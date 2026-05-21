@@ -1,0 +1,6 @@
+{
+  "name": "Gestión de la Demanda TI",
+  "description": "Dashboard interactivo para visualizar el pipeline de iniciativas TI sincronizado con Excel y SharePoint",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

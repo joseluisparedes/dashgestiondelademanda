@@ -161,9 +161,11 @@ export default function App() {
           </div>
 
           {uploadError && (
-            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-left flex items-start gap-2">
-              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
-              <span>{uploadError}</span>
+            <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm text-left flex items-start gap-3 border border-red-200">
+              <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-red-500" />
+              <div className="whitespace-pre-wrap font-medium leading-relaxed flex-1">
+                {uploadError}
+              </div>
             </div>
           )}
 

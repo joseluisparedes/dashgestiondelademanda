@@ -98,6 +98,72 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const buffer = e.target?.result as ArrayBuffer;
         const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
 
+        // ---------------------------------------------------------------------------
+        // VALIDACIÓN DE ESTRUCTURA (Alertas para el usuario)
+        // ---------------------------------------------------------------------------
+        const errors: string[] = [];
+        
+        const expectedTabs = Object.keys(HOJAS_OPERATIVAS);
+        const actualTabs = workbook.SheetNames;
+        
+        const missingTabs = expectedTabs.filter(t => !actualTabs.includes(t));
+        const extraTabs = actualTabs.filter(t => !expectedTabs.includes(t));
+        
+        if (missingTabs.length > 0) {
+          errors.push(`• Faltan pestañas esperadas: ${missingTabs.join(', ')}`);
+        }
+        if (extraTabs.length > 0) {
+          errors.push(`• Se detectaron pestañas nuevas no mapeadas: ${extraTabs.join(', ')}`);
+        }
+
+        const KNOWN_KEYWORDS = [
+          'Id', 'N° Ticket', 'Costo dolares', 'Costo total dolares', 'USD', 'Costo Soles', 'Costo total Soles',
+          'Hora de inicio', 'Fecha Registro', 'Título de la INICIATIVA', 'Titulo', 'Objetivo',
+          'Institución', 'Institucion', 'Universidad', 'VP del área solicitante', 'VP',
+          'Usuario solicitante del negocio', 'Usuario', 'IT BP', 'BP', 'Fecha de entrega requerida', 'Para cuando se necesita',
+          'Proyecto SPO', 'SPO', 'Tipo de iniciativa', 'Tipo', 'Pilar estratégico', 'Pilar',
+          'estabilización de procesos SIS', 'SIS', 'Usuarios beneficiados', 'afectados',
+          'Beneficio cuantitativo', 'Beneficio', 'Complejidad', 'Líder de Dominio', 'Lider',
+          'Asignado por', 'Fecha de asignación esperada', 'Tiempo estimado', 'meses',
+          'Recursos internos o externos', 'Recurso', 'Proyecto o Requerimiento', 'No BAU',
+          'Funcionalidad nueva', 'Estatus Estimación', 'Acción', 'Atender',
+          'Priorización de atención', 'Prioridad', 'Fecha inicio', 'Fecha fin', 'Planificada',
+          'Impacto SOX', 'SOX', 'Estado', 'Subestado', 'Fase', 'Etapa'
+        ];
+
+        const REQUIRED_KEYWORDS = [
+          ['Id', 'N° Ticket'],
+          ['Título de la INICIATIVA', 'Titulo'],
+          ['IT BP', 'BP'],
+          ['Líder de Dominio', 'Lider']
+        ];
+
+        expectedTabs.forEach(sheetName => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return;
+          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
+          if (rows.length === 0) return;
+          
+          const headers = Object.keys(rows[0]);
+          
+          const newCols = headers.filter(h => !KNOWN_KEYWORDS.some(kw => h.toLowerCase().includes(kw.toLowerCase())));
+          if (newCols.length > 0) {
+            errors.push(`• Pestaña "${sheetName}" tiene columnas nuevas o desconocidas: ${newCols.join(', ')}`);
+          }
+
+          const missingRequired = REQUIRED_KEYWORDS.filter(kws => !kws.some(kw => headers.some(h => h.toLowerCase().includes(kw.toLowerCase()))));
+          if (missingRequired.length > 0) {
+            const missingNames = missingRequired.map(kws => kws[0]).join(' o ');
+            errors.push(`• Pestaña "${sheetName}" le faltan columnas críticas: ${missingNames}`);
+          }
+        });
+
+        if (errors.length > 0) {
+          reject(new Error("⚠️ ATENCIÓN: Se detectaron cambios en la estructura del archivo que requieren actualización en la lectura de datos.\n\n" + errors.join('\n')));
+          return;
+        }
+        // ---------------------------------------------------------------------------
+
         const etapaOrder: EtapaPipeline[] = Object.values(HOJAS_OPERATIVAS);
 
         // Mapa de deduplicación: id → { iniciativa, índice de etapa }

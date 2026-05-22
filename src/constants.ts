@@ -67,7 +67,11 @@ export const INITIAL_FILTERS: FilterState = {
   lideres_dominio:  [],
   tipos_recurso:    [],
   prioridades_brm:  [],
-  impacto_sox:      [],
-  proyecto_spo:     [],
+  impacto_sox: [],
+  proyecto_spo: [],
   estabilizacion_sis: [],
+  aprobar_estimacion: [],
+  presupuesto_habilitado: [],
+  planificacion_aprobada: [],
+  pendiente_bps: false,
 };

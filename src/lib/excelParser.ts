@@ -128,7 +128,8 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Recursos internos o externos', 'Recurso', 'Proyecto o Requerimiento', 'No BAU',
           'Funcionalidad nueva', 'Estatus Estimación', 'Acción', 'Atender',
           'Priorización de atención', 'Prioridad', 'Fecha inicio', 'Fecha fin', 'Planificada',
-          'Impacto SOX', 'SOX', 'Estado', 'Subestado', 'Fase', 'Etapa'
+          'Impacto SOX', 'SOX', 'Estado', 'Subestado', 'Fase', 'Etapa',
+          'Aprobar estimación', 'Presupuesto Habilitado', 'Planificación aprobada'
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -248,6 +249,12 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 formatDt(g('Fecha fin [Planificada]')),
               impacto_sox:
                 parseSiNo(g('Impacto SOX', 'SOX')),
+              aprobar_estimacion:
+                parseStr(g('Aprobar estimación', 'Aprobar estimacion')),
+              presupuesto_habilitado:
+                parseStr(g('Presupuesto Habilitado', 'Presupuesto habilitado')),
+              planificacion_aprobada:
+                parseStr(g('Planificación aprobada', 'Planificacion aprobada')),
             };
 
             // Deduplicación: conservar la etapa más avanzada para el mismo ID

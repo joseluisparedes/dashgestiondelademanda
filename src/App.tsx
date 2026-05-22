@@ -48,6 +48,21 @@ function matchesAllFilters(
   filters: FilterState,
   excludeField?: keyof FilterState
 ): boolean {
+  if (filters.pendiente_bps && excludeField !== 'pendiente_bps') {
+    const isTargetStage = ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion'].includes(t.etapa_actual);
+    if (!isTargetStage) return false;
+    
+    let approvalVal: string | null = null;
+    if (t.etapa_actual === 'por_aprobar_estimacion') approvalVal = t.aprobar_estimacion;
+    else if (t.etapa_actual === 'por_habilitar_presupuesto') approvalVal = t.presupuesto_habilitado;
+    else if (t.etapa_actual === 'aprobar_planificacion') approvalVal = t.planificacion_aprobada;
+    
+    const s = (approvalVal ?? '').toUpperCase().trim();
+    if (['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s)) {
+      return false; // Si ya está aprobado, no está pendiente
+    }
+  }
+
   const check = (field: keyof FilterState, value: string | null | undefined) =>
     field === excludeField || matchFilter(filters[field] as string[], value);
 
@@ -62,7 +77,10 @@ function matchesAllFilters(
     check('prioridades_brm', t.prioridad_brm) &&
     check('impacto_sox', t.impacto_sox) &&
     check('proyecto_spo', t.proyecto_spo) &&
-    check('estabilizacion_sis', t.estabilizacion_sis)
+    check('estabilizacion_sis', t.estabilizacion_sis) &&
+    check('aprobar_estimacion', t.aprobar_estimacion) &&
+    check('presupuesto_habilitado', t.presupuesto_habilitado) &&
+    check('planificacion_aprobada', t.planificacion_aprobada)
   );
 }
 
@@ -143,6 +161,9 @@ export default function App() {
       lideres:       buildOptions(from('lideres_dominio'), t => t.lider_dominio),
       recursos:      buildOptions(from('tipos_recurso'), t => t.tipo_recurso),
       prioridades:   buildOptions(from('prioridades_brm'), t => t.prioridad_brm),
+      aprobar_estimacion: buildOptions(from('aprobar_estimacion'), t => t.aprobar_estimacion),
+      presupuesto_habilitado: buildOptions(from('presupuesto_habilitado'), t => t.presupuesto_habilitado),
+      planificacion_aprobada: buildOptions(from('planificacion_aprobada'), t => t.planificacion_aprobada),
     };
   }, [data, filters]);
 

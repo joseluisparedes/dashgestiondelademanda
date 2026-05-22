@@ -49,8 +49,10 @@ export interface Iniciativa {
   prioridad_brm: string | null;
   fecha_inicio_planificada: string | null;
   fecha_fin_planificada: string | null;
-  /** Indica si la iniciativa tiene impacto regulatorio SOX. */
   impacto_sox: 'SI' | 'NO' | null;
+  aprobar_estimacion: string | null;
+  presupuesto_habilitado: string | null;
+  planificacion_aprobada: string | null;
 }
 
 export interface DashboardData {
@@ -83,4 +85,8 @@ export interface FilterState {
   impacto_sox: string[];
   proyecto_spo: string[];
   estabilizacion_sis: string[];
+  aprobar_estimacion: string[];
+  presupuesto_habilitado: string[];
+  planificacion_aprobada: string[];
+  pendiente_bps: boolean;
 }

@@ -93,6 +93,9 @@ export function generateMockData(): DashboardData {
       fecha_fin_planificada:
         etapa === 'planificadas' ? addDays(today, 120).toISOString() : null,
       impacto_sox: pick(['SI', 'NO', null] as Array<'SI' | 'NO' | null>),
+      aprobar_estimacion: null,
+      presupuesto_habilitado: null,
+      planificacion_aprobada: null,
     });
   }
 

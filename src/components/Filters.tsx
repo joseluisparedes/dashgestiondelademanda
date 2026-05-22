@@ -11,6 +11,9 @@ interface FilterOptions {
   lideres: string[];
   recursos: string[];
   prioridades: string[];
+  aprobar_estimacion: string[];
+  presupuesto_habilitado: string[];
+  planificacion_aprobada: string[];
 }
 
 interface FiltersProps {
@@ -280,14 +283,27 @@ export function Filters({ filters, setFilters, options }: FiltersProps) {
             </span>
           )}
         </div>
-        {totalActive > 0 && (
+        <div className="flex items-center gap-4">
           <button
-            onClick={() => setFilters(INITIAL_FILTERS)}
-            className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
+            onClick={() => setFilters(prev => ({ ...prev, pendiente_bps: !prev.pendiente_bps }))}
+            className={`text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm ${
+              filters.pendiente_bps
+                ? 'bg-purple-600 border-purple-700 text-white shadow-purple-200'
+                : 'bg-white border-purple-200 text-purple-700 hover:bg-purple-50'
+            }`}
           >
-            Limpiar todo
+            {filters.pendiente_bps ? '★ Pendiente de BPs (Activo)' : '☆ Ver Pendiente de BPs'}
           </button>
-        )}
+          
+          {totalActive > 0 && (
+            <button
+              onClick={() => setFilters(INITIAL_FILTERS)}
+              className="text-xs text-gray-400 hover:text-red-500 transition-colors font-medium"
+            >
+              Limpiar todo
+            </button>
+          )}
+        </div>
       </div>
 
       {/* Filtros multi-valor */}
@@ -338,6 +354,27 @@ export function Filters({ filters, setFilters, options }: FiltersProps) {
           label="Prioridad BRM"
           field="prioridades_brm"
           options={options.prioridades}
+          filters={filters}
+          setFilters={setFilters}
+        />
+        <MultiSelect
+          label="Aprobar estimación"
+          field="aprobar_estimacion"
+          options={options.aprobar_estimacion}
+          filters={filters}
+          setFilters={setFilters}
+        />
+        <MultiSelect
+          label="Presupuesto Habilitado"
+          field="presupuesto_habilitado"
+          options={options.presupuesto_habilitado}
+          filters={filters}
+          setFilters={setFilters}
+        />
+        <MultiSelect
+          label="Planificación aprobada"
+          field="planificacion_aprobada"
+          options={options.planificacion_aprobada}
           filters={filters}
           setFilters={setFilters}
         />

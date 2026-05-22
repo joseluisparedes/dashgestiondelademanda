@@ -3,7 +3,7 @@ import { Iniciativa } from '../types';
 import { ETAPAS_MAP } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronDown, ChevronRight, FileDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
 interface DataTableProps {
@@ -125,6 +125,7 @@ function ExpandedRow({ t }: { t: Iniciativa }) {
 export function DataTable({ iniciativas }: DataTableProps) {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [sortConfig, setSortConfig] = useState<{ key: keyof Iniciativa; direction: 'asc' | 'desc' } | null>(null);
 
   // Resetear a página 1 cuando cambia el conjunto de datos (al filtrar)
   useEffect(() => {
@@ -132,12 +133,52 @@ export function DataTable({ iniciativas }: DataTableProps) {
     setExpandedId(null);
   }, [iniciativas]);
 
-  const totalPages = Math.ceil(iniciativas.length / ITEMS_PER_PAGE);
+  const handleSort = (key: keyof Iniciativa) => {
+    let direction: 'asc' | 'desc' = 'asc';
+    if (sortConfig && sortConfig.key === key && sortConfig.direction === 'asc') {
+      direction = 'desc';
+    }
+    setSortConfig({ key, direction });
+  };
+
+  const sortedIniciativas = useMemo(() => {
+    let sortableItems = [...iniciativas];
+    if (sortConfig !== null) {
+      sortableItems.sort((a, b) => {
+        let aValue = a[sortConfig.key];
+        let bValue = b[sortConfig.key];
+        
+        // Handle nulls
+        if (aValue === null || aValue === undefined) aValue = '';
+        if (bValue === null || bValue === undefined) bValue = '';
+        
+        if (aValue < bValue) {
+          return sortConfig.direction === 'asc' ? -1 : 1;
+        }
+        if (aValue > bValue) {
+          return sortConfig.direction === 'asc' ? 1 : -1;
+        }
+        return 0;
+      });
+    }
+    return sortableItems;
+  }, [iniciativas, sortConfig]);
+
+  const totalPages = Math.ceil(sortedIniciativas.length / ITEMS_PER_PAGE);
 
   const paginated = useMemo(() => {
     const start = (page - 1) * ITEMS_PER_PAGE;
-    return iniciativas.slice(start, start + ITEMS_PER_PAGE);
-  }, [iniciativas, page]);
+    return sortedIniciativas.slice(start, start + ITEMS_PER_PAGE);
+  }, [sortedIniciativas, page]);
+
+  const renderSortIcon = (key: keyof Iniciativa) => {
+    if (!sortConfig || sortConfig.key !== key) {
+      return <ArrowUpDown size={13} className="inline-block ml-1 opacity-40 group-hover:opacity-100 transition-opacity" />;
+    }
+    return sortConfig.direction === 'asc' 
+      ? <ArrowUp size={13} className="inline-block ml-1 text-blue-600" />
+      : <ArrowDown size={13} className="inline-block ml-1 text-blue-600" />;
+  };
 
   // Exportación CSV — RFC 4180 con escape correcto
   const downloadCSV = () => {
@@ -206,16 +247,30 @@ export function DataTable({ iniciativas }: DataTableProps) {
           <thead className="text-[11px] text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-3 py-3 w-8" />
-              <th className="px-3 py-3 whitespace-nowrap">ID</th>
-              <th className="px-3 py-3 whitespace-nowrap">Institución</th>
-              {/* Título: sin truncar, ancho mínimo garantizado */}
-              <th className="px-3 py-3 min-w-[280px]">Título de la Iniciativa</th>
-              <th className="px-3 py-3 whitespace-nowrap">Etapa</th>
-              {/* Líder: siempre completo */}
-              <th className="px-3 py-3 min-w-[150px] whitespace-nowrap">Líder de Dominio</th>
-              <th className="px-3 py-3 whitespace-nowrap">IT BP</th>
-              <th className="px-3 py-3 whitespace-nowrap">Complejidad</th>
-              <th className="px-3 py-3 whitespace-nowrap text-right">Costo (S/)</th>
+              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('id')}>
+                ID {renderSortIcon('id')}
+              </th>
+              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('institucion')}>
+                Institución {renderSortIcon('institucion')}
+              </th>
+              <th className="px-3 py-3 min-w-[280px] cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('titulo')}>
+                Título de la Iniciativa {renderSortIcon('titulo')}
+              </th>
+              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('etapa_actual')}>
+                Etapa {renderSortIcon('etapa_actual')}
+              </th>
+              <th className="px-3 py-3 min-w-[150px] whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('lider_dominio')}>
+                Líder de Dominio {renderSortIcon('lider_dominio')}
+              </th>
+              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('it_bp')}>
+                IT BP {renderSortIcon('it_bp')}
+              </th>
+              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('complejidad')}>
+                Complejidad {renderSortIcon('complejidad')}
+              </th>
+              <th className="px-3 py-3 whitespace-nowrap text-right cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('costo_soles')}>
+                {renderSortIcon('costo_soles')} Costo (S/)
+              </th>
             </tr>
           </thead>
           <tbody>

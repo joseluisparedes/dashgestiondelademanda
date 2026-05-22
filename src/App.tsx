@@ -3,8 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
-import { generateMockData } from './mockData';
+import React, { useState, useMemo } from 'react';
 import { DashboardData, FilterState, Iniciativa } from './types';
 import { INITIAL_FILTERS, EMPTY_SENTINEL } from './constants';
 import { parseExcelFile } from './lib/excelParser';
@@ -95,10 +94,6 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
 
-  useEffect(() => {
-    setData(generateMockData());
-  }, []);
-
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -153,8 +148,52 @@ export default function App() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center">
-        <Loader2 className="animate-spin text-blue-500 w-8 h-8" />
+      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
+        <div className="bg-white max-w-md w-full rounded-2xl shadow-sm border border-gray-100 p-8 text-center space-y-6">
+          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto text-blue-500">
+            <Upload size={32} />
+          </div>
+          <div>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">¡Bienvenido!</h2>
+            <p className="text-slate-500 text-sm">
+              Para comenzar, por favor sube el archivo Excel con los datos de las iniciativas de Gestión de la Demanda.
+            </p>
+          </div>
+
+          {uploadError && (
+            <div className="bg-red-50 text-red-600 p-3 rounded-lg text-sm text-left flex items-start gap-2">
+              <AlertCircle size={16} className="mt-0.5 flex-shrink-0" />
+              <span>{uploadError}</span>
+            </div>
+          )}
+
+          <label
+            className={`cursor-pointer w-full py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
+              isUploading
+                ? 'bg-blue-300 text-white cursor-not-allowed'
+                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow'
+            }`}
+          >
+            {isUploading ? (
+              <>
+                <Loader2 size={18} className="animate-spin" />
+                Procesando archivo...
+              </>
+            ) : (
+              <>
+                <Upload size={18} />
+                Seleccionar archivo Excel
+              </>
+            )}
+            <input
+              type="file"
+              accept=".xlsx,.xls"
+              className="hidden"
+              onChange={handleFileUpload}
+              disabled={isUploading}
+            />
+          </label>
+        </div>
       </div>
     );
   }
@@ -169,8 +208,7 @@ export default function App() {
                 <span className="text-white font-bold text-sm">TI</span>
               </div>
               <h1 className="text-lg font-bold text-slate-800">
-                Gestión de la Demanda TI{' '}
-                <span className="text-gray-400 font-normal">| Laureate Perú</span>
+                Gestión de la Demanda
               </h1>
             </div>
 

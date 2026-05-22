@@ -1,134 +1,326 @@
-import React, { useMemo, useState } from 'react';
+import React, { useMemo, useState, useEffect } from 'react';
 import { Iniciativa } from '../types';
+import { ETAPAS_MAP } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronDown, ChevronRight, FileDown } from 'lucide-react';
+import { escapeCsvField } from '../lib/utils';
 
-export function DataTable({ iniciativas }: { iniciativas: Iniciativa[] }) {
+interface DataTableProps {
+  iniciativas: Iniciativa[];
+}
+
+const ITEMS_PER_PAGE = 25;
+
+// ---------------------------------------------------------------------------
+// Helpers de formato
+// ---------------------------------------------------------------------------
+function fmtDate(d: string | null): string {
+  if (!d) return '—';
+  try {
+    return format(parseISO(d), 'dd MMM yyyy', { locale: es });
+  } catch {
+    return '—';
+  }
+}
+
+function fmtMoney(v: number | null): string {
+  if (!v) return '—';
+  return `S/ ${v.toLocaleString('es-PE', { maximumFractionDigits: 0 })}`;
+}
+
+// ---------------------------------------------------------------------------
+// Badge de etapa con colores de ETAPAS_MAP
+// ---------------------------------------------------------------------------
+function EtapaBadge({ etapa }: { etapa: string }) {
+  const config = ETAPAS_MAP.get(etapa as Parameters<typeof ETAPAS_MAP.get>[0]);
+  if (!config) {
+    return (
+      <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium whitespace-nowrap">
+        {etapa.replace(/_/g, ' ')}
+      </span>
+    );
+  }
+  return (
+    <span
+      className="text-[10px] px-2 py-0.5 rounded-full font-semibold whitespace-nowrap"
+      style={{ backgroundColor: config.bgColor, color: config.textColor }}
+    >
+      {config.label}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Badge de complejidad
+// ---------------------------------------------------------------------------
+function ComplejidadBadge({ value }: { value: string }) {
+  const styles: Record<string, { bg: string; text: string }> = {
+    Alta:  { bg: '#fef2f2', text: '#b91c1c' },
+    Media: { bg: '#fffbeb', text: '#92400e' },
+    Baja:  { bg: '#f0fdf4', text: '#166534' },
+  };
+  const s = styles[value];
+  if (!s) return <span className="text-xs text-gray-400">{value || '—'}</span>;
+  return (
+    <span
+      className="text-[10px] px-2 py-0.5 rounded-full font-semibold"
+      style={{ backgroundColor: s.bg, color: s.text }}
+    >
+      {value}
+    </span>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Fila expandida con detalle completo
+// ---------------------------------------------------------------------------
+function ExpandedRow({ t }: { t: Iniciativa }) {
+  const fields: Array<{ label: string; value: string | null | number }> = [
+    { label: 'Objetivo', value: t.objetivo },
+    { label: 'VP Solicitante', value: t.vp_solicitante },
+    { label: 'Usuario de Negocio', value: t.usuario_negocio },
+    { label: 'Tipo de Iniciativa', value: t.tipo_iniciativa },
+    { label: 'Pilar Estratégico', value: t.pilar_estrategico },
+    { label: 'Beneficio Cuantitativo', value: t.beneficio_cuantitativo },
+    { label: 'Usuarios Beneficiados', value: t.usuarios_beneficiados },
+    { label: 'Tipo de Recurso', value: t.tipo_recurso },
+    { label: 'Proyecto o Req.', value: t.proyecto_o_req },
+    { label: 'Proyecto SPO', value: t.proyecto_spo },
+    { label: 'Estabilización SIS', value: t.estabilizacion_sis },
+    { label: 'Funcionalidad Nueva', value: t.funcionalidad_nueva },
+    { label: 'Estatus Estimación', value: t.estatus_estimacion },
+    { label: 'Acción BRM', value: t.accion_brm },
+    { label: 'Prioridad BRM', value: t.prioridad_brm },
+    { label: 'Impacto SOX', value: t.impacto_sox },
+    { label: 'Asignado por', value: t.asignado_por },
+    { label: 'Fecha Asignación', value: fmtDate(t.fecha_asignacion) },
+    { label: 'Fecha Entrega Requerida', value: fmtDate(t.fecha_entrega_requerida) },
+    { label: 'Duración (meses)', value: t.duracion_meses },
+    { label: 'Costo USD', value: t.costo_usd ? `$ ${t.costo_usd.toLocaleString()}` : null },
+    { label: 'Costo Soles', value: fmtMoney(t.costo_soles) },
+    { label: 'Inicio Planificado', value: fmtDate(t.fecha_inicio_planificada) },
+    { label: 'Fin Planificado', value: fmtDate(t.fecha_fin_planificada) },
+  ];
+
+  return (
+    <tr className="bg-slate-50 border-b border-gray-100">
+      <td colSpan={9} className="px-6 py-4">
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-2 text-xs">
+          {fields.map(f => (
+            <div key={f.label}>
+              <span className="font-semibold text-gray-500">{f.label}: </span>
+              <span className="text-slate-700">{f.value ?? '—'}</span>
+            </div>
+          ))}
+        </div>
+      </td>
+    </tr>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Componente principal
+// ---------------------------------------------------------------------------
+export function DataTable({ iniciativas }: DataTableProps) {
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
-  const itemsPerPage = 25;
+
+  // Resetear a página 1 cuando cambia el conjunto de datos (al filtrar)
+  useEffect(() => {
+    setPage(1);
+    setExpandedId(null);
+  }, [iniciativas]);
+
+  const totalPages = Math.ceil(iniciativas.length / ITEMS_PER_PAGE);
 
   const paginated = useMemo(() => {
-    const start = (page - 1) * itemsPerPage;
-    return iniciativas.slice(start, start + itemsPerPage);
+    const start = (page - 1) * ITEMS_PER_PAGE;
+    return iniciativas.slice(start, start + ITEMS_PER_PAGE);
   }, [iniciativas, page]);
 
-  const totalPages = Math.ceil(iniciativas.length / itemsPerPage);
-
+  // Exportación CSV — RFC 4180 con escape correcto
   const downloadCSV = () => {
-    const headers = ['ID', 'Institución', 'Título', 'Etapa', 'IT BP', 'Líder Dominio', 'Complejidad', 'Costo Soles', 'Fecha Registro', 'Fecha Entrega'];
+    const headers = [
+      'ID', 'Institución', 'Título', 'Etapa', 'IT BP', 'Líder de Dominio',
+      'Complejidad', 'Prioridad BRM', 'Impacto SOX', 'Proyecto SPO',
+      'Costo Soles', 'Costo USD', 'Duración (meses)', 'Fecha Registro', 'Fecha Entrega',
+    ];
+
     const rows = iniciativas.map(t => [
-      t.id, t.institucion, `"${t.titulo}"`, t.etapa_actual, t.it_bp, t.lider_dominio, t.complejidad, t.costo_soles || 0, t.fecha_registro, t.fecha_entrega_requerida || ''
+      t.id,
+      escapeCsvField(t.institucion),
+      escapeCsvField(t.titulo),
+      escapeCsvField(t.etapa_actual),
+      escapeCsvField(t.it_bp),
+      escapeCsvField(t.lider_dominio),
+      escapeCsvField(t.complejidad),
+      escapeCsvField(t.prioridad_brm ?? ''),
+      escapeCsvField(t.impacto_sox ?? ''),
+      escapeCsvField(t.proyecto_spo),
+      t.costo_soles ?? '',
+      t.costo_usd ?? '',
+      t.duracion_meses ?? '',
+      escapeCsvField(fmtDate(t.fecha_registro)),
+      escapeCsvField(fmtDate(t.fecha_entrega_requerida)),
     ]);
-    
-    const csvContent = [headers.join(','), ...rows.map(e => e.join(','))].join('\n');
-    const blob = new Blob([csvContent], { type: 'text/csv;charset=utf-8;' });
+
+    const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
+    const bom = '\uFEFF'; // BOM para compatibilidad con Excel en Windows
+    const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
     link.href = url;
-    link.setAttribute('download', 'iniciativas_ti.csv');
+    link.download = `iniciativas_ti_${format(new Date(), 'yyyyMMdd')}.csv`;
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
-
-  const dt = (d: string | null) => d ? format(parseISO(d), 'dd MMM yyyy', { locale: es }) : '-';
 
   return (
     <div className="bg-white rounded-xl shadow-sm border border-gray-100 overflow-hidden">
+      {/* Cabecera */}
       <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-        <h3 className="font-semibold text-gray-800">Detalle de Iniciativas ({iniciativas.length})</h3>
-        <button onClick={downloadCSV} className="text-sm px-3 py-1.5 bg-white border border-gray-200 shadow-sm rounded-md hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium">
-          <FileDown size={16} /> Exportar CSV
+        <div>
+          <h3 className="font-semibold text-gray-800">
+            Detalle de Iniciativas
+          </h3>
+          <p className="text-xs text-gray-400 mt-0.5">
+            {iniciativas.length} resultado{iniciativas.length !== 1 ? 's' : ''}
+            {totalPages > 1 && ` · Página ${page} de ${totalPages}`}
+          </p>
+        </div>
+        <button
+          onClick={downloadCSV}
+          className="text-sm px-3 py-1.5 bg-white border border-gray-200 shadow-sm rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium transition-colors"
+        >
+          <FileDown size={15} />
+          Exportar CSV
         </button>
       </div>
+
+      {/* Tabla */}
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] text-left text-gray-600">
-          <thead className="text-xs text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
+          <thead className="text-[11px] text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
             <tr>
-              <th className="px-3 py-3 w-8"></th>
-              <th className="px-3 py-3 border-r border-gray-100">ID</th>
-              <th className="px-3 py-3 border-r border-gray-100">Institución</th>
-              <th className="px-3 py-3 border-r border-gray-100">Título</th>
-              <th className="px-3 py-3 border-r border-gray-100">Etapa</th>
-              <th className="px-3 py-3 border-r border-gray-100">IT BP</th>
-              <th className="px-3 py-3 border-r border-gray-100">Líder</th>
-              <th className="px-3 py-3 border-r border-gray-100">Complejidad</th>
-              <th className="px-3 py-3 border-r border-gray-100">Costo (S/)</th>
-              <th className="px-3 py-3">Registro</th>
+              <th className="px-3 py-3 w-8" />
+              <th className="px-3 py-3 whitespace-nowrap">ID</th>
+              <th className="px-3 py-3 whitespace-nowrap">Institución</th>
+              {/* Título: sin truncar, ancho mínimo garantizado */}
+              <th className="px-3 py-3 min-w-[280px]">Título de la Iniciativa</th>
+              <th className="px-3 py-3 whitespace-nowrap">Etapa</th>
+              {/* Líder: siempre completo */}
+              <th className="px-3 py-3 min-w-[150px] whitespace-nowrap">Líder de Dominio</th>
+              <th className="px-3 py-3 whitespace-nowrap">IT BP</th>
+              <th className="px-3 py-3 whitespace-nowrap">Complejidad</th>
+              <th className="px-3 py-3 whitespace-nowrap text-right">Costo (S/)</th>
             </tr>
           </thead>
           <tbody>
             {paginated.map(t => (
               <React.Fragment key={t.id}>
-                <tr className="bg-white border-b border-gray-50 hover:bg-slate-50 transition-colors">
-                  <td className="px-3 py-3 cursor-pointer" onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}>
-                    {expandedId === t.id ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                <tr className="bg-white border-b border-gray-50 hover:bg-slate-50/70 transition-colors">
+                  {/* Expand button */}
+                  <td className="px-3 py-2">
+                    <button
+                      onClick={() => setExpandedId(expandedId === t.id ? null : t.id)}
+                      className="text-gray-400 hover:text-blue-500 transition-colors"
+                      aria-label={expandedId === t.id ? 'Contraer' : 'Expandir'}
+                    >
+                      {expandedId === t.id
+                        ? <ChevronDown size={15} />
+                        : <ChevronRight size={15} />
+                      }
+                    </button>
                   </td>
-                  <td className="px-3 py-3 font-medium text-slate-800">{String(t.id).padStart(4, '0')}</td>
-                  <td className="px-3 py-3">{t.institucion}</td>
-                  <td className="px-3 py-3 font-medium max-w-[200px] truncate" title={t.titulo}>{t.titulo}</td>
-                  <td className="px-3 py-3 text-[11px] uppercase whitespace-nowrap">{t.etapa_actual.replace(/_/g, ' ')}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">{t.it_bp}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">{t.lider_dominio}</td>
-                  <td className="px-3 py-3">{t.complejidad}</td>
-                  <td className="px-3 py-3 text-right font-mono">{t.costo_soles ? t.costo_soles.toLocaleString() : '-'}</td>
-                  <td className="px-3 py-3 whitespace-nowrap">{dt(t.fecha_registro)}</td>
+                  <td className="px-3 py-2 font-mono text-slate-500 text-xs whitespace-nowrap">
+                    {String(t.id).padStart(4, '0')}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
+                    {t.institucion || '—'}
+                  </td>
+                  {/* Título: wrap normal, no truncado */}
+                  <td className="px-3 py-2 font-medium text-slate-800 leading-snug min-w-[280px]">
+                    {t.titulo}
+                  </td>
+                  <td className="px-3 py-2">
+                    <EtapaBadge etapa={t.etapa_actual} />
+                  </td>
+                  {/* Líder: whitespace-nowrap, nunca truncado */}
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-700 min-w-[150px]">
+                    {t.lider_dominio || '—'}
+                  </td>
+                  <td className="px-3 py-2 whitespace-nowrap text-slate-600">
+                    {t.it_bp || '—'}
+                  </td>
+                  <td className="px-3 py-2">
+                    <ComplejidadBadge value={t.complejidad} />
+                  </td>
+                  <td className="px-3 py-2 text-right font-mono text-slate-600 whitespace-nowrap">
+                    {fmtMoney(t.costo_soles)}
+                  </td>
                 </tr>
-                {expandedId === t.id && (
-                  <tr className="bg-slate-50 border-b border-gray-100">
-                    <td colSpan={10} className="px-6 py-4">
-                      <div className="grid grid-cols-3 gap-6 text-xs">
-                        <div>
-                          <p><span className="font-semibold">Objetivo:</span> {t.objetivo}</p>
-                          <p className="mt-2"><span className="font-semibold">Usuario Negocio:</span> {t.usuario_negocio}</p>
-                          <p className="mt-2"><span className="font-semibold">VP Solicitante:</span> {t.vp_solicitante}</p>
-                        </div>
-                        <div>
-                          <p><span className="font-semibold">Beneficio:</span> {t.beneficio_cuantitativo}</p>
-                          <p className="mt-2"><span className="font-semibold">Pilar:</span> {t.pilar_estrategico}</p>
-                          <p className="mt-2"><span className="font-semibold">Tipo Recurso:</span> {t.tipo_recurso}</p>
-                        </div>
-                        <div>
-                          <p><span className="font-semibold">Entrega Requerida:</span> {dt(t.fecha_entrega_requerida)}</p>
-                          <p className="mt-2"><span className="font-semibold">Duración (meses):</span> {t.duracion_meses || '-'}</p>
-                          <p className="mt-2"><span className="font-semibold">Impacto SOX:</span> {t.impacto_sox}</p>
-                          <p className="mt-2 text-slate-500 italic">Datos extendidos sólo de referencia para la versión detallada.</p>
-                        </div>
-                      </div>
-                    </td>
-                  </tr>
-                )}
+
+                {/* Fila de detalle expandible */}
+                {expandedId === t.id && <ExpandedRow t={t} />}
               </React.Fragment>
             ))}
+
             {paginated.length === 0 && (
               <tr>
-                <td colSpan={10} className="px-4 py-8 text-center text-gray-400">
-                  No hay iniciativas que coincidan con los filtros.
+                <td
+                  colSpan={9}
+                  className="px-4 py-12 text-center text-gray-400 text-sm"
+                >
+                  No hay iniciativas que coincidan con los filtros activos.
                 </td>
               </tr>
             )}
           </tbody>
         </table>
       </div>
+
+      {/* Paginación */}
       {totalPages > 1 && (
-        <div className="p-4 flex justify-between items-center text-sm text-gray-500">
-          <span>Página {page} de {totalPages}</span>
-          <div className="flex gap-2">
-            <button 
-              disabled={page === 1} 
+        <div className="p-4 flex justify-between items-center text-sm text-gray-500 border-t border-gray-100">
+          <span className="text-xs">
+            Mostrando {(page - 1) * ITEMS_PER_PAGE + 1}–{Math.min(page * ITEMS_PER_PAGE, iniciativas.length)} de {iniciativas.length}
+          </span>
+          <div className="flex gap-1">
+            <button
+              disabled={page === 1}
+              onClick={() => setPage(1)}
+              className="px-2 py-1 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 text-xs"
+              aria-label="Primera página"
+            >
+              «
+            </button>
+            <button
+              disabled={page === 1}
               onClick={() => setPage(p => Math.max(1, p - 1))}
-              className="px-3 py-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50 shadow-sm"
+              className="px-3 py-1 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 shadow-sm"
             >
               Anterior
             </button>
-            <button 
-              disabled={page === totalPages} 
+            <span className="px-3 py-1 bg-blue-50 text-blue-600 rounded border border-blue-200 font-semibold text-xs">
+              {page}
+            </span>
+            <button
+              disabled={page === totalPages}
               onClick={() => setPage(p => Math.min(totalPages, p + 1))}
-              className="px-3 py-1 rounded bg-white border border-gray-200 disabled:opacity-50 hover:bg-gray-50 shadow-sm"
+              className="px-3 py-1 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 shadow-sm"
             >
               Siguiente
+            </button>
+            <button
+              disabled={page === totalPages}
+              onClick={() => setPage(totalPages)}
+              className="px-2 py-1 rounded border border-gray-200 disabled:opacity-30 hover:bg-gray-50 text-xs"
+              aria-label="Última página"
+            >
+              »
             </button>
           </div>
         </div>

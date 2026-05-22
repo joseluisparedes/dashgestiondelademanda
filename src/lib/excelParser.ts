@@ -1,0 +1,227 @@
+/**
+ * @fileoverview Parser de archivos Excel para el dashboard de Gestión de la Demanda TI.
+ *
+ * Responsabilidades:
+ * - Leer cada hoja operativa del workbook y mapearla a una EtapaPipeline.
+ * - Normalizar todos los valores: nunca produce el literal "null" como string.
+ * - Deduplicar iniciativas por ID, conservando la de etapa más avanzada.
+ */
+
+import * as XLSX from 'xlsx';
+import { Iniciativa, DashboardData, EtapaPipeline } from '../types';
+import { HOJAS_OPERATIVAS } from '../constants';
+
+// ---------------------------------------------------------------------------
+// Helpers de parseo
+// ---------------------------------------------------------------------------
+
+/** Busca una clave en la fila usando comparación exacta o parcial (case-insensitive). */
+function getVal(row: Record<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const found = Object.keys(row).find(
+      k =>
+        k.toLowerCase().trim() === key.toLowerCase().trim() ||
+        k.toLowerCase().includes(key.toLowerCase())
+    );
+    if (found !== undefined && row[found] !== undefined && row[found] !== '') {
+      return row[found];
+    }
+  }
+  return null;
+}
+
+/** Convierte un valor a ISO string o retorna null si no es parseable. */
+function formatDt(val: unknown): string | null {
+  if (!val) return null;
+  try {
+    const dt = val instanceof Date ? val : new Date(String(val));
+    if (isNaN(dt.getTime())) return null;
+    return dt.toISOString();
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Parsea un valor numérico.
+ * Retorna null si el valor es 0, NaN o no numérico
+ * (0 en costos se trata como "sin costo", no como costo de cero).
+ */
+function parseNum(val: unknown): number | null {
+  if (typeof val === 'number') return val !== 0 ? val : null;
+  if (typeof val === 'string') {
+    const clean = val.replace(/[^0-9.-]+/g, '');
+    const parsed = parseFloat(clean);
+    return !isNaN(parsed) && parsed !== 0 ? parsed : null;
+  }
+  return null;
+}
+
+/**
+ * Convierte un valor a string limpio o null.
+ * Nunca retorna el literal "null", "undefined" o strings vacíos.
+ */
+function parseStr(val: unknown): string | null {
+  if (val === null || val === undefined) return null;
+  const s = String(val).trim();
+  if (s === '' || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return null;
+  return s;
+}
+
+/** Normaliza valores afirmativos/negativos a 'SI' | 'NO' | null. */
+function parseSiNo(val: unknown): 'SI' | 'NO' | null {
+  const s = parseStr(val)?.toUpperCase();
+  if (!s) return null;
+  if (['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s)) return 'SI';
+  if (['NO', 'N', '0', 'FALSE'].includes(s)) return 'NO';
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// Parser principal
+// ---------------------------------------------------------------------------
+
+/**
+ * Parsea un archivo Excel y retorna un DashboardData completo.
+ *
+ * @param file - Archivo .xlsx o .xls seleccionado por el usuario.
+ * @returns Promise que resuelve con los datos del dashboard.
+ */
+export function parseExcelFile(file: File): Promise<DashboardData> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error('Error al leer el archivo Excel.'));
+
+    reader.onload = (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+
+        const etapaOrder: EtapaPipeline[] = Object.values(HOJAS_OPERATIVAS);
+
+        // Mapa de deduplicación: id → { iniciativa, índice de etapa }
+        // En caso de duplicado, se conserva la iniciativa con etapa más avanzada.
+        const seenIds = new Map<number, { iniciativa: Iniciativa; etapaIndex: number }>();
+
+        Object.entries(HOJAS_OPERATIVAS).forEach(([sheetName, etapa]) => {
+          const sheet = workbook.Sheets[sheetName];
+          if (!sheet) return; // Hoja no encontrada en este workbook
+
+          const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+          const etapaIndex = etapaOrder.indexOf(etapa);
+
+          rows.forEach((row, rowIdx) => {
+            const g = (...keys: string[]) => getVal(row, ...keys);
+
+            // ID: intentar leer del campo, o generar uno sintético único
+            const rawId = parseNum(g('Id', 'N° Ticket'));
+            const id = rawId ?? Number(`${rowIdx + 1}${Math.floor(Math.random() * 1000)}`);
+
+            const costo_usd = parseNum(g('Costo dolares', 'Costo total dolares', 'USD'));
+            const costo_soles = parseNum(g('Costo Soles', 'Costo total Soles'));
+
+            const iniciativa: Iniciativa = {
+              id,
+              etapa_actual: etapa,
+              fecha_registro:
+                formatDt(g('Hora de inicio', 'Fecha Registro')) ?? new Date().toISOString(),
+              titulo:
+                parseStr(g('Título de la INICIATIVA', 'Titulo')) ?? 'Sin Título',
+              objetivo:
+                parseStr(g('Objetivo')) ?? '',
+              institucion:
+                parseStr(g('Institución', 'Institucion', 'Universidad')) ?? '',
+              vp_solicitante:
+                parseStr(g('VP del área solicitante', 'VP')) ?? '',
+              usuario_negocio:
+                parseStr(g('Usuario solicitante del negocio', 'Usuario')) ?? '',
+              it_bp:
+                parseStr(g('IT BP', 'BP')) ?? '',
+              fecha_entrega_requerida:
+                formatDt(g('Fecha de entrega requerida', 'Para cuando se necesita')),
+              proyecto_spo:
+                parseSiNo(g('Proyecto SPO', 'SPO')) ?? 'NO',
+              tipo_iniciativa:
+                parseStr(g('Tipo de iniciativa', 'Tipo')) ?? '',
+              pilar_estrategico:
+                parseStr(g('Pilar estratégico', 'Pilar')) ?? '',
+              estabilizacion_sis:
+                parseSiNo(g('estabilización de procesos SIS', 'SIS')) ?? 'NO',
+              usuarios_beneficiados:
+                parseStr(g('Usuarios beneficiados', 'afectados')) ?? '',
+              beneficio_cuantitativo:
+                parseStr(g('Beneficio cuantitativo', 'Beneficio')) ?? '',
+              complejidad:
+                parseStr(g('Complejidad')) ?? '',
+              lider_dominio:
+                parseStr(g('Líder de Dominio', 'Lider')) ?? '',
+              asignado_por:
+                parseStr(g('Asignado por')),
+              fecha_asignacion:
+                formatDt(g('Fecha de asignación esperada')),
+              duracion_meses:
+                parseNum(g('Tiempo estimado', 'meses')),
+              costo_usd,
+              costo_soles,
+              tipo_recurso:
+                parseStr(g('Recursos internos o externos', 'Recurso')),
+              proyecto_o_req:
+                parseStr(g('Proyecto o Requerimiento', 'No BAU')),
+              funcionalidad_nueva:
+                parseStr(g('Funcionalidad nueva')),
+              estatus_estimacion:
+                parseStr(g('Estatus Estimación')),
+              accion_brm:
+                parseStr(g('Acción (Atender', 'Accion')),
+              prioridad_brm:
+                parseStr(g('Priorización de atención', 'Prioridad')),
+              fecha_inicio_planificada:
+                formatDt(g('Fecha inicio [Planificada]')),
+              fecha_fin_planificada:
+                formatDt(g('Fecha fin [Planificada]')),
+              impacto_sox:
+                parseSiNo(g('Impacto SOX', 'SOX')),
+            };
+
+            // Deduplicación: conservar la etapa más avanzada para el mismo ID
+            const existing = seenIds.get(id);
+            if (!existing || etapaIndex > existing.etapaIndex) {
+              seenIds.set(id, { iniciativa, etapaIndex });
+            }
+          });
+        });
+
+        const allIniciativas = Array.from(seenIds.values())
+          .map(v => v.iniciativa)
+          .sort(
+            (a, b) =>
+              new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
+          );
+
+        // Calcular resumen por etapa
+        const resumenPorEtapa: Record<string, number> = {};
+        etapaOrder.forEach(e => (resumenPorEtapa[e] = 0));
+        allIniciativas.forEach(i => {
+          if (resumenPorEtapa[i.etapa_actual] !== undefined) {
+            resumenPorEtapa[i.etapa_actual]++;
+          }
+        });
+
+        resolve({
+          ultima_actualizacion: new Date().toISOString(),
+          tipo_de_cambio: 3.75,
+          resumen: {
+            total_iniciativas: allIniciativas.length,
+            por_etapa: resumenPorEtapa,
+          },
+          iniciativas: allIniciativas,
+        });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Error al procesar el archivo.'));
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}

@@ -73,4 +73,5 @@ export const INITIAL_FILTERS: FilterState = {
   aprobar_estimacion: [],
   presupuesto_habilitado: [],
   planificacion_aprobada: [],
+  pendiente_bps: false,
 };

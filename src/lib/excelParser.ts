@@ -269,7 +269,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               accion_brm:
                 parseStr(g('Acción (Atender', 'Accion')),
               prioridad_brm:
-                parseStr(g('Priorización de atención', 'Prioridad')),
+                parseStr(g('Priorización de atención', 'Prioridad', 'Priorización', 'Priorizacion')),
               fecha_inicio_planificada:
                 formatDt(g('Fecha inicio [Planificada]')),
               fecha_fin_planificada:

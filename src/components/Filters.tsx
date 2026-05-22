@@ -80,7 +80,7 @@ function MultiSelect({ label, field, options, filters, setFilters }: MultiSelect
   const availableCount = options.length;
 
   return (
-    <div className="relative flex-[1_0_140px] min-w-[130px]" ref={ref}>
+    <div className={`relative flex-1 min-w-[130px] ${open ? 'z-50' : 'z-10'}`} ref={ref}>
       <label className="block text-[10px] uppercase font-bold tracking-wider text-gray-400 mb-1">
         {label}
         {availableCount > 0 && (

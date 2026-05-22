@@ -113,7 +113,7 @@ function ExpandedRow({ t }: { t: Iniciativa }) {
 
   return (
     <tr className="bg-slate-50 border-b border-gray-100">
-      <td colSpan={9} className="px-6 py-4">
+      <td colSpan={12} className="px-6 py-4">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-2 text-xs">
           {fields.map(f => (
             <div key={f.label}>
@@ -140,6 +140,7 @@ export function DataTable({ iniciativas }: DataTableProps) {
     { id: 'it_bp', label: 'IT BP', sortKey: 'it_bp', render: t => t.it_bp || '—', className: 'whitespace-nowrap text-slate-600' },
     { id: 'duracion_meses', label: 'Tiempo estimado (meses)', sortKey: 'duracion_meses', render: t => t.duracion_meses ?? '—', className: 'text-center font-mono text-slate-600' },
     { id: 'costo_usd', label: 'Costo en dólares', sortKey: 'costo_usd', render: t => t.costo_usd ? `$ ${t.costo_usd.toLocaleString('en-US')}` : '—', className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
+    { id: 'costo_soles', label: 'Costo Soles', sortKey: 'costo_soles', render: t => fmtMoney(t.costo_soles), className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
     { id: 'fecha_inicio_planificada', label: 'Fecha Inicio (planificada)', sortKey: 'fecha_inicio_planificada', render: t => fmtDate(t.fecha_inicio_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
     { id: 'fecha_fin_planificada', label: 'Fecha fin (planificada)', sortKey: 'fecha_fin_planificada', render: t => fmtDate(t.fecha_fin_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
   ], []);
@@ -334,7 +335,7 @@ export function DataTable({ iniciativas }: DataTableProps) {
             {paginated.length === 0 && (
               <tr>
                 <td
-                  colSpan={9}
+                  colSpan={12}
                   className="px-4 py-12 text-center text-gray-400 text-sm"
                 >
                   No hay iniciativas que coincidan con los filtros activos.

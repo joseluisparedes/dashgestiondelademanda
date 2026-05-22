@@ -48,23 +48,27 @@ function matchesAllFilters(
   filters: FilterState,
   excludeField?: keyof FilterState
 ): boolean {
-  if (filters.pendiente_bps && excludeField !== 'pendiente_bps') {
-    const isTargetStage = ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion'].includes(t.etapa_actual);
-    if (!isTargetStage) return false;
-    
-    let approvalVal: string | null = null;
-    if (t.etapa_actual === 'por_aprobar_estimacion') approvalVal = t.aprobar_estimacion;
-    else if (t.etapa_actual === 'por_habilitar_presupuesto') approvalVal = t.presupuesto_habilitado;
-    else if (t.etapa_actual === 'aprobar_planificacion') approvalVal = t.planificacion_aprobada;
-    
-    const s = (approvalVal ?? '').toUpperCase().trim();
-    if (['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s)) {
-      return false;
-    }
-  }
-
   const check = (field: keyof FilterState, value: string | null | undefined) =>
     field === excludeField || matchFilter(filters[field] as string[], value);
+
+  // Evaluamos los 3 campos de aprobación como un bloque OR si alguno tiene selección
+  const isExcluded = (f: keyof FilterState) => f === excludeField;
+  const hasAprob = !isExcluded('aprobar_estimacion') && filters.aprobar_estimacion.length > 0;
+  const hasPresup = !isExcluded('presupuesto_habilitado') && filters.presupuesto_habilitado.length > 0;
+  const hasPlan = !isExcluded('planificacion_aprobada') && filters.planificacion_aprobada.length > 0;
+
+  const approvalsSelected = hasAprob || hasPresup || hasPlan;
+  
+  // Para que los campos OR no se filtren entre sí en los desplegables:
+  const isAprobGroup = ['aprobar_estimacion', 'presupuesto_habilitado', 'planificacion_aprobada'].includes(excludeField as string);
+
+  let passesApprovals = true;
+  if (!isAprobGroup && approvalsSelected) {
+    passesApprovals = 
+      (hasAprob && matchFilter(filters.aprobar_estimacion, t.aprobar_estimacion)) ||
+      (hasPresup && matchFilter(filters.presupuesto_habilitado, t.presupuesto_habilitado)) ||
+      (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
+  }
 
   return (
     check('etapas', t.etapa_actual) &&
@@ -78,9 +82,7 @@ function matchesAllFilters(
     check('impacto_sox', t.impacto_sox) &&
     check('proyecto_spo', t.proyecto_spo) &&
     check('estabilizacion_sis', t.estabilizacion_sis) &&
-    check('aprobar_estimacion', t.aprobar_estimacion) &&
-    check('presupuesto_habilitado', t.presupuesto_habilitado) &&
-    check('planificacion_aprobada', t.planificacion_aprobada)
+    passesApprovals
   );
 }
 
@@ -167,22 +169,32 @@ export default function App() {
     };
   }, [data, filters]);
 
-  // Macro: Aplicar filtros de Pendiente de BPs
+  // Macro: Aplicar filtros de Pendiente de BPs (visualmente a los checkboxes)
   const handlePendientesBPs = () => {
-    setFilters(prev => {
-      const isActive = prev.pendiente_bps;
-      if (isActive) {
-        // Desactivar
-        return { ...prev, pendiente_bps: false };
-      } else {
-        // Activar: además de prender el flag, marcamos visualmente las etapas
-        return {
-          ...prev,
-          pendiente_bps: true,
-          etapas: ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion']
-        };
-      }
-    });
+    if (!data) return;
+    
+    const isAffirmative = (v: string | null | undefined) => {
+      const s = (v ?? '').toUpperCase().trim();
+      return ['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s);
+    };
+
+    const getPending = (getter: (t: Iniciativa) => string | null | undefined, stage: EtapaPipeline) => {
+      const set = new Set<string>();
+      data.iniciativas.forEach(t => {
+        if (t.etapa_actual === stage && !isAffirmative(getter(t))) {
+          set.add(getter(t) ? getter(t)!.trim() : EMPTY_SENTINEL);
+        }
+      });
+      return Array.from(set);
+    };
+
+    setFilters(prev => ({
+      ...prev,
+      etapas: ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion'],
+      aprobar_estimacion: getPending(t => t.aprobar_estimacion, 'por_aprobar_estimacion'),
+      presupuesto_habilitado: getPending(t => t.presupuesto_habilitado, 'por_habilitar_presupuesto'),
+      planificacion_aprobada: getPending(t => t.planificacion_aprobada, 'aprobar_planificacion'),
+    }));
   };
 
   if (!data) {

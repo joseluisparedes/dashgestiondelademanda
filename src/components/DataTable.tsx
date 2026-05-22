@@ -10,6 +10,14 @@ interface DataTableProps {
   iniciativas: Iniciativa[];
 }
 
+interface ColumnDef {
+  id: string;
+  label: string;
+  render: (t: Iniciativa) => React.ReactNode;
+  sortKey?: keyof Iniciativa;
+  className?: string;
+}
+
 const ITEMS_PER_PAGE = 25;
 
 // ---------------------------------------------------------------------------
@@ -123,9 +131,27 @@ function ExpandedRow({ t }: { t: Iniciativa }) {
 // Componente principal
 // ---------------------------------------------------------------------------
 export function DataTable({ iniciativas }: DataTableProps) {
+  const COLUMNS: ColumnDef[] = useMemo(() => [
+    { id: 'id', label: 'ID', sortKey: 'id', render: t => String(t.id).padStart(4, '0'), className: 'font-mono text-slate-500 text-xs whitespace-nowrap' },
+    { id: 'institucion', label: 'Institución', sortKey: 'institucion', render: t => t.institucion || '—', className: 'whitespace-nowrap font-medium text-slate-700' },
+    { id: 'titulo', label: 'Título de la Iniciativa', sortKey: 'titulo', render: t => t.titulo, className: 'font-medium text-slate-800 leading-snug min-w-[280px]' },
+    { id: 'etapa_actual', label: 'Etapa', sortKey: 'etapa_actual', render: t => <EtapaBadge etapa={t.etapa_actual} /> },
+    { id: 'lider_dominio', label: 'Líder de Dominio', sortKey: 'lider_dominio', render: t => t.lider_dominio || '—', className: 'whitespace-nowrap text-slate-700 min-w-[150px]' },
+    { id: 'it_bp', label: 'IT BP', sortKey: 'it_bp', render: t => t.it_bp || '—', className: 'whitespace-nowrap text-slate-600' },
+    { id: 'duracion_meses', label: 'Tiempo estimado (meses)', sortKey: 'duracion_meses', render: t => t.duracion_meses ?? '—', className: 'text-center font-mono text-slate-600' },
+    { id: 'costo_usd', label: 'Costo en dólares', sortKey: 'costo_usd', render: t => t.costo_usd ? `$ ${t.costo_usd.toLocaleString('en-US')}` : '—', className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
+    { id: 'fecha_inicio_planificada', label: 'Fecha Inicio (planificada)', sortKey: 'fecha_inicio_planificada', render: t => fmtDate(t.fecha_inicio_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+    { id: 'fecha_fin_planificada', label: 'Fecha fin (planificada)', sortKey: 'fecha_fin_planificada', render: t => fmtDate(t.fecha_fin_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+  ], []);
+
   const [page, setPage] = useState(1);
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [sortConfig, setSortConfig] = useState<{ key: keyof Iniciativa; direction: 'asc' | 'desc' } | null>(null);
+  
+  const [columnOrder, setColumnOrder] = useState<string[]>(COLUMNS.map(c => c.id));
+  const [draggedCol, setDraggedCol] = useState<string | null>(null);
+
+  const orderedColumns = columnOrder.map(id => COLUMNS.find(c => c.id === id)!).filter(Boolean) as ColumnDef[];
 
   // Resetear a página 1 cuando cambia el conjunto de datos (al filtrar)
   useEffect(() => {
@@ -139,6 +165,25 @@ export function DataTable({ iniciativas }: DataTableProps) {
       direction = 'desc';
     }
     setSortConfig({ key, direction });
+  };
+
+  const handleDragStart = (e: React.DragEvent, colId: string) => {
+    setDraggedCol(colId);
+    e.dataTransfer.effectAllowed = 'move';
+  };
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+  };
+  const handleDrop = (e: React.DragEvent, targetColId: string) => {
+    e.preventDefault();
+    if (!draggedCol || draggedCol === targetColId) return;
+    const newOrder = [...columnOrder];
+    const fromIndex = newOrder.indexOf(draggedCol);
+    const toIndex = newOrder.indexOf(targetColId);
+    newOrder.splice(fromIndex, 1);
+    newOrder.splice(toIndex, 0, draggedCol);
+    setColumnOrder(newOrder);
+    setDraggedCol(null);
   };
 
   const sortedIniciativas = useMemo(() => {
@@ -180,34 +225,22 @@ export function DataTable({ iniciativas }: DataTableProps) {
       : <ArrowDown size={13} className="inline-block ml-1 text-blue-600" />;
   };
 
-  // Exportación CSV — RFC 4180 con escape correcto
+  // Exportación CSV
   const downloadCSV = () => {
-    const headers = [
-      'ID', 'Institución', 'Título', 'Etapa', 'IT BP', 'Líder de Dominio',
-      'Complejidad', 'Prioridad BRM', 'Impacto SOX', 'Proyecto SPO',
-      'Costo Soles', 'Costo USD', 'Duración (meses)', 'Fecha Registro', 'Fecha Entrega',
-    ];
+    const headers = orderedColumns.map(c => c.label);
 
-    const rows = iniciativas.map(t => [
-      t.id,
-      escapeCsvField(t.institucion),
-      escapeCsvField(t.titulo),
-      escapeCsvField(t.etapa_actual),
-      escapeCsvField(t.it_bp),
-      escapeCsvField(t.lider_dominio),
-      escapeCsvField(t.complejidad),
-      escapeCsvField(t.prioridad_brm ?? ''),
-      escapeCsvField(t.impacto_sox ?? ''),
-      escapeCsvField(t.proyecto_spo),
-      t.costo_soles ?? '',
-      t.costo_usd ?? '',
-      t.duracion_meses ?? '',
-      escapeCsvField(fmtDate(t.fecha_registro)),
-      escapeCsvField(fmtDate(t.fecha_entrega_requerida)),
-    ]);
+    const rows = sortedIniciativas.map(t => orderedColumns.map(col => {
+      // Extraemos el valor base para exportarlo sin formateo HTML
+      const val = t[col.sortKey as keyof Iniciativa];
+      if (val === null || val === undefined) return '';
+      if (col.sortKey === 'fecha_inicio_planificada' || col.sortKey === 'fecha_fin_planificada' || col.sortKey === 'fecha_registro' || col.sortKey === 'fecha_entrega_requerida') {
+        return escapeCsvField(fmtDate(val as string));
+      }
+      return escapeCsvField(String(val));
+    }));
 
     const csv = [headers.join(','), ...rows.map(r => r.join(','))].join('\n');
-    const bom = '\uFEFF'; // BOM para compatibilidad con Excel en Windows
+    const bom = '\uFEFF';
     const blob = new Blob([bom + csv], { type: 'text/csv;charset=utf-8;' });
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
@@ -247,30 +280,25 @@ export function DataTable({ iniciativas }: DataTableProps) {
           <thead className="text-[11px] text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-3 py-3 w-8" />
-              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('id')}>
-                ID {renderSortIcon('id')}
-              </th>
-              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('institucion')}>
-                Institución {renderSortIcon('institucion')}
-              </th>
-              <th className="px-3 py-3 min-w-[280px] cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('titulo')}>
-                Título de la Iniciativa {renderSortIcon('titulo')}
-              </th>
-              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('etapa_actual')}>
-                Etapa {renderSortIcon('etapa_actual')}
-              </th>
-              <th className="px-3 py-3 min-w-[150px] whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('lider_dominio')}>
-                Líder de Dominio {renderSortIcon('lider_dominio')}
-              </th>
-              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('it_bp')}>
-                IT BP {renderSortIcon('it_bp')}
-              </th>
-              <th className="px-3 py-3 whitespace-nowrap cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('complejidad')}>
-                Complejidad {renderSortIcon('complejidad')}
-              </th>
-              <th className="px-3 py-3 whitespace-nowrap text-right cursor-pointer hover:bg-gray-100 transition-colors group select-none" onClick={() => handleSort('costo_soles')}>
-                {renderSortIcon('costo_soles')} Costo (S/)
-              </th>
+              {orderedColumns.map(col => (
+                <th
+                  key={col.id}
+                  draggable
+                  onDragStart={e => handleDragStart(e, col.id)}
+                  onDragOver={handleDragOver}
+                  onDrop={e => handleDrop(e, col.id)}
+                  className={`px-3 py-3 whitespace-nowrap cursor-move select-none hover:bg-gray-200 transition-colors group ${
+                    draggedCol === col.id ? 'opacity-50 bg-gray-200' : ''
+                  }`}
+                  onClick={() => col.sortKey && handleSort(col.sortKey)}
+                  title="Arrastra para mover la columna"
+                >
+                  <div className="flex items-center gap-1 cursor-pointer">
+                    <span>{col.label}</span>
+                    {col.sortKey && renderSortIcon(col.sortKey)}
+                  </div>
+                </th>
+              ))}
             </tr>
           </thead>
           <tbody>
@@ -290,32 +318,12 @@ export function DataTable({ iniciativas }: DataTableProps) {
                       }
                     </button>
                   </td>
-                  <td className="px-3 py-2 font-mono text-slate-500 text-xs whitespace-nowrap">
-                    {String(t.id).padStart(4, '0')}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap font-medium text-slate-700">
-                    {t.institucion || '—'}
-                  </td>
-                  {/* Título: wrap normal, no truncado */}
-                  <td className="px-3 py-2 font-medium text-slate-800 leading-snug min-w-[280px]">
-                    {t.titulo}
-                  </td>
-                  <td className="px-3 py-2">
-                    <EtapaBadge etapa={t.etapa_actual} />
-                  </td>
-                  {/* Líder: whitespace-nowrap, nunca truncado */}
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-700 min-w-[150px]">
-                    {t.lider_dominio || '—'}
-                  </td>
-                  <td className="px-3 py-2 whitespace-nowrap text-slate-600">
-                    {t.it_bp || '—'}
-                  </td>
-                  <td className="px-3 py-2">
-                    <ComplejidadBadge value={t.complejidad} />
-                  </td>
-                  <td className="px-3 py-2 text-right font-mono text-slate-600 whitespace-nowrap">
-                    {fmtMoney(t.costo_soles)}
-                  </td>
+                  {/* Celdas dinámicas */}
+                  {orderedColumns.map(col => (
+                    <td key={col.id} className={`px-3 py-2 ${col.className || ''}`}>
+                      {col.render(t)}
+                    </td>
+                  ))}
                 </tr>
 
                 {/* Fila de detalle expandible */}

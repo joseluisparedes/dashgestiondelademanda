@@ -287,13 +287,9 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
         <div className="flex items-center gap-4">
           <button
             onClick={onPendientesBPs}
-            className={`text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm ${
-              filters.pendiente_bps
-                ? 'bg-purple-600 border-purple-700 text-white shadow-purple-200'
-                : 'bg-white border-purple-200 text-purple-700 hover:bg-purple-50'
-            }`}
+            className="text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm bg-white border-purple-200 text-purple-700 hover:bg-purple-50"
           >
-            {filters.pendiente_bps ? '★ Pendientes BPs (Activo)' : '🌟 Ver Pendientes de BPs'}
+            🌟 Ver Pendientes de BPs
           </button>
           
           {totalActive > 0 && (

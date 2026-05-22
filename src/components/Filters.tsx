@@ -20,6 +20,7 @@ interface FiltersProps {
   filters: FilterState;
   setFilters: (f: React.SetStateAction<FilterState>) => void;
   options: FilterOptions;
+  onPendientesBPs: () => void;
 }
 
 /** Retorna el texto visible de una opción, traduciendo el sentinel. */
@@ -264,7 +265,7 @@ function ToggleFilter({
 // ---------------------------------------------------------------------------
 // Componente principal de filtros
 // ---------------------------------------------------------------------------
-export function Filters({ filters, setFilters, options }: FiltersProps) {
+export function Filters({ filters, setFilters, options, onPendientesBPs }: FiltersProps) {
   const totalActive = (Object.values(filters) as string[][]).reduce(
     (sum, arr) => sum + arr.length,
     0
@@ -285,14 +286,10 @@ export function Filters({ filters, setFilters, options }: FiltersProps) {
         </div>
         <div className="flex items-center gap-4">
           <button
-            onClick={() => setFilters(prev => ({ ...prev, pendiente_bps: !prev.pendiente_bps }))}
-            className={`text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm ${
-              filters.pendiente_bps
-                ? 'bg-purple-600 border-purple-700 text-white shadow-purple-200'
-                : 'bg-white border-purple-200 text-purple-700 hover:bg-purple-50'
-            }`}
+            onClick={onPendientesBPs}
+            className="text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm bg-white border-purple-200 text-purple-700 hover:bg-purple-50"
           >
-            {filters.pendiente_bps ? '★ Pendiente de BPs (Activo)' : '☆ Ver Pendiente de BPs'}
+            🌟 Ver Pendientes de BPs
           </button>
           
           {totalActive > 0 && (

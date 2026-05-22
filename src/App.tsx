@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo } from 'react';
-import { DashboardData, FilterState, Iniciativa } from './types';
+import { DashboardData, FilterState, Iniciativa, EtapaPipeline } from './types';
 import { INITIAL_FILTERS, EMPTY_SENTINEL } from './constants';
 import { parseExcelFile } from './lib/excelParser';
 import { KPICards } from './components/KPICards';
@@ -48,23 +48,17 @@ function matchesAllFilters(
   filters: FilterState,
   excludeField?: keyof FilterState
 ): boolean {
-  if (filters.pendiente_bps && excludeField !== 'pendiente_bps') {
-    const isTargetStage = ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion'].includes(t.etapa_actual);
-    if (!isTargetStage) return false;
-    
-    let approvalVal: string | null = null;
-    if (t.etapa_actual === 'por_aprobar_estimacion') approvalVal = t.aprobar_estimacion;
-    else if (t.etapa_actual === 'por_habilitar_presupuesto') approvalVal = t.presupuesto_habilitado;
-    else if (t.etapa_actual === 'aprobar_planificacion') approvalVal = t.planificacion_aprobada;
-    
-    const s = (approvalVal ?? '').toUpperCase().trim();
-    if (['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s)) {
-      return false; // Si ya está aprobado, no está pendiente
-    }
-  }
-
   const check = (field: keyof FilterState, value: string | null | undefined) =>
     field === excludeField || matchFilter(filters[field] as string[], value);
+
+  // Los filtros de aprobación solo aplican a iniciativas en su etapa correspondiente
+  const checkStageSpecific = (field: keyof FilterState, value: string | null | undefined, targetStage: EtapaPipeline) => {
+    if (field === excludeField) return true;
+    const selected = filters[field] as string[];
+    if (selected.length === 0) return true;
+    if (t.etapa_actual !== targetStage) return true; 
+    return matchFilter(selected, value);
+  };
 
   return (
     check('etapas', t.etapa_actual) &&
@@ -78,9 +72,9 @@ function matchesAllFilters(
     check('impacto_sox', t.impacto_sox) &&
     check('proyecto_spo', t.proyecto_spo) &&
     check('estabilizacion_sis', t.estabilizacion_sis) &&
-    check('aprobar_estimacion', t.aprobar_estimacion) &&
-    check('presupuesto_habilitado', t.presupuesto_habilitado) &&
-    check('planificacion_aprobada', t.planificacion_aprobada)
+    checkStageSpecific('aprobar_estimacion', t.aprobar_estimacion, 'por_aprobar_estimacion') &&
+    checkStageSpecific('presupuesto_habilitado', t.presupuesto_habilitado, 'por_habilitar_presupuesto') &&
+    checkStageSpecific('planificacion_aprobada', t.planificacion_aprobada, 'aprobar_planificacion')
   );
 }
 
@@ -161,11 +155,48 @@ export default function App() {
       lideres:       buildOptions(from('lideres_dominio'), t => t.lider_dominio),
       recursos:      buildOptions(from('tipos_recurso'), t => t.tipo_recurso),
       prioridades:   buildOptions(from('prioridades_brm'), t => t.prioridad_brm),
-      aprobar_estimacion: buildOptions(from('aprobar_estimacion'), t => t.aprobar_estimacion),
-      presupuesto_habilitado: buildOptions(from('presupuesto_habilitado'), t => t.presupuesto_habilitado),
-      planificacion_aprobada: buildOptions(from('planificacion_aprobada'), t => t.planificacion_aprobada),
+      aprobar_estimacion: buildOptions(
+        from('aprobar_estimacion').filter(t => t.etapa_actual === 'por_aprobar_estimacion'), 
+        t => t.aprobar_estimacion
+      ),
+      presupuesto_habilitado: buildOptions(
+        from('presupuesto_habilitado').filter(t => t.etapa_actual === 'por_habilitar_presupuesto'), 
+        t => t.presupuesto_habilitado
+      ),
+      planificacion_aprobada: buildOptions(
+        from('planificacion_aprobada').filter(t => t.etapa_actual === 'aprobar_planificacion'), 
+        t => t.planificacion_aprobada
+      ),
     };
   }, [data, filters]);
+
+  // Macro: Aplicar filtros de Pendiente de BPs
+  const handlePendientesBPs = () => {
+    if (!data) return;
+    
+    const isAffirmative = (v: string | null | undefined) => {
+      const s = (v ?? '').toUpperCase().trim();
+      return ['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s);
+    };
+
+    const getPending = (getter: (t: Iniciativa) => string | null | undefined, stage: EtapaPipeline) => {
+      const set = new Set<string>();
+      data.iniciativas.forEach(t => {
+        if (t.etapa_actual === stage && !isAffirmative(getter(t))) {
+          set.add(normalize(getter(t)));
+        }
+      });
+      return Array.from(set);
+    };
+
+    setFilters(prev => ({
+      ...prev,
+      etapas: ['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion'],
+      aprobar_estimacion: getPending(t => t.aprobar_estimacion, 'por_aprobar_estimacion'),
+      presupuesto_habilitado: getPending(t => t.presupuesto_habilitado, 'por_habilitar_presupuesto'),
+      planificacion_aprobada: getPending(t => t.planificacion_aprobada, 'aprobar_planificacion'),
+    }));
+  };
 
   if (!data) {
     return (
@@ -286,7 +317,12 @@ export default function App() {
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {/* Filtros — siempre arriba */}
-        <Filters filters={filters} setFilters={setFilters} options={filterOptions} />
+        <Filters 
+          filters={filters} 
+          setFilters={setFilters} 
+          options={filterOptions} 
+          onPendientesBPs={handlePendientesBPs}
+        />
 
         {/* Pipeline — filtro visual de etapa */}
         <Pipeline

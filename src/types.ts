@@ -88,5 +88,4 @@ export interface FilterState {
   aprobar_estimacion: string[];
   presupuesto_habilitado: string[];
   planificacion_aprobada: string[];
-  pendiente_bps: boolean;
 }

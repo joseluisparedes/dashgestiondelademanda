@@ -104,10 +104,15 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const errors: string[] = [];
         
         const expectedTabs = Object.keys(HOJAS_OPERATIVAS);
+        const ALLOWED_EXTRA_TABS = [
+          'Data maestra', 'BD', 'Priorización BRM', 'Backup 1902 1025', 
+          'Por confirmar', 'Forms', 'Criterios Prioriz', 'Hoja1', 
+          'Tipo de cambio', 'Sheet1'
+        ];
         const actualTabs = workbook.SheetNames;
         
         const missingTabs = expectedTabs.filter(t => !actualTabs.includes(t));
-        const extraTabs = actualTabs.filter(t => !expectedTabs.includes(t));
+        const extraTabs = actualTabs.filter(t => !expectedTabs.includes(t) && !ALLOWED_EXTRA_TABS.includes(t));
         
         if (missingTabs.length > 0) {
           errors.push(`• Faltan pestañas esperadas: ${missingTabs.join(', ')}`);
@@ -129,7 +134,10 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Funcionalidad nueva', 'Estatus Estimación', 'Acción', 'Atender',
           'Priorización de atención', 'Prioridad', 'Fecha inicio', 'Fecha fin', 'Planificada',
           'Impacto SOX', 'SOX', 'Estado', 'Subestado', 'Fase', 'Etapa',
-          'Aprobar estimación', 'Presupuesto Habilitado', 'Planificación aprobada'
+          'Aprobar estimación', 'Presupuesto Habilitado', 'Planificación aprobada',
+          'Hora de finalización', 'Correo electrónico', 'Nombre', 'Descripción del problema',
+          'Situación deseada', 'Procesos y áreas impactadas', 'Adjuntar', 'Adjuntos',
+          'Fecha máxima de estimación', 'Asunciones', 'Comentarios', 'Completar información', 'STRING'
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -145,7 +153,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
           if (rows.length === 0) return;
           
-          const headers = Object.keys(rows[0]);
+          const headers = Object.keys(rows[0]).filter(h => !h.startsWith('__EMPTY'));
           
           const newCols = headers.filter(h => !KNOWN_KEYWORDS.some(kw => h.toLowerCase().includes(kw.toLowerCase())));
           if (newCols.length > 0) {

@@ -70,7 +70,19 @@ function matchesAllFilters(
       (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
   }
 
+  // Búsqueda por texto (Título u Objetivo)
+  let passesSearch = true;
+  if (filters.busqueda && excludeField !== 'busqueda') {
+    const term = filters.busqueda.toLowerCase().trim();
+    if (term) {
+      const title = (t.titulo || '').toLowerCase();
+      const obj = (t.objetivo || '').toLowerCase();
+      passesSearch = title.includes(term) || obj.includes(term);
+    }
+  }
+
   return (
+    passesSearch &&
     check('etapas', t.etapa_actual) &&
     check('instituciones', t.institucion) &&
     check('pilares', t.pilar_estrategico) &&

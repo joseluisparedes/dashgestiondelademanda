@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FilterState, EtapaPipeline } from '../types';
 import { INITIAL_FILTERS, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
-import { X, ChevronDown, SlidersHorizontal } from 'lucide-react';
+import { X, ChevronDown, SlidersHorizontal, Search } from 'lucide-react';
 
 interface FilterOptions {
   instituciones: string[];
@@ -272,9 +272,9 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
   );
 
   return (
-    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 space-y-4">
+    <div className="bg-white p-5 rounded-xl shadow-sm border border-gray-100 flex flex-col">
       {/* Cabecera */}
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between mb-4">
         <div className="flex items-center gap-2">
           <SlidersHorizontal size={15} className="text-gray-400" />
           <span className="text-sm font-semibold text-gray-700">Filtros</span>
@@ -303,8 +303,30 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
         </div>
       </div>
 
+      {/* Barra de Búsqueda */}
+      <div className="relative mb-5">
+        <div className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none">
+          <Search size={16} className="text-gray-400" />
+        </div>
+        <input
+          type="text"
+          placeholder="Buscar por título u objetivo de la iniciativa..."
+          value={filters.busqueda || ''}
+          onChange={e => setFilters(prev => ({ ...prev, busqueda: e.target.value }))}
+          className="w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-gray-400 text-gray-700"
+        />
+        {filters.busqueda && (
+          <button
+            onClick={() => setFilters(prev => ({ ...prev, busqueda: '' }))}
+            className="absolute inset-y-0 right-0 pr-3 flex items-center text-gray-400 hover:text-gray-600 transition-colors"
+          >
+            <X size={16} />
+          </button>
+        )}
+      </div>
+
       {/* Filtros multi-valor */}
-      <div className="flex flex-wrap gap-3 items-start">
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-x-4 gap-y-5">
         <MultiSelect
           label="Institución"
           field="instituciones"
@@ -376,29 +398,28 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
           setFilters={setFilters}
         />
 
-        {/* Separador visual */}
-        <div className="w-px bg-gray-100 self-stretch mx-1" />
-
-        {/* Toggles booleanos con soporte de vacíos */}
-        <ToggleFilter
-          label="Impacto SOX"
-          field="impacto_sox"
-          filters={filters}
-          setFilters={setFilters}
-          siColor="red"
-        />
-        <ToggleFilter
-          label="Proyecto SPO"
-          field="proyecto_spo"
-          filters={filters}
-          setFilters={setFilters}
-        />
-        <ToggleFilter
-          label="Estab. SIS"
-          field="estabilizacion_sis"
-          filters={filters}
-          setFilters={setFilters}
-        />
+        {/* Toggles booleanos ocupando las celdas restantes */}
+        <div className="col-span-full mt-2 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-start">
+          <ToggleFilter
+            label="Impacto SOX"
+            field="impacto_sox"
+            filters={filters}
+            setFilters={setFilters}
+            siColor="red"
+          />
+          <ToggleFilter
+            label="Proyecto SPO"
+            field="proyecto_spo"
+            filters={filters}
+            setFilters={setFilters}
+          />
+          <ToggleFilter
+            label="Estab. SIS"
+            field="estabilizacion_sis"
+            filters={filters}
+            setFilters={setFilters}
+          />
+        </div>
       </div>
 
       {/* Leyenda y estado */}

@@ -15,14 +15,14 @@ import { HOJAS_OPERATIVAS } from '../constants';
 // Helpers de parseo
 // ---------------------------------------------------------------------------
 
-/** Busca una clave en la fila usando comparación exacta o parcial (case-insensitive). */
+/** Busca una clave en la fila usando comparación exacta o parcial (case-insensitive), normalizando espacios/saltos de línea. */
 function getVal(row: Record<string, unknown>, ...keys: string[]): unknown {
   for (const key of keys) {
-    const found = Object.keys(row).find(
-      k =>
-        k.toLowerCase().trim() === key.toLowerCase().trim() ||
-        k.toLowerCase().includes(key.toLowerCase())
-    );
+    const found = Object.keys(row).find(k => {
+      const normK = k.toLowerCase().replace(/\s+/g, ' ').trim();
+      const normSearch = key.toLowerCase().replace(/\s+/g, ' ').trim();
+      return normK === normSearch || normK.includes(normSearch);
+    });
     if (found !== undefined && row[found] !== undefined && row[found] !== '') {
       return row[found];
     }
@@ -43,15 +43,34 @@ function formatDt(val: unknown): string | null {
 }
 
 /**
- * Parsea un valor numérico.
- * Retorna null si el valor es 0, NaN o no numérico
- * (0 en costos se trata como "sin costo", no como costo de cero).
+ * Parsea un valor numérico de forma robusta soportando formatos de miles/decimales.
+ * Retorna null si el valor es 0, NaN o no numérico.
  */
 function parseNum(val: unknown): number | null {
   if (typeof val === 'number') return val !== 0 ? val : null;
   if (typeof val === 'string') {
-    const clean = val.replace(/[^0-9.-]+/g, '');
-    const parsed = parseFloat(clean);
+    let s = val.replace(/[^0-9.,-]/g, '');
+    if (!s) return null;
+    
+    const cIdx = s.lastIndexOf(',');
+    const dIdx = s.lastIndexOf('.');
+    
+    if (cIdx > dIdx) {
+      // Coma es decimal (ej. 11.332,00)
+      s = s.replace(/\./g, '').replace(',', '.');
+    } else if (dIdx > cIdx) {
+      // Punto es decimal (ej. 11,332.00)
+      s = s.replace(/,/g, '');
+    } else if (cIdx !== -1) {
+      // Solo hay comas. Comprobar si son miles (ej. 11,332)
+      if (s.length - cIdx === 4) {
+        s = s.replace(/,/g, '');
+      } else {
+        s = s.replace(',', '.');
+      }
+    }
+    
+    const parsed = parseFloat(s);
     return !isNaN(parsed) && parsed !== 0 ? parsed : null;
   }
   return null;

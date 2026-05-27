@@ -64,6 +64,7 @@ export const INITIAL_FILTERS: FilterState = {
   pilares:          [],
   complejidades:    [],
   it_bps:           [],
+  vp_solicitantes:  [],
   lideres_dominio:  [],
   tipos_recurso:    [],
   prioridades_brm:  [],

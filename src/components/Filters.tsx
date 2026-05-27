@@ -8,6 +8,7 @@ interface FilterOptions {
   pilares: string[];
   complejidades: string[];
   it_bps: string[];
+  vp_solicitantes: string[];
   lideres: string[];
   recursos: string[];
   prioridades: string[];
@@ -352,6 +353,13 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
           label="IT BP"
           field="it_bps"
           options={options.it_bps}
+          filters={filters}
+          setFilters={setFilters}
+        />
+        <MultiSelect
+          label="VP Área Solicitante"
+          field="vp_solicitantes"
+          options={options.vp_solicitantes}
           filters={filters}
           setFilters={setFilters}
         />

@@ -79,6 +79,7 @@ export interface FilterState {
   pilares: string[];
   complejidades: string[];
   it_bps: string[];
+  vp_solicitantes: string[];
   lideres_dominio: string[];
   tipos_recurso: string[];
   prioridades_brm: string[];

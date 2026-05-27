@@ -8,13 +8,15 @@ import { DashboardData, FilterState, Iniciativa, EtapaPipeline } from './types';
 import { INITIAL_FILTERS, EMPTY_SENTINEL } from './constants';
 import { parseExcelFile } from './lib/excelParser';
 import { KPICards } from './components/KPICards';
-import { Charts } from './components/Charts';
 import { DataTable } from './components/DataTable';
 import { Filters } from './components/Filters';
 import { Pipeline } from './components/Pipeline';
+import { Reports } from './components/Reports';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Upload, AlertCircle } from 'lucide-react';
+import { Loader2, Upload, AlertCircle, LayoutDashboard, BarChart2 } from 'lucide-react';
+
+type ActiveTab = 'resumen' | 'reportes';
 
 // ---------------------------------------------------------------------------
 // Helpers de filtrado
@@ -88,6 +90,7 @@ function matchesAllFilters(
     check('pilares', t.pilar_estrategico) &&
     check('complejidades', t.complejidad) &&
     check('it_bps', t.it_bp) &&
+    check('vp_solicitantes', t.vp_solicitante) &&
     check('lideres_dominio', t.lider_dominio) &&
     check('tipos_recurso', t.tipo_recurso) &&
     check('prioridades_brm', t.prioridad_brm) &&
@@ -125,6 +128,7 @@ export default function App() {
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [activeTab, setActiveTab] = useState<ActiveTab>('resumen');
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -172,6 +176,7 @@ export default function App() {
       pilares:       buildOptions(from('pilares'),       t => t.pilar_estrategico),
       complejidades: buildOptions(from('complejidades'), t => t.complejidad),
       it_bps:        buildOptions(from('it_bps'),        t => t.it_bp),
+      vp_solicitantes: buildOptions(from('vp_solicitantes'), t => t.vp_solicitante),
       lideres:       buildOptions(from('lideres_dominio'), t => t.lider_dominio),
       recursos:      buildOptions(from('tipos_recurso'), t => t.tipo_recurso),
       prioridades:   buildOptions(from('prioridades_brm'), t => t.prioridad_brm),
@@ -263,6 +268,11 @@ export default function App() {
     );
   }
 
+  const TABS: { id: ActiveTab; label: string; icon: React.ReactNode }[] = [
+    { id: 'resumen',  label: 'Resumen',  icon: <LayoutDashboard size={15} /> },
+    { id: 'reportes', label: 'Reportes', icon: <BarChart2 size={15} /> },
+  ];
+
   return (
     <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
       <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
@@ -276,6 +286,24 @@ export default function App() {
                 Gestión de la Demanda
               </h1>
             </div>
+
+            {/* Tabs de navegación */}
+            <nav className="flex items-center gap-1">
+              {TABS.map(tab => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
+                    activeTab === tab.id
+                      ? 'bg-blue-600 text-white shadow-sm'
+                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+                  }`}
+                >
+                  {tab.icon}
+                  {tab.label}
+                </button>
+              ))}
+            </nav>
 
             <div className="flex items-center gap-6">
               <div className="text-sm text-gray-500 flex flex-col items-end">
@@ -327,36 +355,47 @@ export default function App() {
       </header>
 
       <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
-        {/* Filtros — siempre arriba */}
-        <Filters 
-          filters={filters} 
-          setFilters={setFilters} 
-          options={filterOptions} 
-          onPendientesBPs={handlePendientesBPs}
-        />
+        {activeTab === 'resumen' && (
+          <>
+            {/* Filtros — siempre arriba */}
+            <Filters 
+              filters={filters} 
+              setFilters={setFilters} 
+              options={filterOptions} 
+              onPendientesBPs={handlePendientesBPs}
+            />
 
-        {/* Pipeline — filtro visual de etapa */}
-        <Pipeline
-          iniciativas={filteredIniciativas}
-          activeStages={filters.etapas}
-          onStageClick={(stageId) => {
-            setFilters(f => {
-              const next = f.etapas.includes(stageId)
-                ? f.etapas.filter(e => e !== stageId)
-                : [...f.etapas, stageId];
-              return { ...f, etapas: next };
-            });
-          }}
-        />
+            {/* Pipeline — filtro visual de etapa */}
+            <Pipeline
+              iniciativas={filteredIniciativas}
+              activeStages={filters.etapas}
+              onStageClick={(stageId) => {
+                setFilters(f => {
+                  const next = f.etapas.includes(stageId)
+                    ? f.etapas.filter(e => e !== stageId)
+                    : [...f.etapas, stageId];
+                  return { ...f, etapas: next };
+                });
+              }}
+            />
 
-        {/* Tabla de detalle — inmediatamente después del pipeline para exploración rápida */}
-        <DataTable iniciativas={filteredIniciativas} />
+            {/* KPIs */}
+            <KPICards iniciativas={filteredIniciativas} />
 
-        {/* KPIs */}
-        <KPICards iniciativas={filteredIniciativas} />
+            {/* Tabla de detalle */}
+            <DataTable iniciativas={filteredIniciativas} />
+          </>
+        )}
 
-        {/* Gráficos — contexto analítico */}
-        <Charts iniciativas={filteredIniciativas} />
+        {activeTab === 'reportes' && (
+          <Reports
+            iniciativas={data.iniciativas}
+            onNavigate={(partialFilters) => {
+              setFilters({ ...INITIAL_FILTERS, ...partialFilters });
+              setActiveTab('resumen');
+            }}
+          />
+        )}
       </main>
     </div>
   );

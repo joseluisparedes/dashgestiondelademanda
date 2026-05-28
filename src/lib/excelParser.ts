@@ -148,7 +148,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Proyecto SPO', 'SPO', 'Tipo de iniciativa', 'Tipo', 'Pilar estratégico', 'Pilar',
           'estabilización de procesos SIS', 'SIS', 'Usuarios beneficiados', 'afectados',
           'Beneficio cuantitativo', 'Beneficio', 'Complejidad', 'Líder de Dominio', 'Lider',
-          'Asignado por', 'Fecha de asignación esperada', 'Tiempo estimado', 'meses',
+          'Asignado por', 'Fecha de asignación esperada', 'Fecha de asignación del LD', 'Tiempo estimado', 'meses',
           'Recursos internos o externos', 'Recurso', 'Proyecto o Requerimiento', 'No BAU',
           'Funcionalidad nueva', 'Estatus Estimación', 'Acción', 'Atender',
           'Priorización de atención', 'Prioridad', 'Fecha inicio', 'Fecha fin', 'Planificada',
@@ -253,7 +253,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               asignado_por:
                 parseStr(g('Asignado por')),
               fecha_asignacion:
-                formatDt(g('Fecha de asignación esperada')),
+                formatDt(g('Fecha de asignación esperada', 'Fecha de asignación del LD')),
               duracion_meses:
                 parseNum(g('Tiempo estimado', 'meses')),
               costo_usd,

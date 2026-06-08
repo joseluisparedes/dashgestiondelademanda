@@ -149,7 +149,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'estabilización de procesos SIS', 'SIS', 'Usuarios beneficiados', 'afectados',
           'Beneficio cuantitativo', 'Beneficio', 'Complejidad', 'Líder de Dominio', 'Lider',
           'Asignado por', 'Fecha de asignación esperada', 'Fecha de asignación del LD', 'Tiempo estimado', 'meses',
-          'Recursos internos o externos', 'Recurso', 'Proyecto o Requerimiento', 'No BAU',
+          'Recursos internos o externos', 'Recurso', 'Proyecto o Requerimiento', 'No BAU', 'No catalogado', 'Proyecto o Req',
           'Funcionalidad nueva', 'Estatus Estimación', 'Acción', 'Atender',
           'Priorización de atención', 'Prioridad', 'Fecha inicio', 'Fecha fin', 'Planificada',
           'Impacto SOX', 'SOX', 'Estado', 'Subestado', 'Fase', 'Etapa',
@@ -261,7 +261,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               tipo_recurso:
                 parseStr(g('Recursos internos o externos', 'Recurso')),
               proyecto_o_req:
-                parseStr(g('Proyecto o Requerimiento', 'No BAU')),
+                parseStr(g('Proyecto o Requerimiento', 'No BAU', 'Proyecto o Req. No catalogado', 'No catalogado')),
               funcionalidad_nueva:
                 parseStr(g('Funcionalidad nueva')),
               estatus_estimacion:

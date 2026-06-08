@@ -43,38 +43,89 @@ function formatDt(val: unknown): string | null {
 }
 
 /**
- * Parsea un valor numérico de forma robusta soportando formatos de miles/decimales.
- * Retorna null si el valor es 0, NaN o no numérico.
+ * Convierte un token numérico string a float, detectando automáticamente
+ * si el separador de miles/decimales es coma o punto.
+ */
+function parseNumToken(s: string): number | null {
+  if (!s) return null;
+  s = s.trim();
+  const cIdx = s.lastIndexOf(',');
+  const dIdx = s.lastIndexOf('.');
+  let clean = s;
+  if (cIdx > -1 && dIdx > -1) {
+    // Ambos presentes: el último es el decimal
+    if (cIdx > dIdx) {
+      clean = s.replace(/\./g, '').replace(',', '.'); // "1.234,56" → "1234.56"
+    } else {
+      clean = s.replace(/,/g, '');                    // "1,234.56" → "1234.56"
+    }
+  } else if (cIdx > -1) {
+    // Solo coma: ¿miles o decimal?
+    const afterComma = s.substring(cIdx + 1);
+    if (afterComma.length === 3 && /^\d{3}$/.test(afterComma)) {
+      clean = s.replace(',', ''); // "1,234" → "1234"
+    } else {
+      clean = s.replace(',', '.'); // "1,5" → "1.5"
+    }
+  }
+  clean = clean.replace(/[^0-9.]/g, '');
+  const parsed = parseFloat(clean);
+  return !isNaN(parsed) ? parsed : null;
+}
+
+/**
+ * Extrae el número que sigue a "Total:" en un texto descriptivo,
+ * ignorando símbolos de moneda ($, S/, S/.) entre "Total:" y el número.
+ */
+function extractTotalFromText(text: string): number | null {
+  const m = text.match(/total\s*:?\s*[^\n0-9]*([0-9][0-9.,]*)/i);
+  if (!m) return null;
+  return parseNumToken(m[1]);
+}
+
+/**
+ * Parsea un valor numérico de forma robusta soportando:
+ * - Números simples (enteros, decimales con punto o coma)
+ * - Celdas con texto descriptivo y desglose de costos, ej:
+ *     "Datalake: $32,445\nAplicación Genesys: $7,646.40\nTotal: $40,091.4"
+ *   → Si hay una línea "Total:", se usa ese valor.
+ *   → Si no hay Total, se suman los valores monetarios encontrados.
+ * Retorna null si el valor es 0, NaN o no contiene números.
  */
 function parseNum(val: unknown): number | null {
   if (typeof val === 'number') return val !== 0 ? val : null;
   if (typeof val === 'string') {
-    let s = val.replace(/[^0-9.,-]/g, '');
-    if (!s) return null;
-    
-    const cIdx = s.lastIndexOf(',');
-    const dIdx = s.lastIndexOf('.');
-    
-    if (cIdx > dIdx) {
-      // Coma es decimal (ej. 11.332,00)
-      s = s.replace(/\./g, '').replace(',', '.');
-    } else if (dIdx > cIdx) {
-      // Punto es decimal (ej. 11,332.00)
-      s = s.replace(/,/g, '');
-    } else if (cIdx !== -1) {
-      // Solo hay comas. Comprobar si son miles (ej. 11,332)
-      if (s.length - cIdx === 4) {
-        s = s.replace(/,/g, '');
-      } else {
-        s = s.replace(',', '.');
+    const raw = val.trim();
+    if (!raw) return null;
+
+    // Detectar si la celda es texto descriptivo (multilinea o con texto y ":")
+    const isDescriptive = raw.includes('\n') || (raw.includes(':') && /[a-zA-ZáéíóúÁÉÍÓÚñÑ]/.test(raw));
+
+    if (isDescriptive) {
+      // Estrategia 1: buscar "Total:" y extraer su valor
+      const total = extractTotalFromText(raw);
+      if (total !== null && total !== 0) return total;
+
+      // Estrategia 2: sumar los valores monetarios individuales del desglose
+      const lineNums = [...raw.matchAll(/[S\/\$\.]+\s*([0-9]{1,3}(?:[.,][0-9]{3})*(?:[.,][0-9]+)?)/g)];
+      if (lineNums.length > 0) {
+        const sum = lineNums.reduce((acc, m) => {
+          const n = parseNumToken(m[1]);
+          return n !== null ? acc + n : acc;
+        }, 0);
+        if (sum !== 0) return sum;
       }
     }
-    
-    const parsed = parseFloat(s);
-    return !isNaN(parsed) && parsed !== 0 ? parsed : null;
+
+    // Estrategia 3: número simple (comportamiento original)
+    const s = raw.replace(/[^0-9.,-]/g, '');
+    if (!s) return null;
+    const n = parseNumToken(s);
+    return n !== null && n !== 0 ? n : null;
   }
   return null;
 }
+
 
 /**
  * Convierte un valor a string limpio o null.

@@ -23,6 +23,14 @@ type ActiveTab = 'resumen' | 'reportes';
 // ---------------------------------------------------------------------------
 
 /**
+ * Elimina tildes y diacríticos de un string para comparaciones insensibles a acentos.
+ * Ej: "gestión" → "gestion", "Título" → "Titulo"
+ */
+function stripAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
  * Normaliza un valor de campo a string, retornando EMPTY_SENTINEL si está vacío.
  */
 function normalize(v: string | null | undefined): string {
@@ -72,13 +80,13 @@ function matchesAllFilters(
       (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
   }
 
-  // Búsqueda por texto (Título u Objetivo)
+  // Búsqueda por texto insensible a tildes y mayúsculas (Título u Objetivo)
   let passesSearch = true;
   if (filters.busqueda && excludeField !== 'busqueda') {
-    const term = filters.busqueda.toLowerCase().trim();
+    const term = stripAccents(filters.busqueda.toLowerCase().trim());
     if (term) {
-      const title = (t.titulo || '').toLowerCase();
-      const obj = (t.objetivo || '').toLowerCase();
+      const title = stripAccents((t.titulo || '').toLowerCase());
+      const obj   = stripAccents((t.objetivo || '').toLowerCase());
       passesSearch = title.includes(term) || obj.includes(term);
     }
   }

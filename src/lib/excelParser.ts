@@ -207,7 +207,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Aprobar estimación', 'Presupuesto Habilitado', 'Planificación aprobada',
           'Hora de finalización', 'Correo electrónico', 'Nombre', 'Descripción del problema',
           'Situación deseada', 'Procesos y áreas impactadas', 'Adjuntar', 'Adjuntos',
-          'Fecha máxima de estimación', 'Asunciones', 'Comentarios', 'Completar información', 'STRING'
+          'Fecha máxima de estimación', 'Asunciones', 'Supuestos', 'Comentarios', 'Completar información', 'STRING'
         ];
 
         const REQUIRED_KEYWORDS = [

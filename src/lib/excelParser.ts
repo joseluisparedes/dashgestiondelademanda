@@ -267,7 +267,16 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           const sheet = workbook.Sheets[sheetName];
           if (!sheet) return; // Hoja no encontrada en este workbook
 
-          const rows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+          const allRows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
+
+          // Descartar filas vacías: el Excel puede tener celdas formateadas sin datos
+          // que sheet_to_json devuelve como filas. Solo procesamos filas que tengan
+          // al menos un Id/Ticket O un Título real.
+          const rows = allRows.filter(row => {
+            const hasId    = getVal(row, 'Id', 'N° Ticket') !== null;
+            const hasTitle = getVal(row, 'Título de la INICIATIVA', 'Titulo') !== null;
+            return hasId || hasTitle;
+          });
           const etapaIndex = etapaOrder.indexOf(etapa);
 
           rows.forEach((row, rowIdx) => {

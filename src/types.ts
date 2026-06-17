@@ -6,6 +6,7 @@ export type EtapaPipeline =
   | 'registro_incompleto'
   | 'por_estimar'
   | 'por_aprobar_estimacion'
+  | 'por_reestimar'
   | 'por_habilitar_presupuesto'
   | 'por_planificar'
   | 'aprobar_planificacion'

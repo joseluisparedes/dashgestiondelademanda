@@ -177,9 +177,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const ALLOWED_EXTRA_TABS = [
           'Data maestra', 'BD', 'Priorización BRM', 'Backup 1902 1025', 
           'Por confirmar', 'Forms', 'Criterios Prioriz', 'Hoja1', 
-          'Tipo de cambio', 'Sheet1',
-          // v20: nueva hoja de reestimación (no integrada al pipeline aún)
-          'Por Reestimar ', 'Por Reestimar'
+          'Tipo de cambio', 'Sheet1'
         ];
         const actualTabs = workbook.SheetNames;
         

@@ -177,7 +177,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const ALLOWED_EXTRA_TABS = [
           'Data maestra', 'BD', 'Priorización BRM', 'Backup 1902 1025', 
           'Por confirmar', 'Forms', 'Criterios Prioriz', 'Hoja1', 
-          'Tipo de cambio', 'Sheet1'
+          'Tipo de cambio', 'Sheet1',
+          // v20: nueva hoja de reestimación (no integrada al pipeline aún)
+          'Por Reestimar ', 'Por Reestimar'
         ];
         const actualTabs = workbook.SheetNames;
         
@@ -207,7 +209,21 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Aprobar estimación', 'Presupuesto Habilitado', 'Planificación aprobada',
           'Hora de finalización', 'Correo electrónico', 'Nombre', 'Descripción del problema',
           'Situación deseada', 'Procesos y áreas impactadas', 'Adjuntar', 'Adjuntos',
-          'Fecha máxima de estimación', 'Asunciones', 'Supuestos', 'Comentarios', 'Completar información', 'STRING'
+          'Fecha máxima de estimación', 'Asunciones', 'Supuestos', 'Comentarios', 'Completar información', 'STRING',
+          // --- Columnas nuevas / renombradas en v20 ---
+          'Puntaje Sugerido', 'Puntaje sugerido', 'Puntaje',
+          'Beneficios cualitativos',
+          'Evidencia de la aprobación', 'Aprobación de la iniciativa',
+          'Workstream del proyecto SPO', 'Workstream', 'ID SPO',
+          'Forma parte de la estabilización', 'estabilización de procesos',
+          'Indicar si es Proyecto', 'Indicar si',
+          'Usuario - Gerencia', 'Gerencia', 'Área solicitante',
+          'Motivo de Reestimación', 'Reestimación', 'Reestimacion',
+          'Fecha de inicio reestimación', 'Fecha fin reestimación',
+          'Estatus Reestimación', 'Estatus Reestimacion',
+          'Costo total dolares', 'Costo total Soles',
+          'Aprobar Estimación', 'Aprobar Estimacion',
+          'Usuarios beneficiados1',
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -280,7 +296,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               vp_solicitante:
                 parseStr(g('VP del área solicitante', 'VP')) ?? '',
               usuario_negocio:
-                parseStr(g('Usuario solicitante del negocio', 'Usuario')) ?? '',
+                parseStr(g('Usuario solicitante del negocio', 'Usuario - Gerencia, Área solicitante', 'Usuario')) ?? '',
               it_bp:
                 parseStr(g('IT BP', 'BP')) ?? '',
               fecha_entrega_requerida:
@@ -292,9 +308,13 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               pilar_estrategico:
                 parseStr(g('Pilar estratégico', 'Pilar')) ?? '',
               estabilizacion_sis:
-                parseSiNo(g('estabilización de procesos SIS', 'SIS')) ?? 'NO',
+                parseSiNo(g(
+                  'Forma parte de la estabilización de procesos  SIS',
+                  'estabilización de procesos SIS',
+                  'SIS'
+                )) ?? 'NO',
               usuarios_beneficiados:
-                parseStr(g('Usuarios beneficiados', 'afectados')) ?? '',
+                parseStr(g('Usuarios beneficiados1', 'Usuarios beneficiados', 'afectados')) ?? '',
               beneficio_cuantitativo:
                 parseStr(g('Beneficio cuantitativo', 'Beneficio')) ?? '',
               complejidad:
@@ -312,7 +332,14 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               tipo_recurso:
                 parseStr(g('Recursos internos o externos', 'Recurso')),
               proyecto_o_req:
-                parseStr(g('Proyecto o Requerimiento', 'No BAU', 'Proyecto o Req. No catalogado', 'No catalogado')),
+                parseStr(g(
+                  'Indicar si es Proyecto o Requerimiento No BAU',
+                  'Proyecto o Requerimiento No BAU',
+                  'Proyecto o Requerimiento',
+                  'No BAU',
+                  'Proyecto o Req. No catalogado',
+                  'No catalogado'
+                )),
               funcionalidad_nueva:
                 parseStr(g('Funcionalidad nueva')),
               estatus_estimacion:

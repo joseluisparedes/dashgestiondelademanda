@@ -8,6 +8,8 @@ import { escapeCsvField } from '../lib/utils';
 
 interface DataTableProps {
   iniciativas: Iniciativa[];
+  expandedId?: number | null;
+  onExpandedIdChange?: (id: number | null) => void;
 }
 
 interface ColumnDef {
@@ -130,7 +132,7 @@ function ExpandedRow({ t }: { t: Iniciativa }) {
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
-export function DataTable({ iniciativas }: DataTableProps) {
+export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedIdChange }: DataTableProps) {
   const COLUMNS: ColumnDef[] = useMemo(() => [
     { id: 'id', label: 'ID', sortKey: 'id', render: t => String(t.id).padStart(4, '0'), className: 'font-mono text-slate-500 text-xs whitespace-nowrap' },
     { id: 'institucion', label: 'Institución', sortKey: 'institucion', render: t => t.institucion || '—', className: 'whitespace-nowrap font-medium text-slate-700' },
@@ -146,7 +148,17 @@ export function DataTable({ iniciativas }: DataTableProps) {
   ], []);
 
   const [page, setPage] = useState(1);
-  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [localExpandedId, setLocalExpandedId] = useState<number | null>(null);
+  
+  const expandedId = propExpandedId !== undefined ? propExpandedId : localExpandedId;
+  const setExpandedId = (id: number | null) => {
+    if (onExpandedIdChange) {
+      onExpandedIdChange(id);
+    } else {
+      setLocalExpandedId(id);
+    }
+  };
+
   const [sortConfig, setSortConfig] = useState<{ key: keyof Iniciativa; direction: 'asc' | 'desc' } | null>(null);
   
   const [columnOrder, setColumnOrder] = useState<string[]>(COLUMNS.map(c => c.id));
@@ -157,7 +169,9 @@ export function DataTable({ iniciativas }: DataTableProps) {
   // Resetear a página 1 cuando cambia el conjunto de datos (al filtrar)
   useEffect(() => {
     setPage(1);
-    setExpandedId(null);
+    if (expandedId !== null && !iniciativas.some(t => t.id === expandedId)) {
+      setExpandedId(null);
+    }
   }, [iniciativas]);
 
   const handleSort = (key: keyof Iniciativa) => {

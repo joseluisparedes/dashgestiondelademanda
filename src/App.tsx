@@ -12,9 +12,9 @@ import { DataTable } from './components/DataTable';
 import { Filters } from './components/Filters';
 import { Pipeline } from './components/Pipeline';
 import { Reports } from './components/Reports';
-import { format, parseISO } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Upload, AlertCircle, LayoutDashboard, BarChart2 } from 'lucide-react';
+import { Loader2, Upload, AlertCircle, LayoutDashboard, BarChart2, Bell } from 'lucide-react';
 
 type ActiveTab = 'resumen' | 'reportes';
 
@@ -80,14 +80,16 @@ function matchesAllFilters(
       (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
   }
 
-  // Búsqueda por texto insensible a tildes y mayúsculas (Título u Objetivo)
+  // Búsqueda por texto insensible a tildes y mayúsculas (Título, Objetivo o ID)
   let passesSearch = true;
   if (filters.busqueda && excludeField !== 'busqueda') {
     const term = stripAccents(filters.busqueda.toLowerCase().trim());
     if (term) {
       const title = stripAccents((t.titulo || '').toLowerCase());
       const obj   = stripAccents((t.objetivo || '').toLowerCase());
-      passesSearch = title.includes(term) || obj.includes(term);
+      const idStr = String(t.id);
+      const paddedIdStr = idStr.padStart(4, '0');
+      passesSearch = title.includes(term) || obj.includes(term) || idStr === term || paddedIdStr === term;
     }
   }
 
@@ -137,6 +139,8 @@ export default function App() {
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('resumen');
+  const [expandedId, setExpandedId] = useState<number | null>(null);
+  const [notificationsOpen, setNotificationsOpen] = useState(false);
 
   const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -149,6 +153,8 @@ export default function App() {
       const result = await parseExcelFile(file);
       setData(result);
       setFilters(INITIAL_FILTERS);
+      setExpandedId(null);
+      setNotificationsOpen(false);
     } catch (err) {
       setUploadError(
         err instanceof Error ? err.message : 'Error desconocido al procesar el archivo.'
@@ -193,6 +199,36 @@ export default function App() {
       planificacion_aprobada: buildOptions(from('planificacion_aprobada'), t => t.planificacion_aprobada),
     };
   }, [data, filters]);
+
+  // Iniciativas pronto a iniciar (1, 2 o 3 días antes de la fecha_inicio_planificada)
+  const upcomingIniciativas = useMemo(() => {
+    if (!data) return [];
+    const today = new Date();
+    return data.iniciativas.filter(t => {
+      if (!t.fecha_inicio_planificada || t.etapa_actual === 'eliminadas') return false;
+      try {
+        const start = parseISO(t.fecha_inicio_planificada);
+        const diff = differenceInCalendarDays(start, today);
+        return diff >= 1 && diff <= 3;
+      } catch {
+        return false;
+      }
+    }).sort((a, b) => {
+      const dateA = new Date(a.fecha_inicio_planificada!).getTime();
+      const dateB = new Date(b.fecha_inicio_planificada!).getTime();
+      return dateA - dateB;
+    });
+  }, [data]);
+
+  const handleSelectIniciativa = (iniciativa: Iniciativa) => {
+    setFilters({
+      ...INITIAL_FILTERS,
+      busqueda: String(iniciativa.id).padStart(4, '0')
+    });
+    setExpandedId(iniciativa.id);
+    setActiveTab('resumen');
+    setNotificationsOpen(false);
+  };
 
   // Macro: Aplicar filtros de Pendiente de BPs (visualmente a los checkboxes)
   const handlePendientesBPs = () => {
@@ -314,6 +350,99 @@ export default function App() {
             </nav>
 
             <div className="flex items-center gap-6">
+              {/* Campanita de Notificaciones */}
+              <div className="relative">
+                <button
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
+                    notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                  aria-label="Notificaciones"
+                >
+                  <Bell size={20} className={upcomingIniciativas.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
+                  {upcomingIniciativas.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                      {upcomingIniciativas.length}
+                    </span>
+                  )}
+                </button>
+
+                {notificationsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                      <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                        <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
+                          <Bell size={14} className="text-blue-500" />
+                          Próximas a Iniciar
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
+                          {upcomingIniciativas.length} alerta{upcomingIniciativas.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
+                        {upcomingIniciativas.length > 0 ? (
+                          upcomingIniciativas.map(ini => {
+                            const start = parseISO(ini.fecha_inicio_planificada!);
+                            const diff = differenceInCalendarDays(start, new Date());
+                            
+                            const borderClass = 
+                              diff === 1 ? 'border-l-red-500' : 
+                              diff === 2 ? 'border-l-amber-500' : 
+                              'border-l-blue-500';
+                            
+                            const badgeBg = 
+                              diff === 1 ? 'bg-red-50 text-red-700' : 
+                              diff === 2 ? 'bg-amber-50 text-amber-700' : 
+                              'bg-blue-50 text-blue-700';
+
+                            const diffText = 
+                              diff === 1 ? 'Inicia mañana' : 
+                              `Inicia en ${diff} días`;
+
+                            return (
+                              <button
+                                key={ini.id}
+                                onClick={() => handleSelectIniciativa(ini)}
+                                className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
+                              >
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                    ID: {String(ini.id).padStart(4, '0')}
+                                  </span>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
+                                    {diffText}
+                                  </span>
+                                </div>
+                                
+                                <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
+                                  {ini.titulo}
+                                </h4>
+                                
+                                <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
+                                  <span className="font-medium truncate max-w-[150px]">
+                                    BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
+                                  </span>
+                                  <span className="font-mono">
+                                    {format(start, 'dd MMM yyyy', { locale: es })}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="p-6 text-center text-gray-400 text-xs flex flex-col items-center gap-1.5">
+                            <Bell size={20} className="opacity-30" />
+                            <span>Sin iniciativas por iniciar en 1, 2 o 3 días.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
+
               <div className="text-sm text-gray-500 flex flex-col items-end">
                 <span className="font-medium text-[11px] text-gray-400 uppercase tracking-wider">
                   Última actualización
@@ -391,7 +520,11 @@ export default function App() {
             <KPICards iniciativas={filteredIniciativas} />
 
             {/* Tabla de detalle */}
-            <DataTable iniciativas={filteredIniciativas} />
+            <DataTable 
+              iniciativas={filteredIniciativas} 
+              expandedId={expandedId}
+              onExpandedIdChange={setExpandedId}
+            />
           </>
         )}
 

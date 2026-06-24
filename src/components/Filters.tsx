@@ -311,7 +311,7 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
         </div>
         <input
           type="text"
-          placeholder="Buscar por título u objetivo de la iniciativa..."
+          placeholder="Buscar por ID, título u objetivo de la iniciativa..."
           value={filters.busqueda || ''}
           onChange={e => setFilters(prev => ({ ...prev, busqueda: e.target.value }))}
           className="w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-gray-400 text-gray-700"

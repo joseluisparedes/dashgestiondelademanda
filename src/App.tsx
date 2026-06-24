@@ -89,7 +89,7 @@ function matchesAllFilters(
       const obj   = stripAccents((t.objetivo || '').toLowerCase());
       const idStr = String(t.id);
       const paddedIdStr = idStr.padStart(4, '0');
-      passesSearch = title.includes(term) || obj.includes(term) || idStr === term || paddedIdStr === term;
+      passesSearch = title.includes(term) || obj.includes(term) || idStr.includes(term) || paddedIdStr.includes(term);
     }
   }
 

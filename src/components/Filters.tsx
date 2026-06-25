@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { FilterState, EtapaPipeline } from '../types';
-import { INITIAL_FILTERS, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
+import { INITIAL_FILTERS, EMPTY_SENTINEL, EMPTY_LABEL, ETAPAS_MAP, ETAPAS_PLANIFICADAS_MAP } from '../constants';
 import { X, ChevronDown, SlidersHorizontal, Search } from 'lucide-react';
 
 interface FilterOptions {
@@ -15,6 +15,7 @@ interface FilterOptions {
   aprobar_estimacion: string[];
   presupuesto_habilitado: string[];
   planificacion_aprobada: string[];
+  etapas: string[];
 }
 
 interface FiltersProps {
@@ -22,6 +23,7 @@ interface FiltersProps {
   setFilters: (f: React.SetStateAction<FilterState>) => void;
   options: FilterOptions;
   onPendientesBPs: () => void;
+  mode?: 'demanda' | 'planificadas';
 }
 
 /** Retorna el texto visible de una opción, traduciendo el sentinel. */
@@ -36,6 +38,7 @@ function chipStyle(opt: string): string {
     : 'bg-blue-100 text-blue-700';
 }
 
+
 // ---------------------------------------------------------------------------
 // Dropdown multi-select con checkboxes y chips removibles
 // ---------------------------------------------------------------------------
@@ -45,9 +48,10 @@ interface MultiSelectProps {
   options: string[];
   filters: FilterState;
   setFilters: (f: React.SetStateAction<FilterState>) => void;
+  mode?: 'demanda' | 'planificadas';
 }
 
-function MultiSelect({ label, field, options, filters, setFilters }: MultiSelectProps) {
+function MultiSelect({ label, field, options, filters, setFilters, mode = 'demanda' }: MultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
   const selected = filters[field] as string[];
@@ -77,6 +81,17 @@ function MultiSelect({ label, field, options, filters, setFilters }: MultiSelect
     }));
   };
 
+  const getLabel = (opt: string) => {
+    if (field === 'etapas') {
+      if (opt === EMPTY_SENTINEL) return EMPTY_LABEL;
+      const config = mode === 'planificadas'
+        ? ETAPAS_PLANIFICADAS_MAP.get(opt as any)
+        : ETAPAS_MAP.get(opt as any);
+      return config ? config.label : opt;
+    }
+    return optionLabel(opt);
+  };
+
   const hasSelection = selected.length > 0;
   const availableCount = options.length;
 
@@ -89,32 +104,66 @@ function MultiSelect({ label, field, options, filters, setFilters }: MultiSelect
         )}
       </label>
 
-      <button
-        type="button"
-        onClick={() => setOpen(o => !o)}
-        disabled={availableCount === 0}
-        className={`w-full text-xs text-left rounded-lg border px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all ${
-          availableCount === 0
-            ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
-            : hasSelection
-            ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
-            : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
-        }`}
-      >
-        <span>
-          {availableCount === 0
-            ? 'Sin opciones'
-            : hasSelection
-            ? `${selected.length} sel.`
-            : 'Todos'}
-        </span>
-        {availableCount > 0 && (
-          <ChevronDown
-            size={12}
-            className={`flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
-          />
+      <div className="relative">
+        <button
+          type="button"
+          onClick={() => setOpen(o => !o)}
+          disabled={availableCount === 0}
+          className={`w-full text-xs text-left rounded-lg border px-2.5 py-1.5 flex items-center justify-between gap-1 transition-all ${
+            availableCount === 0
+              ? 'border-gray-100 bg-gray-50 text-gray-300 cursor-not-allowed'
+              : hasSelection
+              ? 'border-blue-400 bg-blue-50 text-blue-700 font-medium'
+              : 'border-gray-200 bg-white text-gray-500 hover:border-gray-300'
+          }`}
+        >
+          <span>
+            {availableCount === 0
+              ? 'Sin opciones'
+              : hasSelection
+              ? `${selected.length} sel.`
+              : 'Todos'}
+          </span>
+          {availableCount > 0 && (
+            <ChevronDown
+              size={12}
+              className={`flex-shrink-0 transition-transform duration-150 ${open ? 'rotate-180' : ''}`}
+            />
+          )}
+        </button>
+
+        {/* Dropdown */}
+        {open && availableCount > 0 && (
+          <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[190px] max-h-60 overflow-y-auto">
+            {selected.length > 0 && (
+              <button
+                onClick={() => setFilters(prev => ({ ...prev, [field]: [] }))}
+                className="w-full text-left px-3 py-1.5 text-[11px] text-red-500 hover:bg-red-50 border-b border-gray-100 font-medium"
+              >
+                Limpiar selección
+              </button>
+            )}
+            {options.map(opt => (
+              <label
+                key={opt}
+                className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs ${
+                  opt === EMPTY_SENTINEL
+                    ? 'text-amber-600 italic border-t border-gray-100'
+                    : 'text-gray-700 hover:bg-gray-50'
+                }`}
+              >
+                <input
+                  type="checkbox"
+                  checked={selected.includes(opt)}
+                  onChange={() => toggleOption(opt)}
+                  className={`w-3 h-3 flex-shrink-0 ${opt === EMPTY_SENTINEL ? 'accent-amber-500' : 'accent-blue-500'}`}
+                />
+                <span className="leading-tight">{getLabel(opt)}</span>
+              </label>
+            ))}
+          </div>
         )}
-      </button>
+      </div>
 
       {/* Chips de selección activa */}
       {hasSelection && (
@@ -124,47 +173,15 @@ function MultiSelect({ label, field, options, filters, setFilters }: MultiSelect
               key={val}
               className={`inline-flex items-center gap-0.5 text-[10px] px-1.5 py-0.5 rounded-full font-medium ${chipStyle(val)}`}
             >
-              <span className="max-w-[100px] truncate">{optionLabel(val)}</span>
+              <span className="max-w-[100px] truncate">{getLabel(val)}</span>
               <button
                 onClick={() => removeChip(val)}
                 className="hover:opacity-70 ml-0.5 flex-shrink-0"
-                aria-label={`Quitar ${optionLabel(val)}`}
+                aria-label={`Quitar ${getLabel(val)}`}
               >
                 <X size={9} />
               </button>
             </span>
-          ))}
-        </div>
-      )}
-
-      {/* Dropdown */}
-      {open && availableCount > 0 && (
-        <div className="absolute top-full left-0 mt-1 z-50 bg-white border border-gray-200 rounded-lg shadow-lg min-w-[190px] max-h-60 overflow-y-auto">
-          {selected.length > 0 && (
-            <button
-              onClick={() => setFilters(prev => ({ ...prev, [field]: [] }))}
-              className="w-full text-left px-3 py-1.5 text-[11px] text-red-500 hover:bg-red-50 border-b border-gray-100 font-medium"
-            >
-              Limpiar selección
-            </button>
-          )}
-          {options.map(opt => (
-            <label
-              key={opt}
-              className={`flex items-center gap-2 px-3 py-1.5 cursor-pointer text-xs ${
-                opt === EMPTY_SENTINEL
-                  ? 'text-amber-600 italic border-t border-gray-100'
-                  : 'text-gray-700 hover:bg-gray-50'
-              }`}
-            >
-              <input
-                type="checkbox"
-                checked={selected.includes(opt)}
-                onChange={() => toggleOption(opt)}
-                className={`w-3 h-3 flex-shrink-0 ${opt === EMPTY_SENTINEL ? 'accent-amber-500' : 'accent-blue-500'}`}
-              />
-              <span className="leading-tight">{optionLabel(opt)}</span>
-            </label>
           ))}
         </div>
       )}
@@ -266,7 +283,8 @@ function ToggleFilter({
 // ---------------------------------------------------------------------------
 // Componente principal de filtros
 // ---------------------------------------------------------------------------
-export function Filters({ filters, setFilters, options, onPendientesBPs }: FiltersProps) {
+export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 'demanda' }: FiltersProps) {
+  const isPlanificadas = mode === 'planificadas';
   const totalActive = (Object.values(filters) as string[][]).reduce(
     (sum, arr) => sum + arr.length,
     0
@@ -286,12 +304,14 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
           )}
         </div>
         <div className="flex items-center gap-4">
-          <button
-            onClick={onPendientesBPs}
-            className="text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm bg-white border-purple-200 text-purple-700 hover:bg-purple-50"
-          >
-            🌟 Ver Pendientes de BPs
-          </button>
+          {!isPlanificadas && (
+            <button
+              onClick={onPendientesBPs}
+              className="text-[11px] px-3 py-1.5 rounded-full border font-bold transition-all shadow-sm bg-white border-purple-200 text-purple-700 hover:bg-purple-50"
+            >
+              🌟 Ver Pendientes de BPs
+            </button>
+          )}
           
           {totalActive > 0 && (
             <button
@@ -334,99 +354,149 @@ export function Filters({ filters, setFilters, options, onPendientesBPs }: Filte
           options={options.instituciones}
           filters={filters}
           setFilters={setFilters}
+          mode={mode}
         />
+        
         <MultiSelect
-          label="Pilar Estratégico"
-          field="pilares"
-          options={options.pilares}
+          label={isPlanificadas ? "Estado" : "Etapa"}
+          field="etapas"
+          options={options.etapas}
           filters={filters}
           setFilters={setFilters}
+          mode={mode}
         />
-        <MultiSelect
-          label="Complejidad"
-          field="complejidades"
-          options={options.complejidades}
-          filters={filters}
-          setFilters={setFilters}
-        />
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Pilar Estratégico"
+            field="pilares"
+            options={options.pilares}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Complejidad"
+            field="complejidades"
+            options={options.complejidades}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
         <MultiSelect
           label="IT BP"
           field="it_bps"
           options={options.it_bps}
           filters={filters}
           setFilters={setFilters}
+          mode={mode}
         />
+        
         <MultiSelect
           label="VP Área Solicitante"
           field="vp_solicitantes"
           options={options.vp_solicitantes}
           filters={filters}
           setFilters={setFilters}
+          mode={mode}
         />
+        
         <MultiSelect
           label="Líder de Dominio"
           field="lideres_dominio"
           options={options.lideres}
           filters={filters}
           setFilters={setFilters}
+          mode={mode}
         />
-        <MultiSelect
-          label="Tipo de Recurso"
-          field="tipos_recurso"
-          options={options.recursos}
-          filters={filters}
-          setFilters={setFilters}
-        />
-        <MultiSelect
-          label="Prioridad BRM"
-          field="prioridades_brm"
-          options={options.prioridades}
-          filters={filters}
-          setFilters={setFilters}
-        />
-        <MultiSelect
-          label="Aprobar estimación"
-          field="aprobar_estimacion"
-          options={options.aprobar_estimacion}
-          filters={filters}
-          setFilters={setFilters}
-        />
-        <MultiSelect
-          label="Presupuesto Habilitado"
-          field="presupuesto_habilitado"
-          options={options.presupuesto_habilitado}
-          filters={filters}
-          setFilters={setFilters}
-        />
-        <MultiSelect
-          label="Planificación aprobada"
-          field="planificacion_aprobada"
-          options={options.planificacion_aprobada}
-          filters={filters}
-          setFilters={setFilters}
-        />
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Tipo de Recurso"
+            field="tipos_recurso"
+            options={options.recursos}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Prioridad BRM"
+            field="prioridades_brm"
+            options={options.prioridades}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Aprobar estimación"
+            field="aprobar_estimacion"
+            options={options.aprobar_estimacion}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Presupuesto Habilitado"
+            field="presupuesto_habilitado"
+            options={options.presupuesto_habilitado}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
+        
+        {!isPlanificadas && (
+          <MultiSelect
+            label="Planificación aprobada"
+            field="planificacion_aprobada"
+            options={options.planificacion_aprobada}
+            filters={filters}
+            setFilters={setFilters}
+            mode={mode}
+          />
+        )}
 
         {/* Toggles booleanos ocupando las celdas restantes */}
         <div className="col-span-full mt-2 pt-4 border-t border-gray-100 flex flex-wrap gap-4 items-start">
-          <ToggleFilter
-            label="Impacto SOX"
-            field="impacto_sox"
-            filters={filters}
-            setFilters={setFilters}
-            siColor="red"
-          />
+          {!isPlanificadas && (
+            <ToggleFilter
+              label="Impacto SOX"
+              field="impacto_sox"
+              filters={filters}
+              setFilters={setFilters}
+              siColor="red"
+            />
+          )}
+          
           <ToggleFilter
             label="Proyecto SPO"
             field="proyecto_spo"
             filters={filters}
             setFilters={setFilters}
           />
-          <ToggleFilter
-            label="Estab. SIS"
-            field="estabilizacion_sis"
-            filters={filters}
-            setFilters={setFilters}
-          />
+          
+          {!isPlanificadas && (
+            <ToggleFilter
+              label="Estab. SIS"
+              field="estabilizacion_sis"
+              filters={filters}
+              setFilters={setFilters}
+            />
+          )}
         </div>
       </div>
 

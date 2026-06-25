@@ -5,11 +5,32 @@ import { formatSoles } from '../lib/utils';
 
 interface KPICardsProps {
   iniciativas: Iniciativa[];
+  mode?: 'demanda' | 'planificadas';
 }
 
-export function KPICards({ iniciativas: all }: KPICardsProps) {
+export function KPICards({ iniciativas: all, mode = 'demanda' }: KPICardsProps) {
+  const isPlanificadas = mode === 'planificadas';
+
   const kpis = useMemo(() => {
-    // Excluir eliminadas de todos los cálculos de KPI
+    if (isPlanificadas) {
+      const total = all.length;
+      const porIniciar = all.filter(i => i.etapa_actual === 'por_iniciar').length;
+      const enEjecucion = all.filter(i => i.etapa_actual === 'en_ejecucion').length;
+      const terminado = all.filter(i => i.etapa_actual === 'terminado').length;
+      const detenido = all.filter(i => i.etapa_actual === 'detenido').length;
+      const costoTotalSoles = all.reduce((sum, i) => sum + (i.costo_soles ?? 0), 0);
+
+      return {
+        total,
+        porIniciar,
+        enEjecucion,
+        terminado,
+        detenido,
+        costoTotalSoles,
+      };
+    }
+
+    // Excluir eliminadas de todos los cálculos de KPI para el modo Demanda
     const activas = all.filter(i => i.etapa_actual !== 'eliminadas');
     const eliminadas = all.filter(i => i.etapa_actual === 'eliminadas');
 
@@ -38,7 +59,7 @@ export function KPICards({ iniciativas: all }: KPICardsProps) {
       soxCount,
       eliminadas: eliminadas.length,
     };
-  }, [all]);
+  }, [all, isPlanificadas]);
 
   const formatPresupuesto = (val: number) => {
     if (val === 0) return 'S/ 0';
@@ -47,44 +68,104 @@ export function KPICards({ iniciativas: all }: KPICardsProps) {
     return formatSoles(val);
   };
 
+  if (isPlanificadas) {
+    const pkpis = kpis as {
+      total: number;
+      porIniciar: number;
+      enEjecucion: number;
+      terminado: number;
+      detenido: number;
+      costoTotalSoles: number;
+    };
+    return (
+      <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
+        <Card
+          title="Total Requerimientos"
+          value={pkpis.total}
+          subtitle="En el archivo de planificadas"
+          icon={<Briefcase size={18} className="text-blue-500" />}
+          accentColor="#3b82f6"
+        />
+        <Card
+          title="Por Iniciar"
+          value={pkpis.porIniciar}
+          subtitle="Pendientes de comenzar"
+          icon={<AlertCircle size={18} className="text-yellow-500" />}
+          accentColor="#eab308"
+        />
+        <Card
+          title="En Ejecución"
+          value={pkpis.enEjecucion}
+          subtitle="Trabajo en progreso"
+          icon={<Activity size={18} className="text-blue-600" />}
+          accentColor="#2563eb"
+        />
+        <Card
+          title="Terminados"
+          value={pkpis.terminado}
+          subtitle="Entregas completadas"
+          icon={<Banknote size={18} className="text-emerald-500" />}
+          accentColor="#10b981"
+        />
+        <Card
+          title="Detenidos"
+          value={pkpis.detenido}
+          subtitle="Requerimientos pausados"
+          icon={<ShieldAlert size={18} className="text-red-500" />}
+          accentColor="#ef4444"
+          highlight={pkpis.detenido > 0}
+        />
+      </div>
+    );
+  }
+
+  const dKpis = kpis as {
+    totalActivas: number;
+    sinEstimar: number;
+    presComprometido: number;
+    presEvaluacion: number;
+    soxCount: number;
+    eliminadas: number;
+  };
+
   return (
     <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-5 gap-4">
       <Card
         title="Iniciativas Activas"
-        value={kpis.totalActivas}
+        value={dKpis.totalActivas}
         subtitle="Excluye eliminadas"
         icon={<Activity size={18} className="text-blue-500" />}
         accentColor="#3b82f6"
       />
       <Card
         title="Sin Estimar"
-        value={kpis.sinEstimar}
+        value={dKpis.sinEstimar}
         subtitle="Fases iniciales del pipeline"
         icon={<AlertCircle size={18} className="text-orange-500" />}
         accentColor="#f97316"
-        highlight={kpis.sinEstimar > 20}
+        highlight={dKpis.sinEstimar > 20}
       />
       <Card
         title="Presup. Comprometido"
-        value={formatPresupuesto(kpis.presComprometido)}
+        value={formatPresupuesto(dKpis.presComprometido)}
         subtitle="En planificación activa"
         icon={<Banknote size={18} className="text-emerald-500" />}
         accentColor="#10b981"
       />
       <Card
         title="Presup. en Evaluación"
-        value={formatPresupuesto(kpis.presEvaluacion)}
+        value={formatPresupuesto(dKpis.presEvaluacion)}
         subtitle="Pendiente de aprobación"
         icon={<Briefcase size={18} className="text-purple-500" />}
         accentColor="#8b5cf6"
       />
       <Card
         title="Impacto SOX"
-        value={kpis.soxCount}
+        value={dKpis.soxCount}
         subtitle="Requieren control regulatorio"
         icon={<ShieldAlert size={18} className="text-red-500" />}
         accentColor="#ef4444"
-        highlight={kpis.soxCount > 0}
+        highlight={dKpis.soxCount > 0}
       />
     </div>
   );

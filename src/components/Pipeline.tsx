@@ -1,17 +1,21 @@
 import { Iniciativa } from '../types';
 import { EtapaPipeline } from '../types';
-import { ETAPAS_CONFIG, ETAPAS_MAP } from '../constants';
+import { ETAPAS_CONFIG, ETAPAS_MAP, ETAPAS_PLANIFICADAS_CONFIG, ETAPAS_PLANIFICADAS_MAP } from '../constants';
 
 interface PipelineProps {
   iniciativas: Iniciativa[];
   onStageClick: (stage: EtapaPipeline) => void;
   activeStages: EtapaPipeline[];
+  mode?: 'demanda' | 'planificadas';
 }
 
-export function Pipeline({ iniciativas, onStageClick, activeStages }: PipelineProps) {
+export function Pipeline({ iniciativas, onStageClick, activeStages, mode = 'demanda' }: PipelineProps) {
+  const isPlanificadas = mode === 'planificadas';
+  const currentConfigList = isPlanificadas ? ETAPAS_PLANIFICADAS_CONFIG : ETAPAS_CONFIG;
+  
   // Etapas del flujo normal (excluyendo terminales para el flujo principal)
-  const mainStages = ETAPAS_CONFIG.filter(e => !e.isTerminal);
-  const terminalStages = ETAPAS_CONFIG.filter(e => e.isTerminal);
+  const mainStages = currentConfigList.filter(e => !e.isTerminal);
+  const terminalStages = currentConfigList.filter(e => e.isTerminal);
 
   const getCount = (stageId: EtapaPipeline) =>
     iniciativas.filter(i => i.etapa_actual === stageId).length;
@@ -57,7 +61,7 @@ export function Pipeline({ iniciativas, onStageClick, activeStages }: PipelinePr
     );
   };
 
-  const totalActivas = iniciativas.filter(i => i.etapa_actual !== 'eliminadas').length;
+  const totalActivas = iniciativas.filter(i => isPlanificadas || i.etapa_actual !== 'eliminadas').length;
   const totalEliminadas = getCount('eliminadas');
 
   return (
@@ -97,25 +101,29 @@ export function Pipeline({ iniciativas, onStageClick, activeStages }: PipelinePr
             </div>
           ))}
 
-          {/* Separador visual para etapas terminales */}
-          <div className="mx-3 flex items-center gap-1 text-gray-300">
-            <div className="w-6 border-t-2 border-dashed border-gray-300" />
-            <span className="text-[10px] uppercase font-bold text-gray-300">o</span>
-            <div className="w-6 border-t-2 border-dashed border-gray-300" />
-          </div>
+          {/* Separador visual para etapas terminales si existen */}
+          {terminalStages.length > 0 && (
+            <>
+              <div className="mx-3 flex items-center gap-1 text-gray-300">
+                <div className="w-6 border-t-2 border-dashed border-gray-300" />
+                <span className="text-[10px] uppercase font-bold text-gray-300">o</span>
+                <div className="w-6 border-t-2 border-dashed border-gray-300" />
+              </div>
 
-          {/* Etapas terminales (eliminadas) */}
-          {terminalStages.map(stage => (
-            <div key={stage.id}>
-              <StageButton stage={stage} />
-            </div>
-          ))}
+              {/* Etapas terminales (eliminadas) */}
+              {terminalStages.map(stage => (
+                <div key={stage.id}>
+                  <StageButton stage={stage} />
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
 
       {/* Leyenda de colores */}
       <div className="mt-3 pt-3 border-t border-gray-50 flex flex-wrap gap-2">
-        {ETAPAS_CONFIG.map(stage => (
+        {currentConfigList.map(stage => (
           <div key={stage.id} className="flex items-center gap-1">
             <div
               className="w-2 h-2 rounded-full flex-shrink-0"

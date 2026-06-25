@@ -5,7 +5,9 @@
 
 import React, { useState, useMemo, useRef, useEffect } from 'react';
 import { Iniciativa, EtapaPipeline, FilterState } from '../types';
-import { ETAPAS_CONFIG, ETAPAS_MAP, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
+import { ETAPAS_CONFIG, ETAPAS_MAP, ETAPAS_PLANIFICADAS_CONFIG, ETAPAS_PLANIFICADAS_MAP, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
+import { format, parseISO } from 'date-fns';
+import { es } from 'date-fns/locale';
 import {
   ResponsiveContainer,
   BarChart,
@@ -42,6 +44,7 @@ type NavigateFn = (partialFilters: Partial<FilterState>) => void;
 interface ReportsProps {
   iniciativas: Iniciativa[];
   onNavigate: NavigateFn;
+  mode?: 'demanda' | 'planificadas';
 }
 
 interface MacroFilters {
@@ -78,6 +81,15 @@ function buildMacroOptions(
     if (b === EMPTY_SENTINEL) return -1;
     return a.localeCompare(b, 'es');
   });
+}
+
+function fmtDatePopup(d: string | null | undefined): string {
+  if (!d) return '—';
+  try {
+    return format(parseISO(d), 'dd MMM yyyy', { locale: es });
+  } catch {
+    return '—';
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -405,7 +417,7 @@ function ReportCard({ title, icon, children }: { title: string; icon: React.Reac
 // ---------------------------------------------------------------------------
 // Leyenda etapas
 // ---------------------------------------------------------------------------
-function EtapasLegend({ etapas }: { etapas: typeof ETAPAS_CONFIG }) {
+function EtapasLegend({ etapas }: { etapas: any[] }) {
   return (
     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
       {etapas.map(e => (
@@ -430,7 +442,7 @@ function EtapaBadge({
   navFilters: Partial<FilterState>;
   onNavigate: NavigateFn;
 }) {
-  const cfg = ETAPAS_CONFIG.find(e => e.id === etapaId);
+  const cfg = ETAPAS_CONFIG.find(e => e.id === etapaId) || ETAPAS_PLANIFICADAS_CONFIG.find(e => e.id === etapaId);
   const [hov, setHov] = useState(false);
   if (!cfg || count === 0) return null;
   return (
@@ -565,7 +577,8 @@ function ReporteVP({
   const topEtapas = useMemo(() => {
     const counts: Record<string, number> = {};
     iniciativas.forEach(i => { counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1; });
-    return ETAPAS_CONFIG.filter(e => counts[e.id] > 0)
+    const configList = [...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG];
+    return configList.filter(e => counts[e.id] > 0)
       .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0)).slice(0, 6);
   }, [iniciativas]);
 
@@ -639,7 +652,7 @@ function ReporteVP({
                   </td>
                   <td style={{ padding: '8px 12px' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {ETAPAS_CONFIG.filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
+                      {[...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG].filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
                         <EtapaBadge key={e.id} etapaId={e.id} count={row.byEtapa[e.id] || 0} navFilters={base} onNavigate={onNavigate} />
                       ))}
                     </div>
@@ -676,7 +689,8 @@ function ReporteEstados({
     const counts: Record<string, number> = {};
     iniciativas.forEach(i => { counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1; });
     const total = iniciativas.length || 1;
-    return ETAPAS_CONFIG.filter(e => counts[e.id]).map(e => ({
+    const configList = [...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG];
+    return configList.filter(e => counts[e.id]).map(e => ({
       ...e,
       total: counts[e.id] || 0,
       pct: Math.round(((counts[e.id] || 0) / total) * 100),
@@ -820,7 +834,8 @@ function ReporteITBP({
   const topEtapas = useMemo(() => {
     const counts: Record<string, number> = {};
     iniciativas.forEach(i => { counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1; });
-    return ETAPAS_CONFIG.filter(e => counts[e.id] > 0)
+    const configList = [...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG];
+    return configList.filter(e => counts[e.id] > 0)
       .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0)).slice(0, 6);
   }, [iniciativas]);
 
@@ -894,7 +909,7 @@ function ReporteITBP({
                   </td>
                   <td style={{ padding: '8px 12px' }}>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {ETAPAS_CONFIG.filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
+                      {[...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG].filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
                         <EtapaBadge key={e.id} etapaId={e.id} count={row.byEtapa[e.id] || 0} navFilters={base} onNavigate={onNavigate} />
                       ))}
                     </div>
@@ -920,7 +935,7 @@ function ReporteITBP({
 // ---------------------------------------------------------------------------
 // Componente principal: Reports
 // ---------------------------------------------------------------------------
-export function Reports({ iniciativas, onNavigate }: ReportsProps) {
+export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsProps) {
   // ---- Estado de filtros macro ----
   const [macroInstituciones, setMacroInstituciones] = useState<string[]>([]);
   const [macroSPO,           setMacroSPO]           = useState<string[]>([]);
@@ -928,6 +943,9 @@ export function Reports({ iniciativas, onNavigate }: ReportsProps) {
   const [macroVPs,           setMacroVPs]           = useState<string[]>([]);
   const [macroEtapas,        setMacroEtapas]        = useState<string[]>([]);
   const [macroLideres,       setMacroLideres]       = useState<string[]>([]);
+
+  // ---- Estado del popup de iniciativas ----
+  const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
 
   // ---- Opciones (de todo el dataset) ----
   const opts = useMemo(() => ({
@@ -939,7 +957,7 @@ export function Reports({ iniciativas, onNavigate }: ReportsProps) {
   }), [iniciativas]);
 
   // ---- Label para etapas en el dropdown ----
-  const etapaLabel = (v: string) => ETAPAS_MAP.get(v as EtapaPipeline)?.label || v;
+  const etapaLabel = (v: string) => ETAPAS_MAP.get(v as EtapaPipeline)?.label || ETAPAS_PLANIFICADAS_MAP.get(v as EtapaPipeline)?.label || v;
 
   // ---- Aplicar filtros macro ----
   const filtered = useMemo(() => {
@@ -953,6 +971,20 @@ export function Reports({ iniciativas, onNavigate }: ReportsProps) {
       return true;
     });
   }, [iniciativas, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres]);
+
+  // ---- Filtrar iniciativas del popup ----
+  const popupIniciativas = useMemo(() => {
+    if (!popupFilters) return [];
+    return iniciativas.filter(i => {
+      if (popupFilters.instituciones?.length && !popupFilters.instituciones.includes(normalize(i.institucion))) return false;
+      if (popupFilters.proyecto_spo?.length && !popupFilters.proyecto_spo.includes(normalize(i.proyecto_spo))) return false;
+      if (popupFilters.it_bps?.length && !popupFilters.it_bps.includes(normalize(i.it_bp))) return false;
+      if (popupFilters.vp_solicitantes?.length && !popupFilters.vp_solicitantes.includes(normalize(i.vp_solicitante))) return false;
+      if (popupFilters.etapas?.length && !popupFilters.etapas.includes(i.etapa_actual)) return false;
+      if (popupFilters.lideres_dominio?.length && !popupFilters.lideres_dominio.includes(normalize(i.lider_dominio))) return false;
+      return true;
+    });
+  }, [iniciativas, popupFilters]);
 
   const macro: MacroFilters = {
     instituciones:   macroInstituciones,
@@ -1102,21 +1134,227 @@ export function Reports({ iniciativas, onNavigate }: ReportsProps) {
           <SpoToggle selected={macroSPO} onChange={setMacroSPO} />
         </div>
       </div>
-
       {/* ================================================================
           REPORTES
       ================================================================ */}
       <ReportCard title="Reporte por VP del Área Solicitante" icon={<Users size={18} />}>
-        <ReporteVP iniciativas={filtered} onNavigate={onNavigate} macro={macro} />
+        <ReporteVP iniciativas={filtered} onNavigate={setPopupFilters} macro={macro} />
       </ReportCard>
 
       <ReportCard title="Reporte por Estado (Etapa del Pipeline)" icon={<Layers size={18} />}>
-        <ReporteEstados iniciativas={filtered} onNavigate={onNavigate} macro={macro} />
+        <ReporteEstados iniciativas={filtered} onNavigate={setPopupFilters} macro={macro} />
       </ReportCard>
 
       <ReportCard title="Reporte por IT BP" icon={<BarChart2 size={18} />}>
-        <ReporteITBP iniciativas={filtered} onNavigate={onNavigate} macro={macro} />
+        <ReporteITBP iniciativas={filtered} onNavigate={setPopupFilters} macro={macro} />
       </ReportCard>
+
+      {/* Popup/Modal overlay */}
+      {popupFilters && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.4)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setPopupFilters(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 16,
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              width: '100%',
+              maxWidth: 950,
+              maxHeight: '85vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              border: '1px solid #e2e8f0',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {/* Header */}
+            <div
+              style={{
+                padding: '18px 24px',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                  Detalle de Iniciativas
+                </h3>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
+                  Mostrando {popupIniciativas.length} iniciativas que coinciden con la selección
+                </p>
+              </div>
+              <button
+                onClick={() => setPopupFilters(null)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                  transition: 'background-color 0.15s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Content list */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
+              {popupIniciativas.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
+                  No se encontraron iniciativas.
+                </div>
+              ) : (
+                <div style={{ overflowX: 'auto' }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                    <thead>
+                      <tr style={{ borderBottom: '2px solid #f1f5f9', textAlign: 'left', color: '#475569' }}>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>ID</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>Título</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>VP Área Solicitante</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>IT BP</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>Estado</th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>
+                          {mode === 'planificadas' ? 'F. Inicio Planif.' : 'F. Entrega Req.'}
+                        </th>
+                        <th style={{ padding: '10px 12px', fontWeight: 600 }}>
+                          {mode === 'planificadas' ? 'F. Fin Planif.' : 'F. Registro'}
+                        </th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {popupIniciativas.map((t, idx) => {
+                        const idStr = String(t.id).padStart(4, '0');
+                        const isPlan = mode === 'planificadas';
+                        const config = isPlan
+                          ? ETAPAS_PLANIFICADAS_MAP.get(t.etapa_actual)
+                          : ETAPAS_MAP.get(t.etapa_actual);
+
+                        return (
+                          <tr
+                            key={t.id}
+                            style={{
+                              borderBottom: '1px solid #f1f5f9',
+                              backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                              transition: 'background-color 0.15s',
+                            }}
+                            onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                            onMouseOut={(e) => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc')}
+                          >
+                            <td style={{ padding: '12px 12px', fontWeight: 700, color: '#3b82f6' }}>
+                              {idStr}
+                            </td>
+                            <td style={{ padding: '12px 12px', fontWeight: 500, color: '#1e293b', maxWidth: 280, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={t.titulo}>
+                              {t.titulo}
+                            </td>
+                            <td style={{ padding: '12px 12px', color: '#475569' }}>
+                              {t.vp_solicitante || '—'}
+                            </td>
+                            <td style={{ padding: '12px 12px', color: '#475569' }}>
+                              {t.it_bp || '—'}
+                            </td>
+                            <td style={{ padding: '12px 12px' }}>
+                              {config ? (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    padding: '2px 8px',
+                                    borderRadius: 20,
+                                    backgroundColor: config.bgColor,
+                                    color: config.textColor,
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {config.label}
+                                </span>
+                              ) : (
+                                <span
+                                  style={{
+                                    fontSize: 10,
+                                    padding: '2px 8px',
+                                    borderRadius: 20,
+                                    backgroundColor: '#f1f5f9',
+                                    color: '#475569',
+                                    fontWeight: 600,
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                >
+                                  {t.etapa_actual.replace(/_/g, ' ')}
+                                </span>
+                              )}
+                            </td>
+                            <td style={{ padding: '12px 12px', color: '#64748b' }}>
+                              {isPlan ? fmtDatePopup(t.fecha_inicio_planificada) : fmtDatePopup(t.fecha_entrega_requerida)}
+                            </td>
+                            <td style={{ padding: '12px 12px', color: '#64748b' }}>
+                              {isPlan ? fmtDatePopup(t.fecha_fin_planificada) : fmtDatePopup(t.fecha_registro)}
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+            </div>
+
+            {/* Footer */}
+            <div
+              style={{
+                padding: '16px 24px',
+                borderTop: '1px solid #f1f5f9',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                backgroundColor: '#f8fafc',
+              }}
+            >
+              <button
+                onClick={() => setPopupFilters(null)}
+                style={{
+                  backgroundColor: '#3b82f6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '8px 18px',
+                  fontSize: 12,
+                  fontWeight: 600,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 4px rgba(59, 130, 246, 0.2)',
+                  transition: 'background-color 0.15s',
+                }}
+                onMouseOver={(e) => (e.currentTarget.style.backgroundColor = '#2563eb')}
+                onMouseOut={(e) => (e.currentTarget.style.backgroundColor = '#3b82f6')}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

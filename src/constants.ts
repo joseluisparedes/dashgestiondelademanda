@@ -51,6 +51,21 @@ export const ETAPAS_MAP = new Map<EtapaPipeline, EtapaConfig>(
 );
 
 /**
+ * Configuración visual y de negocio de cada etapa para el modo Planificadas.
+ */
+export const ETAPAS_PLANIFICADAS_CONFIG: EtapaConfig[] = [
+  { id: 'por_iniciar',  label: 'Por Iniciar',  color: '#eab308', bgColor: '#fefce8', textColor: '#a16207' },
+  { id: 'en_ejecucion', label: 'En Ejecución', color: '#3b82f6', bgColor: '#eff6ff', textColor: '#1d4ed8' },
+  { id: 'terminado',   label: 'Terminado',   color: '#16a34a', bgColor: '#f0fdf4', textColor: '#166534' },
+  { id: 'detenido',    label: 'Detenido',    color: '#ef4444', bgColor: '#fef2f2', textColor: '#b91c1c' },
+];
+
+/** Mapa id → EtapaConfig para el modo Planificadas. */
+export const ETAPAS_PLANIFICADAS_MAP = new Map<EtapaPipeline, EtapaConfig>(
+  ETAPAS_PLANIFICADAS_CONFIG.map(e => [e.id, e])
+);
+
+/**
  * Valor centinela que representa campos vacíos, nulos o en blanco en los filtros.
  * Permite al usuario filtrar explícitamente por iniciativas sin ese campo asignado.
  */

@@ -4,9 +4,10 @@
  */
 
 import React, { useState, useMemo } from 'react';
+import * as XLSX from 'xlsx';
 import { DashboardData, FilterState, Iniciativa, EtapaPipeline } from './types';
 import { INITIAL_FILTERS, EMPTY_SENTINEL } from './constants';
-import { parseExcelFile } from './lib/excelParser';
+import { parseExcelFile, parsePlanificadasExcelFile } from './lib/excelParser';
 import { KPICards } from './components/KPICards';
 import { DataTable } from './components/DataTable';
 import { Filters } from './components/Filters';
@@ -129,6 +130,30 @@ function buildOptions(
   });
 }
 
+const detectExcelMode = (file: File): Promise<'demanda' | 'planificadas' | 'unknown'> => {
+  return new Promise((resolve) => {
+    const reader = new FileReader();
+    reader.onerror = () => resolve('unknown');
+    reader.onload = (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
+        const sheetNames = workbook.SheetNames;
+        if (sheetNames.includes('Req No Catalogados Demanda')) {
+          resolve('planificadas');
+        } else if (sheetNames.includes('Registro incompleto') || sheetNames.includes('Por estimar') || sheetNames.includes('Por planificar')) {
+          resolve('demanda');
+        } else {
+          resolve('unknown');
+        }
+      } catch {
+        resolve('unknown');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+  });
+};
+
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
@@ -142,15 +167,20 @@ export default function App() {
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  const handleFileUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
+  // ---- Modal de Mismatch de archivo ----
+  const [mismatchData, setMismatchData] = useState<{
+    file: File;
+    currentMode: 'demanda' | 'planificadas';
+    targetMode: 'demanda' | 'planificadas';
+  } | null>(null);
 
+  const executeUpload = async (file: File, targetMode: 'demanda' | 'planificadas') => {
     setIsUploading(true);
     setUploadError(null);
-
     try {
-      const result = await parseExcelFile(file);
+      const result = targetMode === 'planificadas'
+        ? await parsePlanificadasExcelFile(file)
+        : await parseExcelFile(file);
       setData(result);
       setFilters(INITIAL_FILTERS);
       setExpandedId(null);
@@ -161,7 +191,106 @@ export default function App() {
       );
     } finally {
       setIsUploading(false);
-      event.target.value = '';
+    }
+  };
+
+  const renderMismatchModal = () => {
+    if (!mismatchData) return null;
+    return (
+      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
+        <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-left">
+          <div className="p-6">
+            <div className="flex items-start gap-4">
+              <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center flex-shrink-0">
+                <AlertCircle size={22} className="text-amber-500" />
+              </div>
+              <div>
+                <h3 className="text-base font-bold text-slate-900">
+                  Opción incorrecta detectada
+                </h3>
+                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
+                  Te estás equivocando de opción. Has subido un archivo de{' '}
+                  <strong>
+                    {mismatchData.targetMode === 'demanda'
+                      ? 'Gestión de la Demanda'
+                      : 'Iniciativas Planificadas'}
+                  </strong>{' '}
+                  pero seleccionaste la opción de{' '}
+                  <strong>
+                    {mismatchData.currentMode === 'demanda'
+                      ? 'Gestión de la Demanda'
+                      : 'Iniciativas Planificadas'}
+                  </strong>
+                  .
+                </p>
+                <p className="text-xs font-semibold text-slate-700 mt-3">
+                  ¿Deseas cargar este archivo como{' '}
+                  {mismatchData.targetMode === 'demanda'
+                    ? 'Gestión de la Demanda'
+                    : 'Iniciativas Planificadas'}
+                  ?
+                </p>
+              </div>
+            </div>
+          </div>
+          <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
+            <button
+              onClick={() => setMismatchData(null)}
+              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 transition-colors"
+            >
+              Cancelar
+            </button>
+            <button
+              onClick={() => {
+                const { file, targetMode } = mismatchData;
+                setMismatchData(null);
+                executeUpload(file, targetMode);
+              }}
+              className={`px-4 py-2 text-white rounded-lg text-xs font-medium shadow-sm transition-colors ${
+                mismatchData.targetMode === 'planificadas'
+                  ? 'bg-emerald-600 hover:bg-emerald-700'
+                  : 'bg-blue-600 hover:bg-blue-700'
+              }`}
+            >
+              Sí, cargar como {mismatchData.targetMode === 'planificadas' ? 'Planificadas' : 'Demanda'}
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  };
+
+  const handleDemandaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+
+    setIsUploading(true);
+    setUploadError(null);
+    const detected = await detectExcelMode(file);
+    setIsUploading(false);
+
+    if (detected === 'planificadas') {
+      setMismatchData({ file, currentMode: 'demanda', targetMode: 'planificadas' });
+    } else {
+      executeUpload(file, 'demanda');
+    }
+  };
+
+  const handlePlanificadasUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    event.target.value = '';
+
+    setIsUploading(true);
+    setUploadError(null);
+    const detected = await detectExcelMode(file);
+    setIsUploading(false);
+
+    if (detected === 'demanda') {
+      setMismatchData({ file, currentMode: 'planificadas', targetMode: 'demanda' });
+    } else {
+      executeUpload(file, 'planificadas');
     }
   };
 
@@ -197,6 +326,7 @@ export default function App() {
       aprobar_estimacion: buildOptions(from('aprobar_estimacion'), t => t.aprobar_estimacion),
       presupuesto_habilitado: buildOptions(from('presupuesto_habilitado'), t => t.presupuesto_habilitado),
       planificacion_aprobada: buildOptions(from('planificacion_aprobada'), t => t.planificacion_aprobada),
+      etapas:        buildOptions(from('etapas'),        t => t.etapa_actual),
     };
   }, [data, filters]);
 
@@ -261,14 +391,14 @@ export default function App() {
   if (!data) {
     return (
       <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="bg-white max-w-md w-full rounded-2xl shadow-sm border border-gray-100 p-8 text-center space-y-6">
+        <div className="bg-white max-w-2xl w-full rounded-2xl shadow-sm border border-gray-100 p-8 text-center space-y-6">
           <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto text-blue-500">
             <Upload size={32} />
           </div>
           <div>
-            <h2 className="text-xl font-bold text-slate-800 mb-2">¡Bienvenido!</h2>
+            <h2 className="text-xl font-bold text-slate-800 mb-2">¡Bienvenido al Panel TI!</h2>
             <p className="text-slate-500 text-sm">
-              Para comenzar, por favor sube el archivo Excel con los datos de las iniciativas de Gestión de la Demanda.
+              Selecciona una opción para comenzar cargando el archivo Excel correspondiente:
             </p>
           </div>
 
@@ -281,33 +411,59 @@ export default function App() {
             </div>
           )}
 
-          <label
-            className={`cursor-pointer w-full py-3 px-4 rounded-xl font-medium flex items-center justify-center gap-2 transition-all ${
-              isUploading
-                ? 'bg-blue-300 text-white cursor-not-allowed'
-                : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm hover:shadow'
-            }`}
-          >
-            {isUploading ? (
-              <>
-                <Loader2 size={18} className="animate-spin" />
-                Procesando archivo...
-              </>
-            ) : (
-              <>
-                <Upload size={18} />
-                Seleccionar archivo Excel
-              </>
-            )}
-            <input
-              type="file"
-              accept=".xlsx,.xls"
-              className="hidden"
-              onChange={handleFileUpload}
-              disabled={isUploading}
-            />
-          </label>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+            {/* OPCION 1: DEMANDA */}
+            <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-blue-400 hover:shadow-sm transition-all bg-slate-50/50">
+              <div className="mb-4">
+                <h3 className="font-bold text-slate-800 text-sm mb-1">1. Gestión de la Demanda</h3>
+                <p className="text-gray-400 text-xs">Pipeline operativo, estimaciones y presupuestos.</p>
+              </div>
+              <label
+                className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
+                  isUploading
+                    ? 'bg-blue-300 text-white cursor-not-allowed'
+                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
+                }`}
+              >
+                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                <span>Subir Demanda</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handleDemandaUpload}
+                  disabled={isUploading}
+                />
+              </label>
+            </div>
+
+            {/* OPCION 2: PLANIFICADAS */}
+            <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-blue-400 hover:shadow-sm transition-all bg-slate-50/50">
+              <div className="mb-4">
+                <h3 className="font-bold text-slate-800 text-sm mb-1">2. Iniciativas Planificadas</h3>
+                <p className="text-gray-400 text-xs">Seguimiento de ejecución, estados y desviaciones.</p>
+              </div>
+              <label
+                className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
+                  isUploading
+                    ? 'bg-emerald-300 text-white cursor-not-allowed'
+                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                }`}
+              >
+                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                <span>Subir Planificadas</span>
+                <input
+                  type="file"
+                  accept=".xlsx,.xls"
+                  className="hidden"
+                  onChange={handlePlanificadasUpload}
+                  disabled={isUploading}
+                />
+              </label>
+            </div>
+          </div>
         </div>
+        {renderMismatchModal()}
       </div>
     );
   }
@@ -327,8 +483,15 @@ export default function App() {
                 <span className="text-white font-bold text-sm">TI</span>
               </div>
               <h1 className="text-lg font-bold text-slate-800">
-                Gestión de la Demanda
+                {data.mode === 'planificadas' ? 'Iniciativas Planificadas' : 'Gestión de la Demanda'}
               </h1>
+              <button
+                onClick={() => setData(null)}
+                className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-all ml-2"
+                title="Cambiar de archivo Excel"
+              >
+                Volver
+              </button>
             </div>
 
             {/* Tabs de navegación */}
@@ -350,98 +513,100 @@ export default function App() {
             </nav>
 
             <div className="flex items-center gap-6">
-              {/* Campanita de Notificaciones */}
-              <div className="relative">
-                <button
-                  onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
-                    notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
-                  }`}
-                  aria-label="Notificaciones"
-                >
-                  <Bell size={20} className={upcomingIniciativas.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
-                  {upcomingIniciativas.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                      {upcomingIniciativas.length}
-                    </span>
+              {/* Campanita de Notificaciones (solo en modo demanda) */}
+              {data.mode === 'demanda' && (
+                <div className="relative">
+                  <button
+                    onClick={() => setNotificationsOpen(!notificationsOpen)}
+                    className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
+                      notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
+                    }`}
+                    aria-label="Notificaciones"
+                  >
+                    <Bell size={20} className={upcomingIniciativas.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
+                    {upcomingIniciativas.length > 0 && (
+                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                        {upcomingIniciativas.length}
+                      </span>
+                    )}
+                  </button>
+
+                  {notificationsOpen && (
+                    <>
+                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
+                      <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
+                        <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                          <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
+                            <Bell size={14} className="text-blue-500" />
+                            Próximas a Iniciar
+                          </span>
+                          <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
+                            {upcomingIniciativas.length} alerta{upcomingIniciativas.length !== 1 ? 's' : ''}
+                          </span>
+                        </div>
+
+                        <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
+                          {upcomingIniciativas.length > 0 ? (
+                            upcomingIniciativas.map(ini => {
+                              const start = parseISO(ini.fecha_inicio_planificada!);
+                              const diff = differenceInCalendarDays(start, new Date());
+                              
+                              const borderClass = 
+                                diff === 1 ? 'border-l-red-500' : 
+                                diff === 2 ? 'border-l-amber-500' : 
+                                'border-l-blue-500';
+                              
+                              const badgeBg = 
+                                diff === 1 ? 'bg-red-50 text-red-700' : 
+                                diff === 2 ? 'bg-amber-50 text-amber-700' : 
+                                'bg-blue-50 text-blue-700';
+
+                              const diffText = 
+                                diff === 1 ? 'Inicia mañana' : 
+                                `Inicia en ${diff} días`;
+
+                              return (
+                                <button
+                                  key={ini.id}
+                                  onClick={() => handleSelectIniciativa(ini)}
+                                  className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
+                                >
+                                  <div className="flex justify-between items-start gap-2">
+                                    <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                      ID: {String(ini.id).padStart(4, '0')}
+                                    </span>
+                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
+                                      {diffText}
+                                    </span>
+                                  </div>
+                                  
+                                  <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
+                                    {ini.titulo}
+                                  </h4>
+                                  
+                                  <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
+                                    <span className="font-medium truncate max-w-[150px]">
+                                      BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
+                                    </span>
+                                    <span className="font-mono">
+                                      {format(start, 'dd MMM yyyy', { locale: es })}
+                                    </span>
+                                  </div>
+                                </button>
+                              );
+                            })
+                          ) : (
+                            <div className="p-6 text-center text-gray-400 text-xs flex flex-col items-center gap-1.5">
+                              <Bell size={20} className="opacity-30" />
+                              <span>Sin iniciativas por iniciar en 1, 2 o 3 días.</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </>
                   )}
-                </button>
-
-                {notificationsOpen && (
-                  <>
-                    <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
-                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                      <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                        <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                          <Bell size={14} className="text-blue-500" />
-                          Próximas a Iniciar
-                        </span>
-                        <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
-                          {upcomingIniciativas.length} alerta{upcomingIniciativas.length !== 1 ? 's' : ''}
-                        </span>
-                      </div>
-
-                      <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
-                        {upcomingIniciativas.length > 0 ? (
-                          upcomingIniciativas.map(ini => {
-                            const start = parseISO(ini.fecha_inicio_planificada!);
-                            const diff = differenceInCalendarDays(start, new Date());
-                            
-                            const borderClass = 
-                              diff === 1 ? 'border-l-red-500' : 
-                              diff === 2 ? 'border-l-amber-500' : 
-                              'border-l-blue-500';
-                            
-                            const badgeBg = 
-                              diff === 1 ? 'bg-red-50 text-red-700' : 
-                              diff === 2 ? 'bg-amber-50 text-amber-700' : 
-                              'bg-blue-50 text-blue-700';
-
-                            const diffText = 
-                              diff === 1 ? 'Inicia mañana' : 
-                              `Inicia en ${diff} días`;
-
-                            return (
-                              <button
-                                key={ini.id}
-                                onClick={() => handleSelectIniciativa(ini)}
-                                className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
-                              >
-                                <div className="flex justify-between items-start gap-2">
-                                  <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                    ID: {String(ini.id).padStart(4, '0')}
-                                  </span>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
-                                    {diffText}
-                                  </span>
-                                </div>
-                                
-                                <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
-                                  {ini.titulo}
-                                </h4>
-                                
-                                <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
-                                  <span className="font-medium truncate max-w-[150px]">
-                                    BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
-                                  </span>
-                                  <span className="font-mono">
-                                    {format(start, 'dd MMM yyyy', { locale: es })}
-                                  </span>
-                                </div>
-                              </button>
-                            );
-                          })
-                        ) : (
-                          <div className="p-6 text-center text-gray-400 text-xs flex flex-col items-center gap-1.5">
-                            <Bell size={20} className="opacity-30" />
-                            <span>Sin iniciativas por iniciar en 1, 2 o 3 días.</span>
-                          </div>
-                        )}
-                      </div>
-                    </div>
-                  </>
-                )}
-              </div>
+                </div>
+              )}
 
               <div className="text-sm text-gray-500 flex flex-col items-end">
                 <span className="font-medium text-[11px] text-gray-400 uppercase tracking-wider">
@@ -452,27 +617,51 @@ export default function App() {
                 </span>
               </div>
 
-              <label
-                className={`cursor-pointer px-4 py-2 rounded-lg text-sm font-medium flex items-center gap-2 shadow-sm transition-colors ${
-                  isUploading
-                    ? 'bg-blue-400 cursor-not-allowed text-white'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white'
-                }`}
-              >
-                {isUploading ? (
-                  <Loader2 size={16} className="animate-spin" />
-                ) : (
-                  <Upload size={16} />
-                )}
-                <span>{isUploading ? 'Procesando…' : 'Subir Excel'}</span>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={handleFileUpload}
-                  disabled={isUploading}
-                />
-              </label>
+              <div className="flex gap-2">
+                <label
+                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 ${
+                    isUploading
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                      : 'bg-white hover:bg-gray-50 text-blue-700 border border-blue-200 hover:border-blue-300'
+                  }`}
+                >
+                  {isUploading ? (
+                    <Loader2 size={14} className="animate-spin text-gray-400" />
+                  ) : (
+                    <Upload size={14} className="text-blue-600" />
+                  )}
+                  <span>{isUploading ? 'Procesando…' : 'Subir Demanda'}</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={handleDemandaUpload}
+                    disabled={isUploading}
+                  />
+                </label>
+
+                <label
+                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 ${
+                    isUploading
+                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
+                      : 'bg-white hover:bg-gray-50 text-emerald-700 border border-emerald-200 hover:border-emerald-300'
+                  }`}
+                >
+                  {isUploading ? (
+                    <Loader2 size={14} className="animate-spin text-gray-400" />
+                  ) : (
+                    <Upload size={14} className="text-emerald-600" />
+                  )}
+                  <span>{isUploading ? 'Procesando…' : 'Subir Planificadas'}</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={handlePlanificadasUpload}
+                    disabled={isUploading}
+                  />
+                </label>
+              </div>
             </div>
           </div>
 
@@ -500,6 +689,7 @@ export default function App() {
               setFilters={setFilters} 
               options={filterOptions} 
               onPendientesBPs={handlePendientesBPs}
+              mode={data.mode}
             />
 
             {/* Pipeline — filtro visual de etapa */}
@@ -514,16 +704,18 @@ export default function App() {
                   return { ...f, etapas: next };
                 });
               }}
+              mode={data.mode}
             />
 
             {/* KPIs */}
-            <KPICards iniciativas={filteredIniciativas} />
+            <KPICards iniciativas={filteredIniciativas} mode={data.mode} />
 
             {/* Tabla de detalle */}
             <DataTable 
               iniciativas={filteredIniciativas} 
               expandedId={expandedId}
               onExpandedIdChange={setExpandedId}
+              mode={data.mode}
             />
           </>
         )}
@@ -535,9 +727,13 @@ export default function App() {
               setFilters({ ...INITIAL_FILTERS, ...partialFilters });
               setActiveTab('resumen');
             }}
+            mode={data.mode}
           />
         )}
       </main>
+
+      {/* Modal de confirmación ante error de opción */}
+      {renderMismatchModal()}
     </div>
   );
 }

@@ -109,5 +109,6 @@ export function generateMockData(): DashboardData {
     iniciativas: iniciativas.sort(
       (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
     ),
+    mode: 'demanda',
   };
 }

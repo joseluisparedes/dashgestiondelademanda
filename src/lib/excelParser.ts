@@ -401,9 +401,154 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
             por_etapa: resumenPorEtapa,
           },
           iniciativas: allIniciativas,
+          mode: 'demanda',
         });
       } catch (err) {
         reject(err instanceof Error ? err : new Error('Error al procesar el archivo.'));
+      }
+    };
+
+    reader.readAsArrayBuffer(file);
+  });
+}
+
+/**
+ * Parsea el archivo Excel de iniciativas planificadas (formato simplificado).
+ * 
+ * @param file - Archivo .xlsx o .xls
+ * @returns Promise con los datos formateados.
+ */
+export function parsePlanificadasExcelFile(file: File): Promise<DashboardData> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onerror = () => reject(new Error('Error al leer el archivo Excel de planificadas.'));
+
+    reader.onload = (e) => {
+      try {
+        const buffer = e.target?.result as ArrayBuffer;
+        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+
+        const sheetName = 'Req No Catalogados Demanda';
+        const sheet = workbook.Sheets[sheetName];
+        if (!sheet) {
+          reject(new Error(`⚠️ El archivo Excel no contiene la pestaña requerida "${sheetName}".`));
+          return;
+        }
+
+        // Leer saltándose la primera fila descriptiva
+        const rows = XLSX.utils.sheet_to_json(sheet, { range: 1 }) as Record<string, unknown>[];
+        
+        const validRows = rows.filter(row => {
+          const hasId = getVal(row, 'ID Demanda', 'ID\r\nDemanda', 'ID') !== null;
+          const hasTitle = getVal(row, 'Título de la Iniciativa', 'Titulo') !== null;
+          return hasId || hasTitle;
+        });
+
+        const seenIds = new Map<number, Iniciativa>();
+
+        validRows.forEach((row, rowIdx) => {
+          const g = (...keys: string[]) => getVal(row, ...keys);
+
+          const rawId = parseNum(g('ID Demanda', 'ID\r\nDemanda', 'ID'));
+          const id = rawId ?? Number(`99${rowIdx + 1}${Math.floor(Math.random() * 100)}`);
+
+          const rawEstado = parseStr(g('Estado')) || 'Por iniciar';
+          let etapa_actual: EtapaPipeline = 'por_iniciar';
+          
+          const normEstado = rawEstado.toLowerCase().trim();
+          if (normEstado.includes('ejecuc') || normEstado.includes('progreso')) {
+            etapa_actual = 'en_ejecucion';
+          } else if (normEstado.includes('terminado') || normEstado.includes('finalizado')) {
+            etapa_actual = 'terminado';
+          } else if (normEstado.includes('detenido') || normEstado.includes('suspendido') || normEstado.includes('pausa')) {
+            etapa_actual = 'detenido';
+          }
+
+          const costo_soles = parseNum(g('Costo Soles'));
+
+          const ini: Iniciativa = {
+            id,
+            etapa_actual,
+            fecha_registro: formatDt(g('Fecha inicio planificada')) ?? new Date().toISOString(),
+            titulo: parseStr(g('Título de la Iniciativa', 'Titulo')) ?? 'Sin Título',
+            objetivo: parseStr(g('Objetivo')) ?? '',
+            institucion: parseStr(g('Institución', 'Universidad', 'Institucion')) ?? '',
+            vp_solicitante: parseStr(g('Nombre VP', 'VP')) ?? '',
+            usuario_negocio: parseStr(g('Solicitante', 'Usuario')) ?? '',
+            it_bp: parseStr(g('IT BP', 'BP')) ?? '',
+            fecha_entrega_requerida: formatDt(g('Fecha fin planificada')),
+            proyecto_spo: g('ID SPO') ? 'SI' : 'NO',
+            tipo_iniciativa: 'Requerimiento',
+            pilar_estrategico: '',
+            estabilizacion_sis: 'NO',
+            usuarios_beneficiados: '',
+            beneficio_cuantitativo: '',
+            complejidad: '',
+            lider_dominio: parseStr(g('Líder de dominio', 'Lider')) ?? '',
+            asignado_por: null,
+            fecha_asignacion: null,
+            duracion_meses: null,
+            costo_usd: null,
+            costo_soles,
+            tipo_recurso: null,
+            proyecto_o_req: 'Requerimiento',
+            funcionalidad_nueva: null,
+            estatus_estimacion: null,
+            accion_brm: null,
+            prioridad_brm: null,
+            fecha_inicio_planificada: formatDt(g('Fecha inicio planificada')),
+            fecha_fin_planificada: formatDt(g('Fecha fin planificada')),
+            impacto_sox: 'NO',
+            aprobar_estimacion: null,
+            presupuesto_habilitado: null,
+            planificacion_aprobada: null,
+            
+            // Campos específicos
+            frente: parseStr(g('Frente')),
+            nombre_vp: parseStr(g('Nombre VP')),
+            sub_estado: parseStr(g('Sub Estado', 'Subestado')),
+            desviacion_pct: parseNum(g('% desviación', 'desviación')),
+            fecha_inicio_real: formatDt(g('Fecha inicio real')),
+            fecha_fin_real: formatDt(g('Fecha fin real')),
+            aviso_negocio_cambio_fecha: parseStr(g('Se aviso a Negocio cambio de fecha?')),
+            ticket_sn_rit: parseStr(g('Ticket SN (RIT)')),
+            id_jira: parseStr(g('ID Jira')),
+            motivo_replanificacion: parseStr(g('Motivo de Replanificación')),
+          };
+
+          seenIds.set(id, ini);
+        });
+
+        const allIniciativas = Array.from(seenIds.values()).sort(
+          (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
+        );
+
+        const resumenPorEtapa: Record<string, number> = {
+          por_iniciar: 0,
+          en_ejecucion: 0,
+          terminado: 0,
+          detenido: 0,
+        };
+
+        allIniciativas.forEach(i => {
+          if (resumenPorEtapa[i.etapa_actual] !== undefined) {
+            resumenPorEtapa[i.etapa_actual]++;
+          }
+        });
+
+        resolve({
+          ultima_actualizacion: new Date().toISOString(),
+          tipo_de_cambio: 3.75,
+          resumen: {
+            total_iniciativas: allIniciativas.length,
+            por_etapa: resumenPorEtapa,
+          },
+          iniciativas: allIniciativas,
+          mode: 'planificadas',
+        });
+      } catch (err) {
+        reject(err instanceof Error ? err : new Error('Error al procesar el archivo Excel.'));
       }
     };
 

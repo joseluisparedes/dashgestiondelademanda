@@ -1,6 +1,6 @@
 import React, { useMemo, useState, useEffect } from 'react';
 import { Iniciativa } from '../types';
-import { ETAPAS_MAP } from '../constants';
+import { ETAPAS_MAP, ETAPAS_PLANIFICADAS_MAP } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
@@ -10,6 +10,7 @@ interface DataTableProps {
   iniciativas: Iniciativa[];
   expandedId?: number | null;
   onExpandedIdChange?: (id: number | null) => void;
+  mode?: 'demanda' | 'planificadas';
 }
 
 interface ColumnDef {
@@ -42,8 +43,12 @@ function fmtMoney(v: number | null): string {
 // ---------------------------------------------------------------------------
 // Badge de etapa con colores de ETAPAS_MAP
 // ---------------------------------------------------------------------------
-function EtapaBadge({ etapa }: { etapa: string }) {
-  const config = ETAPAS_MAP.get(etapa as Parameters<typeof ETAPAS_MAP.get>[0]);
+function EtapaBadge({ etapa, mode = 'demanda' }: { etapa: string; mode?: 'demanda' | 'planificadas' }) {
+  const isPlanificadas = mode === 'planificadas';
+  const config = isPlanificadas
+    ? ETAPAS_PLANIFICADAS_MAP.get(etapa as Parameters<typeof ETAPAS_PLANIFICADAS_MAP.get>[0])
+    : ETAPAS_MAP.get(etapa as Parameters<typeof ETAPAS_MAP.get>[0]);
+    
   if (!config) {
     return (
       <span className="text-[10px] px-2 py-0.5 rounded-full bg-gray-100 text-gray-500 font-medium whitespace-nowrap">
@@ -85,33 +90,53 @@ function ComplejidadBadge({ value }: { value: string }) {
 // ---------------------------------------------------------------------------
 // Fila expandida con detalle completo
 // ---------------------------------------------------------------------------
-function ExpandedRow({ t }: { t: Iniciativa }) {
-  const fields: Array<{ label: string; value: string | null | number }> = [
-    { label: 'Objetivo', value: t.objetivo },
-    { label: 'VP Solicitante', value: t.vp_solicitante },
-    { label: 'Usuario de Negocio', value: t.usuario_negocio },
-    { label: 'Tipo de Iniciativa', value: t.tipo_iniciativa },
-    { label: 'Pilar Estratégico', value: t.pilar_estrategico },
-    { label: 'Beneficio Cuantitativo', value: t.beneficio_cuantitativo },
-    { label: 'Usuarios Beneficiados', value: t.usuarios_beneficiados },
-    { label: 'Tipo de Recurso', value: t.tipo_recurso },
-    { label: 'Proyecto o Req.', value: t.proyecto_o_req },
-    { label: 'Proyecto SPO', value: t.proyecto_spo },
-    { label: 'Estabilización SIS', value: t.estabilizacion_sis },
-    { label: 'Funcionalidad Nueva', value: t.funcionalidad_nueva },
-    { label: 'Estatus Estimación', value: t.estatus_estimacion },
-    { label: 'Acción BRM', value: t.accion_brm },
-    { label: 'Prioridad BRM', value: t.prioridad_brm },
-    { label: 'Impacto SOX', value: t.impacto_sox },
-    { label: 'Asignado por', value: t.asignado_por },
-    { label: 'Fecha Asignación', value: fmtDate(t.fecha_asignacion) },
-    { label: 'Fecha Entrega Requerida', value: fmtDate(t.fecha_entrega_requerida) },
-    { label: 'Duración (meses)', value: t.duracion_meses },
-    { label: 'Costo USD', value: t.costo_usd ? `$ ${t.costo_usd.toLocaleString()}` : null },
-    { label: 'Costo Soles', value: fmtMoney(t.costo_soles) },
-    { label: 'Inicio Planificado', value: fmtDate(t.fecha_inicio_planificada) },
-    { label: 'Fin Planificado', value: fmtDate(t.fecha_fin_planificada) },
-  ];
+function ExpandedRow({ t, mode = 'demanda' }: { t: Iniciativa; mode?: 'demanda' | 'planificadas' }) {
+  const isPlanificadas = mode === 'planificadas';
+
+  const fields: Array<{ label: string; value: string | null | number }> = isPlanificadas
+    ? [
+        { label: 'Frente', value: t.frente ?? null },
+        { label: 'Sub Estado', value: t.sub_estado ?? null },
+        { label: 'ID Jira', value: t.id_jira ?? null },
+        { label: 'Ticket SN RITM', value: t.ticket_sn_rit ?? null },
+        { label: 'Líder de dominio', value: t.lider_dominio },
+        { label: 'IT BP', value: t.it_bp },
+        { label: 'Solicitante', value: t.usuario_negocio },
+        { label: 'Costo Soles', value: fmtMoney(t.costo_soles) },
+        { label: 'Inicio Planificado', value: fmtDate(t.fecha_inicio_planificada) },
+        { label: 'Fin Planificado', value: fmtDate(t.fecha_fin_planificada) },
+        { label: 'Inicio Real', value: fmtDate(t.fecha_inicio_real ?? null) },
+        { label: 'Fin Real', value: fmtDate(t.fecha_fin_real ?? null) },
+        { label: 'Desviación (%)', value: t.desviacion_pct !== null && t.desviacion_pct !== undefined ? `${t.desviacion_pct}%` : null },
+        { label: 'Aviso a Negocio cambio de fecha', value: t.aviso_negocio_cambio_fecha ?? null },
+        { label: 'Motivo de Replanificación', value: t.motivo_replanificacion ?? null },
+      ]
+    : [
+        { label: 'Objetivo', value: t.objetivo },
+        { label: 'VP Solicitante', value: t.vp_solicitante },
+        { label: 'Usuario de Negocio', value: t.usuario_negocio },
+        { label: 'Tipo de Iniciativa', value: t.tipo_iniciativa },
+        { label: 'Pilar Estratégico', value: t.pilar_estrategico },
+        { label: 'Beneficio Cuantitativo', value: t.beneficio_cuantitativo },
+        { label: 'Usuarios Beneficiados', value: t.usuarios_beneficiados },
+        { label: 'Tipo de Recurso', value: t.tipo_recurso },
+        { label: 'Proyecto o Req.', value: t.proyecto_o_req },
+        { label: 'Proyecto SPO', value: t.proyecto_spo },
+        { label: 'Estabilización SIS', value: t.estabilizacion_sis },
+        { label: 'Funcionalidad Nueva', value: t.funcionalidad_nueva },
+        { label: 'Estatus Estimación', value: t.estatus_estimacion },
+        { label: 'Acción BRM', value: t.accion_brm },
+        { label: 'Prioridad BRM', value: t.prioridad_brm },
+        { label: 'Impacto SOX', value: t.impacto_sox },
+        { label: 'Asignado por', value: t.asignado_por },
+        { label: 'Fecha Asignación', value: fmtDate(t.fecha_asignacion) },
+        { label: 'Fecha Entrega Requerida', value: fmtDate(t.fecha_entrega_requerida) },
+        { label: 'Duración (meses)', value: t.duracion_meses },
+        { label: 'Costo USD', value: t.costo_usd ? `$ ${t.costo_usd.toLocaleString()}` : null },
+        { label: 'Costo Soles', value: fmtMoney(t.costo_soles) },
+        { label: 'Inicio Planificado', value: fmtDate(t.fecha_inicio_planificada) },
+        { label: 'Fin Planificado', value: fmtDate(t.fecha_fin_planificada) },
+      ];
 
   return (
     <tr className="bg-slate-50 border-b border-gray-100">
@@ -132,20 +157,42 @@ function ExpandedRow({ t }: { t: Iniciativa }) {
 // ---------------------------------------------------------------------------
 // Componente principal
 // ---------------------------------------------------------------------------
-export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedIdChange }: DataTableProps) {
-  const COLUMNS: ColumnDef[] = useMemo(() => [
-    { id: 'id', label: 'ID', sortKey: 'id', render: t => String(t.id).padStart(4, '0'), className: 'font-mono text-slate-500 text-xs whitespace-nowrap' },
-    { id: 'institucion', label: 'Institución', sortKey: 'institucion', render: t => t.institucion || '—', className: 'whitespace-nowrap font-medium text-slate-700' },
-    { id: 'titulo', label: 'Título de la Iniciativa', sortKey: 'titulo', render: t => t.titulo, className: 'font-medium text-slate-800 leading-snug min-w-[280px]' },
-    { id: 'etapa_actual', label: 'Etapa', sortKey: 'etapa_actual', render: t => <EtapaBadge etapa={t.etapa_actual} /> },
-    { id: 'lider_dominio', label: 'Líder de Dominio', sortKey: 'lider_dominio', render: t => t.lider_dominio || '—', className: 'whitespace-nowrap text-slate-700 min-w-[150px]' },
-    { id: 'it_bp', label: 'IT BP', sortKey: 'it_bp', render: t => t.it_bp || '—', className: 'whitespace-nowrap text-slate-600' },
-    { id: 'duracion_meses', label: 'Tiempo estimado (meses)', sortKey: 'duracion_meses', render: t => t.duracion_meses ?? '—', className: 'text-center font-mono text-slate-600' },
-    { id: 'costo_usd', label: 'Costo en dólares', sortKey: 'costo_usd', render: t => t.costo_usd ? `$ ${t.costo_usd.toLocaleString('en-US')}` : '—', className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
-    { id: 'costo_soles', label: 'Costo Soles', sortKey: 'costo_soles', render: t => fmtMoney(t.costo_soles), className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
-    { id: 'fecha_inicio_planificada', label: 'Fecha Inicio (planificada)', sortKey: 'fecha_inicio_planificada', render: t => fmtDate(t.fecha_inicio_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
-    { id: 'fecha_fin_planificada', label: 'Fecha fin (planificada)', sortKey: 'fecha_fin_planificada', render: t => fmtDate(t.fecha_fin_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
-  ], []);
+export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedIdChange, mode = 'demanda' }: DataTableProps) {
+  const isPlanificadas = mode === 'planificadas';
+
+  const COLUMNS: ColumnDef[] = useMemo(() => {
+    if (isPlanificadas) {
+      return [
+        { id: 'id', label: 'ID Demanda', sortKey: 'id', render: t => String(t.id).padStart(4, '0'), className: 'font-mono text-slate-500 text-xs whitespace-nowrap' },
+        { id: 'frente', label: 'Frente', sortKey: 'frente' as any, render: t => t.frente || '—', className: 'whitespace-nowrap font-medium text-slate-700' },
+        { id: 'titulo', label: 'Título de la Iniciativa', sortKey: 'titulo', render: t => t.titulo, className: 'font-medium text-slate-800 leading-snug min-w-[280px]' },
+        { id: 'etapa_actual', label: 'Estado', sortKey: 'etapa_actual', render: t => <EtapaBadge etapa={t.etapa_actual} mode={mode} /> },
+        { id: 'sub_estado', label: 'Sub Estado', sortKey: 'sub_estado' as any, render: t => t.sub_estado || '—', className: 'whitespace-nowrap text-slate-600' },
+        { id: 'lider_dominio', label: 'Líder de Dominio', sortKey: 'lider_dominio', render: t => t.lider_dominio || '—', className: 'whitespace-nowrap text-slate-700 min-w-[150px]' },
+        { id: 'it_bp', label: 'IT BP', sortKey: 'it_bp', render: t => t.it_bp || '—', className: 'whitespace-nowrap text-slate-600' },
+        { id: 'costo_soles', label: 'Costo Soles', sortKey: 'costo_soles', render: t => fmtMoney(t.costo_soles), className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
+        { id: 'fecha_inicio_planificada', label: 'F. Inicio Planificada', sortKey: 'fecha_inicio_planificada', render: t => fmtDate(t.fecha_inicio_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+        { id: 'fecha_fin_planificada', label: 'F. Fin Planificada', sortKey: 'fecha_fin_planificada', render: t => fmtDate(t.fecha_fin_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+        { id: 'fecha_inicio_real', label: 'F. Inicio Real', sortKey: 'fecha_inicio_real' as any, render: t => fmtDate(t.fecha_inicio_real ?? null), className: 'whitespace-nowrap text-xs text-slate-600' },
+        { id: 'fecha_fin_real', label: 'F. Fin Real', sortKey: 'fecha_fin_real' as any, render: t => fmtDate(t.fecha_fin_real ?? null), className: 'whitespace-nowrap text-xs text-slate-600' },
+        { id: 'id_jira', label: 'ID Jira', sortKey: 'id_jira' as any, render: t => t.id_jira || '—', className: 'whitespace-nowrap text-xs text-slate-600' },
+      ];
+    }
+
+    return [
+      { id: 'id', label: 'ID', sortKey: 'id', render: t => String(t.id).padStart(4, '0'), className: 'font-mono text-slate-500 text-xs whitespace-nowrap' },
+      { id: 'institucion', label: 'Institución', sortKey: 'institucion', render: t => t.institucion || '—', className: 'whitespace-nowrap font-medium text-slate-700' },
+      { id: 'titulo', label: 'Título de la Iniciativa', sortKey: 'titulo', render: t => t.titulo, className: 'font-medium text-slate-800 leading-snug min-w-[280px]' },
+      { id: 'etapa_actual', label: 'Etapa', sortKey: 'etapa_actual', render: t => <EtapaBadge etapa={t.etapa_actual} mode={mode} /> },
+      { id: 'lider_dominio', label: 'Líder de Dominio', sortKey: 'lider_dominio', render: t => t.lider_dominio || '—', className: 'whitespace-nowrap text-slate-700 min-w-[150px]' },
+      { id: 'it_bp', label: 'IT BP', sortKey: 'it_bp', render: t => t.it_bp || '—', className: 'whitespace-nowrap text-slate-600' },
+      { id: 'duracion_meses', label: 'Tiempo estimado (meses)', sortKey: 'duracion_meses', render: t => t.duracion_meses ?? '—', className: 'text-center font-mono text-slate-600' },
+      { id: 'costo_usd', label: 'Costo en dólares', sortKey: 'costo_usd', render: t => t.costo_usd ? `$ ${t.costo_usd.toLocaleString('en-US')}` : '—', className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
+      { id: 'costo_soles', label: 'Costo Soles', sortKey: 'costo_soles', render: t => fmtMoney(t.costo_soles), className: 'text-right font-mono text-slate-600 whitespace-nowrap' },
+      { id: 'fecha_inicio_planificada', label: 'Fecha Inicio (planificada)', sortKey: 'fecha_inicio_planificada', render: t => fmtDate(t.fecha_inicio_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+      { id: 'fecha_fin_planificada', label: 'Fecha fin (planificada)', sortKey: 'fecha_fin_planificada', render: t => fmtDate(t.fecha_fin_planificada), className: 'whitespace-nowrap text-xs text-slate-600' },
+    ];
+  }, [isPlanificadas, mode]);
 
   const [page, setPage] = useState(1);
   const [localExpandedId, setLocalExpandedId] = useState<number | null>(null);
@@ -342,7 +389,7 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
                 </tr>
 
                 {/* Fila de detalle expandible */}
-                {expandedId === t.id && <ExpandedRow t={t} />}
+                {expandedId === t.id && <ExpandedRow t={t} mode={mode} />}
               </React.Fragment>
             ))}
 

@@ -11,7 +11,12 @@ export type EtapaPipeline =
   | 'por_planificar'
   | 'aprobar_planificacion'
   | 'planificadas'
-  | 'eliminadas';
+  | 'eliminadas'
+  // Etapas del nuevo Excel (iniciativas planificadas)
+  | 'por_iniciar'
+  | 'en_ejecucion'
+  | 'terminado'
+  | 'detenido';
 
 
 export interface Iniciativa {
@@ -54,6 +59,18 @@ export interface Iniciativa {
   aprobar_estimacion: string | null;
   presupuesto_habilitado: string | null;
   planificacion_aprobada: string | null;
+
+  // Campos adicionales para iniciativas planificadas
+  frente?: string | null;
+  nombre_vp?: string | null;
+  sub_estado?: string | null;
+  desviacion_pct?: number | null;
+  fecha_inicio_real?: string | null;
+  fecha_fin_real?: string | null;
+  aviso_negocio_cambio_fecha?: string | null;
+  ticket_sn_rit?: string | null;
+  id_jira?: string | null;
+  motivo_replanificacion?: string | null;
 }
 
 export interface DashboardData {
@@ -66,6 +83,7 @@ export interface DashboardData {
     por_etapa: Record<string, number>;
   };
   iniciativas: Iniciativa[];
+  mode: 'demanda' | 'planificadas';
 }
 
 /**

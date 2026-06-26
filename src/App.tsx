@@ -330,24 +330,52 @@ export default function App() {
     };
   }, [data, filters]);
 
-  // Iniciativas pronto a iniciar (1, 2 o 3 días antes de la fecha_inicio_planificada)
-  const upcomingIniciativas = useMemo(() => {
+  // Alertas de fechas / hitos próximos (1, 2 o 3 días de diferencia)
+  const upcomingAlerts = useMemo(() => {
     if (!data) return [];
     const today = new Date();
-    return data.iniciativas.filter(t => {
-      if (!t.fecha_inicio_planificada || t.etapa_actual === 'eliminadas') return false;
-      try {
-        const start = parseISO(t.fecha_inicio_planificada);
-        const diff = differenceInCalendarDays(start, today);
-        return diff >= 1 && diff <= 3;
-      } catch {
-        return false;
+    const list: Array<{
+      id: string;
+      iniciativa: Iniciativa;
+      label: string;
+      dateField: string;
+      diff: number;
+    }> = [];
+
+    data.iniciativas.forEach(t => {
+      if (t.etapa_actual === 'eliminadas') return;
+
+      const checkField = (fieldValue: string | null | undefined, label: string) => {
+        if (!fieldValue) return;
+        try {
+          const date = parseISO(fieldValue);
+          const diff = differenceInCalendarDays(date, today);
+          if (diff >= 1 && diff <= 3) {
+            list.push({
+              id: `${t.id}-${label.toLowerCase().replace(/\s+/g, '-')}`,
+              iniciativa: t,
+              label,
+              dateField: fieldValue,
+              diff,
+            });
+          }
+        } catch {
+          // ignore
+        }
+      };
+
+      if (data.mode === 'planificadas') {
+        checkField(t.fecha_inicio_planificada, 'Inicio Planificado');
+        checkField(t.fecha_fin_planificada, 'Fin Planificado');
+        checkField(t.fecha_inicio_real, 'Inicio Real');
+        checkField(t.fecha_fin_real, 'Fin Real');
+      } else {
+        checkField(t.fecha_inicio_planificada, 'Inicio Planificado');
+        checkField(t.fecha_fin_planificada, 'Fin Planificado');
       }
-    }).sort((a, b) => {
-      const dateA = new Date(a.fecha_inicio_planificada!).getTime();
-      const dateB = new Date(b.fecha_inicio_planificada!).getTime();
-      return dateA - dateB;
     });
+
+    return list.sort((a, b) => a.diff - b.diff);
   }, [data]);
 
   const handleSelectIniciativa = (iniciativa: Iniciativa) => {
@@ -513,100 +541,99 @@ export default function App() {
             </nav>
 
             <div className="flex items-center gap-6">
-              {/* Campanita de Notificaciones (solo en modo demanda) */}
-              {data.mode === 'demanda' && (
-                <div className="relative">
-                  <button
-                    onClick={() => setNotificationsOpen(!notificationsOpen)}
-                    className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
-                      notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
-                    }`}
-                    aria-label="Notificaciones"
-                  >
-                    <Bell size={20} className={upcomingIniciativas.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
-                    {upcomingIniciativas.length > 0 && (
-                      <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
-                        {upcomingIniciativas.length}
-                      </span>
-                    )}
-                  </button>
-
-                  {notificationsOpen && (
-                    <>
-                      <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
-                      <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden">
-                        <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
-                          <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                            <Bell size={14} className="text-blue-500" />
-                            Próximas a Iniciar
-                          </span>
-                          <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
-                            {upcomingIniciativas.length} alerta{upcomingIniciativas.length !== 1 ? 's' : ''}
-                          </span>
-                        </div>
-
-                        <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
-                          {upcomingIniciativas.length > 0 ? (
-                            upcomingIniciativas.map(ini => {
-                              const start = parseISO(ini.fecha_inicio_planificada!);
-                              const diff = differenceInCalendarDays(start, new Date());
-                              
-                              const borderClass = 
-                                diff === 1 ? 'border-l-red-500' : 
-                                diff === 2 ? 'border-l-amber-500' : 
-                                'border-l-blue-500';
-                              
-                              const badgeBg = 
-                                diff === 1 ? 'bg-red-50 text-red-700' : 
-                                diff === 2 ? 'bg-amber-50 text-amber-700' : 
-                                'bg-blue-50 text-blue-700';
-
-                              const diffText = 
-                                diff === 1 ? 'Inicia mañana' : 
-                                `Inicia en ${diff} días`;
-
-                              return (
-                                <button
-                                  key={ini.id}
-                                  onClick={() => handleSelectIniciativa(ini)}
-                                  className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
-                                >
-                                  <div className="flex justify-between items-start gap-2">
-                                    <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                      ID: {String(ini.id).padStart(4, '0')}
-                                    </span>
-                                    <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
-                                      {diffText}
-                                    </span>
-                                  </div>
-                                  
-                                  <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
-                                    {ini.titulo}
-                                  </h4>
-                                  
-                                  <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
-                                    <span className="font-medium truncate max-w-[150px]">
-                                      BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
-                                    </span>
-                                    <span className="font-mono">
-                                      {format(start, 'dd MMM yyyy', { locale: es })}
-                                    </span>
-                                  </div>
-                                </button>
-                              );
-                            })
-                          ) : (
-                            <div className="p-6 text-center text-gray-400 text-xs flex flex-col items-center gap-1.5">
-                              <Bell size={20} className="opacity-30" />
-                              <span>Sin iniciativas por iniciar en 1, 2 o 3 días.</span>
-                            </div>
-                          )}
-                        </div>
-                      </div>
-                    </>
+              {/* Campanita de Notificaciones */}
+              <div className="relative">
+                <button
+                  onClick={() => setNotificationsOpen(!notificationsOpen)}
+                  className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
+                    notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
+                  }`}
+                  aria-label="Notificaciones"
+                >
+                  <Bell size={20} className={upcomingAlerts.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
+                  {upcomingAlerts.length > 0 && (
+                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                      {upcomingAlerts.length}
+                    </span>
                   )}
-                </div>
-              )}
+                </button>
+
+                {notificationsOpen && (
+                  <>
+                    <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
+                    <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden text-left">
+                      <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                        <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
+                          <Bell size={14} className="text-blue-500" />
+                          Próximos Eventos / Hitos
+                        </span>
+                        <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
+                          {upcomingAlerts.length} alerta{upcomingAlerts.length !== 1 ? 's' : ''}
+                        </span>
+                      </div>
+
+                      <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
+                        {upcomingAlerts.length > 0 ? (
+                          upcomingAlerts.map(alert => {
+                            const ini = alert.iniciativa;
+                            const dateObj = parseISO(alert.dateField);
+                            const diff = alert.diff;
+                            
+                            const borderClass = 
+                              diff === 1 ? 'border-l-red-500' : 
+                              diff === 2 ? 'border-l-amber-500' : 
+                              'border-l-blue-500';
+                            
+                            const badgeBg = 
+                              diff === 1 ? 'bg-red-50 text-red-700' : 
+                              diff === 2 ? 'bg-amber-50 text-amber-700' : 
+                              'bg-blue-50 text-blue-700';
+
+                            const diffText = 
+                              diff === 1 ? `${alert.label}: mañana` : 
+                              `${alert.label}: en ${diff} días`;
+
+                            return (
+                              <button
+                                key={alert.id}
+                                onClick={() => handleSelectIniciativa(ini)}
+                                className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
+                              >
+                                <div className="flex justify-between items-start gap-2">
+                                  <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                    ID: {String(ini.id).padStart(4, '0')}
+                                  </span>
+                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
+                                    {diffText}
+                                  </span>
+                                </div>
+                                
+                                <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
+                                  {ini.titulo}
+                                </h4>
+                                
+                                <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
+                                  <span className="font-medium truncate max-w-[150px]">
+                                    BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
+                                  </span>
+                                  <span className="font-mono">
+                                    {format(dateObj, 'dd MMM yyyy', { locale: es })}
+                                  </span>
+                                </div>
+                              </button>
+                            );
+                          })
+                        ) : (
+                          <div className="p-6 text-center text-gray-400 text-xs flex flex-col items-center gap-1.5">
+                            <Bell size={20} className="opacity-30" />
+                            <span>Sin alertas de fechas para los próximos 3 días.</span>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                  </>
+                )}
+              </div>
 
               <div className="text-sm text-gray-500 flex flex-col items-end">
                 <span className="font-medium text-[11px] text-gray-400 uppercase tracking-wider">

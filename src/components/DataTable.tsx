@@ -274,7 +274,7 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
 
     const selectedRows = iniciativas.filter(t => selectedIds.has(t.id));
 
-    // Generar formato texto plano para Outlook
+    // Generar formato texto plano (como fallback)
     let plainText = `Hola\n\n`;
     plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\n`;
     plainText += `----------------------------------------------------------------------------------------------------\n`;
@@ -288,9 +288,8 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
       plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(t.fecha_inicio_planificada)}\t${fmtDate(t.fecha_fin_planificada)}\n`;
     });
 
-    // Generar formato HTML para copiar al portapapeles
-    let htmlString = `<p>Hola</p><br/>`;
-    htmlString += `<table border="1" style="border-collapse: collapse; font-family: Calibri, Arial, sans-serif; font-size: 11pt; border: 1px solid #cbd5e1; width: 100%;">`;
+    // Generar tabla HTML formateada
+    let htmlString = `<table border="1" style="border-collapse: collapse; font-family: Calibri, Arial, sans-serif; font-size: 11pt; border: 1px solid #cbd5e1; width: 100%;">`;
     htmlString += `<thead><tr style="background-color: #f8fafc; text-align: left; font-weight: bold;">`;
     htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">ID</th>`;
     htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">Título</th>`;
@@ -320,25 +319,44 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
     });
     htmlString += `</tbody></table>`;
 
-    // Intentar copiar HTML al portapapeles
+    // Intentar también copiar al portapapeles por comodidad del usuario
     try {
-      const blobHtml = new Blob([htmlString], { type: 'text/html' });
+      const blobHtml = new Blob([`<p>Hola</p><br/>` + htmlString], { type: 'text/html' });
       const blobText = new Blob([plainText], { type: 'text/plain' });
       const dataItems = [new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText })];
       await navigator.clipboard.write(dataItems);
     } catch (e) {
-      try {
-        await navigator.clipboard.writeText(plainText);
-      } catch (err) {
-        console.error("No se pudo copiar al portapapeles", err);
-      }
+      // Ignore copy error
     }
 
-    // Abrir cliente de correo (Outlook)
-    const mailtoSubject = encodeURIComponent("Iniciativas TI");
-    const mailtoBody = encodeURIComponent("Hola\n\n[Pega aquí la tabla del portapapeles usando Ctrl+V]\n\n" + plainText);
-    
-    window.location.href = `mailto:?subject=${mailtoSubject}&body=${mailtoBody}`;
+    // Crear el archivo EML con cabecera X-Unsent para abrir Outlook en modo edición directa
+    const emlContent = [
+      "Subject: Iniciativas TI",
+      "X-Unsent: 1",
+      "Content-Type: text/html; charset=utf-8",
+      "",
+      "<!DOCTYPE html>",
+      "<html>",
+      "  <head>",
+      "    <meta charset=\"utf-8\">",
+      "  </head>",
+      "  <body style=\"font-family: Calibri, Arial, sans-serif; font-size: 11pt; color: #1e293b;\">",
+      "    <p>Hola</p>",
+      "    <br/>",
+      htmlString,
+      "  </body>",
+      "</html>"
+    ].join("\r\n");
+
+    const blob = new Blob([emlContent], { type: "message/rfc822" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `iniciativa_email_${format(new Date(), 'yyyyMMdd_HHmmss')}.eml`;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(url);
   };
 
   const sortedIniciativas = useMemo(() => {

@@ -3,7 +3,7 @@ import { Iniciativa } from '../types';
 import { ETAPAS_MAP, ETAPAS_PLANIFICADAS_MAP } from '../constants';
 import { format, parseISO } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown } from 'lucide-react';
+import { ChevronDown, ChevronRight, FileDown, ArrowUpDown, ArrowUp, ArrowDown, Mail } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
 interface DataTableProps {
@@ -88,9 +88,7 @@ function ComplejidadBadge({ value }: { value: string }) {
 }
 
 // ---------------------------------------------------------------------------
-// Fila expandida con detalle completo
-// ---------------------------------------------------------------------------
-function ExpandedRow({ t, mode = 'demanda' }: { t: Iniciativa; mode?: 'demanda' | 'planificadas' }) {
+function ExpandedRow({ t, mode = 'demanda', colSpan = 12 }: { t: Iniciativa; mode?: 'demanda' | 'planificadas'; colSpan?: number }) {
   const isPlanificadas = mode === 'planificadas';
 
   const fields: Array<{ label: string; value: string | null | number }> = isPlanificadas
@@ -140,7 +138,7 @@ function ExpandedRow({ t, mode = 'demanda' }: { t: Iniciativa; mode?: 'demanda' 
 
   return (
     <tr className="bg-slate-50 border-b border-gray-100">
-      <td colSpan={12} className="px-6 py-4">
+      <td colSpan={colSpan} className="px-6 py-4">
         <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-x-8 gap-y-2 text-xs">
           {fields.map(f => (
             <div key={f.label}>
@@ -195,6 +193,7 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
   }, [isPlanificadas, mode]);
 
   const [page, setPage] = useState(1);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
   const [localExpandedId, setLocalExpandedId] = useState<number | null>(null);
   
   const expandedId = propExpandedId !== undefined ? propExpandedId : localExpandedId;
@@ -213,9 +212,10 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
 
   const orderedColumns = columnOrder.map(id => COLUMNS.find(c => c.id === id)!).filter(Boolean) as ColumnDef[];
 
-  // Resetear a página 1 cuando cambia el conjunto de datos (al filtrar)
+  // Resetear a página 1 y limpiar selección cuando cambia el conjunto de datos (al filtrar)
   useEffect(() => {
     setPage(1);
+    setSelectedIds(new Set());
     if (expandedId !== null && !iniciativas.some(t => t.id === expandedId)) {
       setExpandedId(null);
     }
@@ -246,6 +246,99 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
     newOrder.splice(toIndex, 0, draggedCol);
     setColumnOrder(newOrder);
     setDraggedCol(null);
+  };
+
+  const handleToggleSelectAll = () => {
+    const allSelected = paginated.length > 0 && paginated.every(t => selectedIds.has(t.id));
+    const next = new Set(selectedIds);
+    if (allSelected) {
+      paginated.forEach(t => next.delete(t.id));
+    } else {
+      paginated.forEach(t => next.add(t.id));
+    }
+    setSelectedIds(next);
+  };
+
+  const handleToggleSelectRow = (id: number) => {
+    const next = new Set(selectedIds);
+    if (next.has(id)) {
+      next.delete(id);
+    } else {
+      next.add(id);
+    }
+    setSelectedIds(next);
+  };
+
+  const handleSendEmail = async () => {
+    if (selectedIds.size === 0) return;
+
+    const selectedRows = iniciativas.filter(t => selectedIds.has(t.id));
+
+    // Generar formato texto plano para Outlook
+    let plainText = `Hola\n\n`;
+    plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\n`;
+    plainText += `----------------------------------------------------------------------------------------------------\n`;
+    selectedRows.forEach(t => {
+      const idStr = String(t.id).padStart(4, '0');
+      const stageCfg = isPlanificadas 
+        ? ETAPAS_PLANIFICADAS_MAP.get(t.etapa_actual)
+        : ETAPAS_MAP.get(t.etapa_actual);
+      const estado = stageCfg ? stageCfg.label : t.etapa_actual;
+      
+      plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(t.fecha_inicio_planificada)}\t${fmtDate(t.fecha_fin_planificada)}\n`;
+    });
+
+    // Generar formato HTML para copiar al portapapeles
+    let htmlString = `<p>Hola</p><br/>`;
+    htmlString += `<table border="1" style="border-collapse: collapse; font-family: Calibri, Arial, sans-serif; font-size: 11pt; border: 1px solid #cbd5e1; width: 100%;">`;
+    htmlString += `<thead><tr style="background-color: #f8fafc; text-align: left; font-weight: bold;">`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">ID</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">Título</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">VP Área Solicitante</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">IT BP</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">Estado</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Inicio Planificada</th>`;
+    htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Fin Planificada</th>`;
+    htmlString += `</tr></thead><tbody>`;
+
+    selectedRows.forEach(t => {
+      const idStr = String(t.id).padStart(4, '0');
+      const stageCfg = isPlanificadas 
+        ? ETAPAS_PLANIFICADAS_MAP.get(t.etapa_actual)
+        : ETAPAS_MAP.get(t.etapa_actual);
+      const estado = stageCfg ? stageCfg.label : t.etapa_actual;
+
+      htmlString += `<tr>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1; font-weight: bold; color: #2563eb; font-family: monospace;">${idStr}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${t.titulo}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${t.vp_solicitante || '—'}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${t.it_bp || '—'}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${estado}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_inicio_planificada)}</td>`;
+      htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_fin_planificada)}</td>`;
+      htmlString += `</tr>`;
+    });
+    htmlString += `</tbody></table>`;
+
+    // Intentar copiar HTML al portapapeles
+    try {
+      const blobHtml = new Blob([htmlString], { type: 'text/html' });
+      const blobText = new Blob([plainText], { type: 'text/plain' });
+      const dataItems = [new ClipboardItem({ 'text/html': blobHtml, 'text/plain': blobText })];
+      await navigator.clipboard.write(dataItems);
+    } catch (e) {
+      try {
+        await navigator.clipboard.writeText(plainText);
+      } catch (err) {
+        console.error("No se pudo copiar al portapapeles", err);
+      }
+    }
+
+    // Abrir cliente de correo (Outlook)
+    const mailtoSubject = encodeURIComponent("Iniciativas TI");
+    const mailtoBody = encodeURIComponent("Hola\n\n[Pega aquí la tabla del portapapeles usando Ctrl+V]\n\n" + plainText);
+    
+    window.location.href = `mailto:?subject=${mailtoSubject}&body=${mailtoBody}`;
   };
 
   const sortedIniciativas = useMemo(() => {
@@ -327,13 +420,24 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
             {totalPages > 1 && ` · Página ${page} de ${totalPages}`}
           </p>
         </div>
-        <button
-          onClick={downloadCSV}
-          className="text-sm px-3 py-1.5 bg-white border border-gray-200 shadow-sm rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium transition-colors"
-        >
-          <FileDown size={15} />
-          Exportar CSV
-        </button>
+        <div className="flex gap-2">
+          {selectedIds.size > 0 && (
+            <button
+              onClick={handleSendEmail}
+              className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-sm rounded-lg flex items-center gap-2 font-semibold transition-all active:scale-95 animate-in fade-in slide-in-from-right-4 duration-200"
+            >
+              <Mail size={15} />
+              Enviar mail ({selectedIds.size})
+            </button>
+          )}
+          <button
+            onClick={downloadCSV}
+            className="text-sm px-3 py-1.5 bg-white border border-gray-200 shadow-sm rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium transition-colors"
+          >
+            <FileDown size={15} />
+            Exportar CSV
+          </button>
+        </div>
       </div>
 
       {/* Tabla */}
@@ -342,6 +446,15 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
           <thead className="text-[11px] text-gray-500 uppercase bg-gray-50 border-b border-gray-100">
             <tr>
               <th className="px-3 py-3 w-8" />
+              <th className="px-3 py-3 w-8 text-center">
+                <input
+                  type="checkbox"
+                  checked={paginated.length > 0 && paginated.every(t => selectedIds.has(t.id))}
+                  onChange={handleToggleSelectAll}
+                  className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer"
+                  title="Seleccionar todos los visibles"
+                />
+              </th>
               {orderedColumns.map(col => (
                 <th
                   key={col.id}
@@ -380,6 +493,15 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
                       }
                     </button>
                   </td>
+                  {/* Checkbox selector */}
+                  <td className="px-3 py-2 text-center">
+                    <input
+                      type="checkbox"
+                      checked={selectedIds.has(t.id)}
+                      onChange={() => handleToggleSelectRow(t.id)}
+                      className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer"
+                    />
+                  </td>
                   {/* Celdas dinámicas */}
                   {orderedColumns.map(col => (
                     <td key={col.id} className={`px-3 py-2 ${col.className || ''}`}>
@@ -389,14 +511,14 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
                 </tr>
 
                 {/* Fila de detalle expandible */}
-                {expandedId === t.id && <ExpandedRow t={t} mode={mode} />}
+                {expandedId === t.id && <ExpandedRow t={t} mode={mode} colSpan={orderedColumns.length + 2} />}
               </React.Fragment>
             ))}
 
             {paginated.length === 0 && (
               <tr>
                 <td
-                  colSpan={12}
+                  colSpan={orderedColumns.length + 2}
                   className="px-4 py-12 text-center text-gray-400 text-sm"
                 >
                   No hay iniciativas que coincidan con los filtros activos.

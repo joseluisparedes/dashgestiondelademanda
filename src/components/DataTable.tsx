@@ -276,7 +276,11 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
 
     // Generar formato texto plano (como fallback)
     let plainText = `Hola\n\n`;
-    plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\n`;
+    if (isPlanificadas) {
+      plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\tF. Inicio Real\tF. Fin Real\tID Jira\n`;
+    } else {
+      plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\n`;
+    }
     plainText += `----------------------------------------------------------------------------------------------------\n`;
     selectedRows.forEach(t => {
       const idStr = String(t.id).padStart(4, '0');
@@ -285,7 +289,11 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
         : ETAPAS_MAP.get(t.etapa_actual);
       const estado = stageCfg ? stageCfg.label : t.etapa_actual;
       
-      plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(t.fecha_inicio_planificada)}\t${fmtDate(t.fecha_fin_planificada)}\n`;
+      if (isPlanificadas) {
+        plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(t.fecha_inicio_planificada)}\t${fmtDate(t.fecha_fin_planificada)}\t${fmtDate(t.fecha_inicio_real ?? null)}\t${fmtDate(t.fecha_fin_real ?? null)}\t${t.id_jira || '—'}\n`;
+      } else {
+        plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(t.fecha_inicio_planificada)}\t${fmtDate(t.fecha_fin_planificada)}\n`;
+      }
     });
 
     // Generar tabla HTML formateada
@@ -298,6 +306,11 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
     htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">Estado</th>`;
     htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Inicio Planificada</th>`;
     htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Fin Planificada</th>`;
+    if (isPlanificadas) {
+      htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Inicio Real</th>`;
+      htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Fin Real</th>`;
+      htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">ID Jira</th>`;
+    }
     htmlString += `</tr></thead><tbody>`;
 
     selectedRows.forEach(t => {
@@ -315,6 +328,11 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
       htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${estado}</td>`;
       htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_inicio_planificada)}</td>`;
       htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_fin_planificada)}</td>`;
+      if (isPlanificadas) {
+        htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_inicio_real ?? null)}</td>`;
+        htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_fin_real ?? null)}</td>`;
+        htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${t.id_jira || '—'}</td>`;
+      }
       htmlString += `</tr>`;
     });
     htmlString += `</tbody></table>`;

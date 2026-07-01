@@ -1,1 +1,135 @@
+@import url('https://fonts.googleapis.com/css2?family=Montserrat:wght@300;400;500;600;700;800;900&display=swap');
 @import "tailwindcss";
+@plugin "@tailwindcss/typography";
+
+@theme {
+  --font-sans: 'Montserrat', sans-serif;
+}
+
+
+/* ── Design tokens ──────────────────────────────────────────── */
+:root {
+  --bg:          #f7f8fc;
+  --bg-card:     #FFFFFF;
+  --bg-sidebar:  #FFFFFF;
+  --bg-header:   #FFFFFF;
+  --primary:     #EB5F46;
+  --primary-hov: #c94a32;
+  --primary-lt:  #fff0ed;
+  --text-1:      #1a1a2e;
+  --text-2:      #4a5568;
+  --text-3:      #9ca3af;
+  --border:      #e4e6ea;
+  --border-2:    #D7D9E8;
+  --shadow-sm:   0 1px 3px rgba(13,67,108,.05), 0 1px 2px rgba(13,67,108,.03);
+  --shadow-md:   0 4px 12px rgba(13,67,108,.08), 0 2px 6px rgba(13,67,108,.05);
+  --shadow-lg:   0 10px 30px rgba(13,67,108,.1);
+}
+
+/* ── Base ───────────────────────────────────────────────────── */
+*, *::before, *::after { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: 'Montserrat', Arial, sans-serif;
+  background: var(--bg);
+  color: var(--text-1);
+  -webkit-font-smoothing: antialiased;
+}
+
+/* ── Scrollbar ──────────────────────────────────────────────── */
+::-webkit-scrollbar       { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 99px; }
+::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
+
+/* ── Date input dark scheme fix ─────────────────────────────── */
+input[type="date"] { color-scheme: light; }
+
+/* ── Arbitrary Tailwind overrides for corporate styles ── */
+.bg-\[\#4F5AF5\] {
+  background-color: var(--primary) !important;
+}
+.hover\:bg-\[\#3F49E0\]:hover,
+.hover\:bg-indigo-700:hover,
+.hover\:bg-\[\#4F5AF5\/90\]:hover {
+  background-color: var(--primary-hov) !important;
+}
+.text-\[\#4F5AF5\] {
+  color: var(--primary) !important;
+}
+.text-\[\#4F5AF5\/90\] {
+  color: var(--primary) !important;
+}
+.hover\:text-\[\#3F49E0\]:hover {
+  color: var(--primary-hov) !important;
+}
+.border-\[\#4F5AF5\] {
+  border-color: var(--primary) !important;
+}
+.bg-\[\#EEF2FF\] {
+  background-color: var(--primary-lt) !important;
+}
+.border-\[\#C7D2FE\] {
+  border-color: var(--border-2) !important;
+}
+.from-\[\#4F5AF5\/10\] {
+  --tw-gradient-from: rgba(235, 95, 70, 0.1) !important;
+  --tw-gradient-stops: rgba(235, 95, 70, 0.1), var(--tw-gradient-to, rgba(235, 95, 70, 0)) !important;
+}
+
+/* Override standard indigo classes if any remain */
+.text-indigo-600 {
+  color: var(--primary) !important;
+}
+.bg-indigo-600 {
+  background-color: var(--primary) !important;
+}
+.bg-indigo-50 {
+  background-color: var(--primary-lt) !important;
+}
+.border-indigo-100, .border-indigo-200 {
+  border-color: var(--primary-lt) !important;
+}
+.focus\:ring-indigo-500:focus, .focus\:ring-\[\#4F5AF5\]:focus {
+  --tw-ring-color: var(--primary) !important;
+}
+.focus\:border-indigo-500:focus, .focus\:border-\[\#4F5AF5\]:focus {
+  border-color: var(--primary) !important;
+}
+
+/* ── Corporate Header Styles ── */
+.corp-header {
+  position: relative;
+  /* Allow dropdowns to overflow */
+  overflow: visible;
+}
+.corp-header-bg {
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(135deg, var(--primary) 0%, var(--navy, #0D436C) 100%) !important;
+  overflow: hidden;
+  z-index: 0;
+}
+.corp-header-bg::before {
+  content: '';
+  position: absolute;
+  top: -60px;
+  right: -60px;
+  width: 280px;
+  height: 280px;
+  background: rgba(255, 255, 255, 0.06);
+  border-radius: 50%;
+  pointer-events: none;
+}
+.corp-header-bg::after {
+  content: '';
+  position: absolute;
+  bottom: -80px;
+  left: 30%;
+  width: 200px;
+  height: 200px;
+  background: rgba(255, 255, 255, 0.04);
+  border-radius: 50%;
+  pointer-events: none;
+}

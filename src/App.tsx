@@ -86,11 +86,18 @@ function matchesAllFilters(
   if (filters.busqueda && excludeField !== 'busqueda') {
     const term = stripAccents(filters.busqueda.toLowerCase().trim());
     if (term) {
-      const title = stripAccents((t.titulo || '').toLowerCase());
-      const obj   = stripAccents((t.objetivo || '').toLowerCase());
-      const idStr = String(t.id);
-      const paddedIdStr = idStr.padStart(4, '0');
-      passesSearch = title.includes(term) || obj.includes(term) || idStr.includes(term) || paddedIdStr.includes(term);
+      if (term.startsWith('ids:')) {
+        const idsList = term.replace('ids:', '').split(',').map(s => s.trim()).filter(Boolean);
+        const idStr = String(t.id);
+        const paddedIdStr = idStr.padStart(4, '0');
+        passesSearch = idsList.includes(idStr) || idsList.includes(paddedIdStr);
+      } else {
+        const title = stripAccents((t.titulo || '').toLowerCase());
+        const obj   = stripAccents((t.objetivo || '').toLowerCase());
+        const idStr = String(t.id);
+        const paddedIdStr = idStr.padStart(4, '0');
+        passesSearch = title.includes(term) || obj.includes(term) || idStr.includes(term) || paddedIdStr.includes(term);
+      }
     }
   }
 
@@ -378,12 +385,51 @@ export default function App() {
     return list.sort((a, b) => a.diff - b.diff);
   }, [data]);
 
+  // Agrupar alertas por BP TI
+  const groupedAlerts = useMemo(() => {
+    const groups: Record<
+      string,
+      Array<{
+        id: string;
+        iniciativa: Iniciativa;
+        label: string;
+        dateField: string;
+        diff: number;
+      }>
+    > = {};
+    upcomingAlerts.forEach(alert => {
+      const bp = alert.iniciativa.it_bp?.trim() || '(Sin asignar)';
+      if (!groups[bp]) {
+        groups[bp] = [];
+      }
+      groups[bp].push(alert);
+    });
+    return groups;
+  }, [upcomingAlerts]);
+
   const handleSelectIniciativa = (iniciativa: Iniciativa) => {
     setFilters({
       ...INITIAL_FILTERS,
       busqueda: String(iniciativa.id).padStart(4, '0')
     });
     setExpandedId(iniciativa.id);
+    setActiveTab('resumen');
+    setNotificationsOpen(false);
+  };
+
+  const handleSelectBp = (bpName: string) => {
+    // Obtener los IDs de las iniciativas en upcomingAlerts que pertenecen a este BP TI
+    const alertsForBp = upcomingAlerts.filter(
+      alert => (alert.iniciativa.it_bp?.trim() || '(Sin asignar)') === bpName
+    );
+    const ids = alertsForBp.map(alert => alert.iniciativa.id);
+
+    setFilters({
+      ...INITIAL_FILTERS,
+      it_bps: [bpName],
+      busqueda: ids.length > 0 ? `ids:${ids.join(',')}` : ''
+    });
+    setExpandedId(null);
     setActiveTab('resumen');
     setNotificationsOpen(false);
   };
@@ -418,79 +464,106 @@ export default function App() {
 
   if (!data) {
     return (
-      <div className="min-h-screen bg-slate-50 flex items-center justify-center p-6">
-        <div className="bg-white max-w-2xl w-full rounded-2xl shadow-sm border border-gray-100 p-8 text-center space-y-6">
-          <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center mx-auto text-blue-500">
-            <Upload size={32} />
-          </div>
-          <div>
-            <h2 className="text-xl font-bold text-slate-800 mb-2">¡Bienvenido al Panel TI!</h2>
-            <p className="text-slate-500 text-sm">
-              Selecciona una opción para comenzar cargando el archivo Excel correspondiente:
-            </p>
-          </div>
-
-          {uploadError && (
-            <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm text-left flex items-start gap-3 border border-red-200">
-              <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-red-500" />
-              <div className="whitespace-pre-wrap font-medium leading-relaxed flex-1">
-                {uploadError}
+      <div className="min-h-screen bg-[#f7f8fc] flex flex-col font-sans">
+        {/* Simple header */}
+        <header className="corp-header sticky top-0 z-20 shadow-[0_2px_12px_rgba(13,67,108,.05)] shrink-0">
+          <div className="corp-header-bg" />
+          <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
+            <div className="flex items-center h-16">
+              <div className="flex items-center gap-3">
+                <div className="w-8 h-8 bg-white/10 rounded border border-white/20 flex items-center justify-center shadow-sm flex-shrink-0">
+                  <span className="text-white font-bold text-sm">TI</span>
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 leading-none mb-0.5">Laureate Perú</span>
+                  <h2 className="text-sm font-extrabold uppercase tracking-wider text-white">IT Needs Manager</h2>
+                </div>
               </div>
             </div>
-          )}
+          </div>
+          <div className="h-1 w-full bg-gradient-to-r from-[#EB5F46] via-[#007FB1] to-[#00B8B2]" />
+        </header>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-            {/* OPCION 1: DEMANDA */}
-            <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-blue-400 hover:shadow-sm transition-all bg-slate-50/50">
-              <div className="mb-4">
-                <h3 className="font-bold text-slate-800 text-sm mb-1">1. Gestión de la Demanda</h3>
-                <p className="text-gray-400 text-xs">Pipeline operativo, estimaciones y presupuestos.</p>
-              </div>
-              <label
-                className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
-                  isUploading
-                    ? 'bg-blue-300 text-white cursor-not-allowed'
-                    : 'bg-blue-600 hover:bg-blue-700 text-white shadow-sm'
-                }`}
-              >
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                <span>Subir Demanda</span>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={handleDemandaUpload}
-                  disabled={isUploading}
-                />
-              </label>
+        {/* Content */}
+        <div className="flex-grow flex items-center justify-center p-6">
+          <div className="bg-white max-w-2xl w-full rounded-2xl shadow-md border border-gray-100 p-8 text-center space-y-6">
+            <div className="w-16 h-16 bg-[#fff0ed] rounded-full flex items-center justify-center mx-auto text-[#EB5F46]">
+              <Upload size={32} />
+            </div>
+            <div>
+              <h2 className="text-xl font-bold text-[#1a1a2e] mb-2">¡Bienvenido al Panel TI!</h2>
+              <p className="text-[#4a5568] text-sm">
+                Selecciona una opción para comenzar cargando el archivo Excel correspondiente:
+              </p>
             </div>
 
-            {/* OPCION 2: PLANIFICADAS */}
-            <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-blue-400 hover:shadow-sm transition-all bg-slate-50/50">
-              <div className="mb-4">
-                <h3 className="font-bold text-slate-800 text-sm mb-1">2. Iniciativas Planificadas</h3>
-                <p className="text-gray-400 text-xs">Seguimiento de ejecución, estados y desviaciones.</p>
+            {uploadError && (
+              <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm text-left flex items-start gap-3 border border-red-200">
+                <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-red-500" />
+                <div className="whitespace-pre-wrap font-medium leading-relaxed flex-1">
+                  {uploadError}
+                </div>
               </div>
-              <label
-                className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
-                  isUploading
-                    ? 'bg-emerald-300 text-white cursor-not-allowed'
-                    : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                }`}
-              >
-                {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                <span>Subir Planificadas</span>
-                <input
-                  type="file"
-                  accept=".xlsx,.xls"
-                  className="hidden"
-                  onChange={handlePlanificadasUpload}
-                  disabled={isUploading}
-                />
-              </label>
+            )}
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
+              {/* OPCION 1: DEMANDA */}
+              <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-[#EB5F46] hover:shadow-sm transition-all bg-slate-50/50">
+                <div className="mb-4">
+                  <h3 className="font-bold text-[#1a1a2e] text-sm mb-1">1. Gestión de la Demanda</h3>
+                  <p className="text-[#9ca3af] text-xs">Pipeline operativo, estimaciones y presupuestos.</p>
+                </div>
+                <label
+                  className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
+                    isUploading
+                      ? 'bg-orange-300 text-white cursor-not-allowed'
+                      : 'bg-[#EB5F46] hover:bg-[#c94a32] text-white shadow-sm'
+                  }`}
+                >
+                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span>Subir Demanda</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={handleDemandaUpload}
+                    disabled={isUploading}
+                  />
+                </label>
+              </div>
+
+              {/* OPCION 2: PLANIFICADAS */}
+              <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-emerald-400 hover:shadow-sm transition-all bg-slate-50/50">
+                <div className="mb-4">
+                  <h3 className="font-bold text-[#1a1a2e] text-sm mb-1">2. Iniciativas Planificadas</h3>
+                  <p className="text-[#9ca3af] text-xs">Seguimiento de ejecución, estados y desviaciones.</p>
+                </div>
+                <label
+                  className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
+                    isUploading
+                      ? 'bg-emerald-300 text-white cursor-not-allowed'
+                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
+                  }`}
+                >
+                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
+                  <span>Subir Planificadas</span>
+                  <input
+                    type="file"
+                    accept=".xlsx,.xls"
+                    className="hidden"
+                    onChange={handlePlanificadasUpload}
+                    disabled={isUploading}
+                  />
+                </label>
+              </div>
             </div>
           </div>
         </div>
+
+        {/* Footer */}
+        <footer className="bg-[#22223C] text-slate-400 text-center py-4 px-8 text-xs font-semibold tracking-wider border-t border-slate-800 shrink-0">
+          © {new Date().getFullYear()} <strong>Laureate Perú</strong>. Todos los derechos reservados.
+        </footer>
         {renderMismatchModal()}
       </div>
     );
@@ -502,20 +575,24 @@ export default function App() {
   ];
 
   return (
-    <div className="min-h-screen bg-slate-50 text-slate-900 font-sans">
-      <header className="bg-white border-b border-gray-200 sticky top-0 z-20 shadow-sm">
-        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-[#f7f8fc] text-[#1a1a2e] font-sans flex flex-col">
+      <header className="corp-header sticky top-0 z-20 shadow-[0_2px_12px_rgba(13,67,108,.05)] shrink-0">
+        <div className="corp-header-bg" />
+        <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
           <div className="flex justify-between items-center h-16">
             <div className="flex items-center gap-3">
-              <div className="w-8 h-8 bg-blue-600 rounded flex items-center justify-center shadow-sm flex-shrink-0">
+              <div className="w-8 h-8 bg-white/10 rounded border border-white/20 flex items-center justify-center shadow-sm flex-shrink-0">
                 <span className="text-white font-bold text-sm">TI</span>
               </div>
-              <h1 className="text-lg font-bold text-slate-800">
-                {data.mode === 'planificadas' ? 'Iniciativas Planificadas' : 'Gestión de la Demanda'}
-              </h1>
+              <div className="flex flex-col">
+                <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 leading-none mb-0.5">Laureate Perú</span>
+                <h1 className="text-sm font-extrabold uppercase tracking-wider text-white">
+                  {data.mode === 'planificadas' ? 'Iniciativas Planificadas' : 'Gestión de la Demanda'}
+                </h1>
+              </div>
               <button
                 onClick={() => setData(null)}
-                className="text-xs text-blue-600 hover:text-blue-800 font-bold flex items-center gap-1 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg transition-all ml-2"
+                className="text-xs text-white bg-white/10 border border-white/20 hover:bg-white/20 font-bold flex items-center gap-1 px-2.5 py-1 rounded-lg transition-all ml-2"
                 title="Cambiar de archivo Excel"
               >
                 Volver
@@ -530,8 +607,8 @@ export default function App() {
                   onClick={() => setActiveTab(tab.id)}
                   className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-semibold transition-all ${
                     activeTab === tab.id
-                      ? 'bg-blue-600 text-white shadow-sm'
-                      : 'text-gray-500 hover:bg-gray-100 hover:text-gray-800'
+                      ? 'bg-white text-[#EB5F46] shadow-sm'
+                      : 'text-white/80 hover:bg-white/10 hover:text-white'
                   }`}
                 >
                   {tab.icon}
@@ -545,14 +622,14 @@ export default function App() {
               <div className="relative">
                 <button
                   onClick={() => setNotificationsOpen(!notificationsOpen)}
-                  className={`p-2 rounded-full hover:bg-slate-100 transition-all relative ${
-                    notificationsOpen ? 'bg-slate-100 text-blue-600' : 'text-gray-500 hover:text-gray-800'
+                  className={`p-2 rounded-full hover:bg-white/10 transition-all relative ${
+                    notificationsOpen ? 'bg-white/10 text-white' : 'text-white/80 hover:text-white'
                   }`}
                   aria-label="Notificaciones"
                 >
                   <Bell size={20} className={upcomingAlerts.length > 0 ? 'animate-bounce' : ''} style={{ animationDuration: '3s' }} />
                   {upcomingAlerts.length > 0 && (
-                    <span className="absolute -top-1 -right-1 bg-red-500 text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
+                    <span className="absolute -top-1 -right-1 bg-[#EB5F46] text-white text-[9px] font-bold w-4.5 h-4.5 rounded-full flex items-center justify-center border-2 border-white shadow-sm">
                       {upcomingAlerts.length}
                     </span>
                   )}
@@ -562,65 +639,84 @@ export default function App() {
                   <>
                     <div className="fixed inset-0 z-40 cursor-default" onClick={() => setNotificationsOpen(false)} />
                     <div className="absolute right-0 mt-2 w-80 sm:w-96 bg-white rounded-xl shadow-xl border border-gray-100 z-50 overflow-hidden text-left">
-                      <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+                      <div className="p-3 border-b border-gray-100 flex justify-between items-center bg-[#f7f8fc]">
                         <span className="font-semibold text-xs text-slate-800 flex items-center gap-1.5">
-                          <Bell size={14} className="text-blue-500" />
+                          <Bell size={14} className="text-[#EB5F46]" />
                           Próximos Eventos / Hitos
                         </span>
-                        <span className="text-[10px] px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full font-semibold">
+                        <span className="text-[10px] px-2 py-0.5 bg-[#fff0ed] text-[#EB5F46] rounded-full font-semibold">
                           {upcomingAlerts.length} alerta{upcomingAlerts.length !== 1 ? 's' : ''}
                         </span>
                       </div>
 
-                      <div className="max-h-[300px] overflow-y-auto divide-y divide-gray-50">
+                      <div className="max-h-[350px] overflow-y-auto divide-y divide-gray-150">
                         {upcomingAlerts.length > 0 ? (
-                          upcomingAlerts.map(alert => {
-                            const ini = alert.iniciativa;
-                            const dateObj = parseISO(alert.dateField);
-                            const diff = alert.diff;
-                            
-                            const borderClass = 
-                              diff === 1 ? 'border-l-red-500' : 
-                              diff === 2 ? 'border-l-amber-500' : 
-                              'border-l-blue-500';
-                            
-                            const badgeBg = 
-                              diff === 1 ? 'bg-red-50 text-red-700' : 
-                              diff === 2 ? 'bg-amber-50 text-amber-700' : 
-                              'bg-blue-50 text-blue-700';
-
-                            const diffText = 
-                              diff === 1 ? `${alert.label}: mañana` : 
-                              `${alert.label}: en ${diff} días`;
-
+                          Object.keys(groupedAlerts).map(bpName => {
+                            const alerts = groupedAlerts[bpName];
                             return (
-                              <button
-                                key={alert.id}
-                                onClick={() => handleSelectIniciativa(ini)}
-                                className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
-                              >
-                                <div className="flex justify-between items-start gap-2">
-                                  <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
-                                    ID: {String(ini.id).padStart(4, '0')}
+                              <div key={bpName} className="flex flex-col">
+                                <button
+                                  onClick={() => handleSelectBp(bpName)}
+                                  className="w-full bg-slate-50 hover:bg-slate-100 transition-colors border-y border-gray-100 text-slate-600 px-3 py-1.5 text-[9px] font-extrabold uppercase tracking-wider flex items-center justify-between sticky top-0 z-10 cursor-pointer text-left"
+                                  title={`Filtrar iniciativas de ${bpName}`}
+                                >
+                                  <span>BP TI: {bpName}</span>
+                                  <span className="bg-[#fff0ed] text-[#EB5F46] text-[9px] font-bold px-2 py-0.5 rounded-full">
+                                    {alerts.length}
                                   </span>
-                                  <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
-                                    {diffText}
-                                  </span>
+                                </button>
+                                <div className="divide-y divide-gray-50">
+                                  {alerts.map(alert => {
+                                    const ini = alert.iniciativa;
+                                    const dateObj = parseISO(alert.dateField);
+                                    const diff = alert.diff;
+                                    
+                                    const borderClass = 
+                                      diff === 1 ? 'border-l-[#EB5F46]' : 
+                                      diff === 2 ? 'border-l-amber-500' : 
+                                      'border-l-blue-500';
+                                    
+                                    const badgeBg = 
+                                      diff === 1 ? 'bg-[#fff0ed] text-[#EB5F46]' : 
+                                      diff === 2 ? 'bg-amber-50 text-amber-700' : 
+                                      'bg-blue-50 text-blue-700';
+
+                                    const diffText = 
+                                      diff === 1 ? `${alert.label}: mañana` : 
+                                      `${alert.label}: en ${diff} días`;
+
+                                    return (
+                                      <button
+                                        key={alert.id}
+                                        onClick={() => handleSelectIniciativa(ini)}
+                                        className={`w-full text-left p-3 hover:bg-slate-50 transition-colors flex flex-col gap-1 border-l-4 ${borderClass}`}
+                                      >
+                                        <div className="flex justify-between items-start gap-2">
+                                          <span className="font-mono text-[9px] text-gray-400 bg-gray-100 px-1.5 py-0.5 rounded font-semibold whitespace-nowrap">
+                                            ID: {String(ini.id).padStart(4, '0')}
+                                          </span>
+                                          <span className={`text-[9px] font-bold px-1.5 py-0.5 rounded-full ${badgeBg} whitespace-nowrap`}>
+                                            {diffText}
+                                          </span>
+                                        </div>
+                                        
+                                        <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
+                                          {ini.titulo}
+                                        </h4>
+                                        
+                                        <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
+                                          <span className="font-medium text-slate-400 truncate max-w-[220px]">
+                                            {ini.vp_solicitante || '(Sin VP)'}
+                                          </span>
+                                          <span className="font-mono">
+                                            {format(dateObj, 'dd MMM yyyy', { locale: es })}
+                                          </span>
+                                        </div>
+                                      </button>
+                                    );
+                                  })}
                                 </div>
-                                
-                                <h4 className="font-semibold text-xs text-slate-800 line-clamp-2 leading-tight">
-                                  {ini.titulo}
-                                </h4>
-                                
-                                <div className="flex justify-between items-center text-[9px] text-gray-500 mt-1">
-                                  <span className="font-medium truncate max-w-[150px]">
-                                    BP: <span className="text-gray-700">{ini.it_bp || '(Sin asignar)'}</span>
-                                  </span>
-                                  <span className="font-mono">
-                                    {format(dateObj, 'dd MMM yyyy', { locale: es })}
-                                  </span>
-                                </div>
-                              </button>
+                              </div>
                             );
                           })
                         ) : (
@@ -635,27 +731,27 @@ export default function App() {
                 )}
               </div>
 
-              <div className="text-sm text-gray-500 flex flex-col items-end">
-                <span className="font-medium text-[11px] text-gray-400 uppercase tracking-wider">
+              <div className="text-sm text-white/70 flex flex-col items-end">
+                <span className="font-medium text-[9px] text-white/50 uppercase tracking-wider">
                   Última actualización
                 </span>
-                <span>
+                <span className="text-[11px] font-mono">
                   {format(parseISO(data.ultima_actualizacion), 'dd MMM yyyy HH:mm', { locale: es })}
                 </span>
               </div>
 
               <div className="flex gap-2">
                 <label
-                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 ${
+                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 border ${
                     isUploading
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-                      : 'bg-white hover:bg-gray-50 text-blue-700 border border-blue-200 hover:border-blue-300'
+                      ? 'bg-white/10 text-white/40 cursor-not-allowed border-white/10'
+                      : 'bg-white hover:bg-white/95 text-[#0d436c] border-white/20'
                   }`}
                 >
                   {isUploading ? (
-                    <Loader2 size={14} className="animate-spin text-gray-400" />
+                    <Loader2 size={14} className="animate-spin text-white/40" />
                   ) : (
-                    <Upload size={14} className="text-blue-600" />
+                    <Upload size={14} className="text-[#0d436c]" />
                   )}
                   <span>{isUploading ? 'Procesando…' : 'Subir Demanda'}</span>
                   <input
@@ -668,16 +764,16 @@ export default function App() {
                 </label>
 
                 <label
-                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 ${
+                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 border ${
                     isUploading
-                      ? 'bg-gray-100 text-gray-400 cursor-not-allowed border border-gray-200'
-                      : 'bg-white hover:bg-gray-50 text-emerald-700 border border-emerald-200 hover:border-emerald-300'
+                      ? 'bg-white/10 text-white/40 cursor-not-allowed border-white/10'
+                      : 'bg-white hover:bg-white/95 text-emerald-700 border-white/20'
                   }`}
                 >
                   {isUploading ? (
-                    <Loader2 size={14} className="animate-spin text-gray-400" />
+                    <Loader2 size={14} className="animate-spin text-white/40" />
                   ) : (
-                    <Upload size={14} className="text-emerald-600" />
+                    <Upload size={14} className="text-emerald-700" />
                   )}
                   <span>{isUploading ? 'Procesando…' : 'Subir Planificadas'}</span>
                   <input
@@ -691,23 +787,12 @@ export default function App() {
               </div>
             </div>
           </div>
-
-          {uploadError && (
-            <div className="flex items-center gap-2 bg-red-50 border-t border-red-200 text-red-700 text-sm px-4 py-2">
-              <AlertCircle size={16} className="flex-shrink-0" />
-              <span>{uploadError}</span>
-              <button
-                onClick={() => setUploadError(null)}
-                className="ml-auto text-red-400 hover:text-red-600 font-bold"
-              >
-                ✕
-              </button>
-            </div>
-          )}
         </div>
+        {/* Color Line Divider */}
+        <div className="h-1 w-full bg-gradient-to-r from-[#EB5F46] via-[#007FB1] to-[#00B8B2]" />
       </header>
 
-      <main className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
+      <main className="flex-1 max-w-screen-2xl w-full mx-auto px-4 sm:px-6 lg:px-8 py-6 space-y-6">
         {activeTab === 'resumen' && (
           <>
             {/* Filtros — siempre arriba */}
@@ -758,6 +843,11 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Footer */}
+      <footer className="bg-[#22223C] text-slate-400 text-center py-4 px-8 text-xs font-semibold tracking-wider border-t border-slate-800 shrink-0">
+        © {new Date().getFullYear()} <strong>Laureate Perú</strong>. Todos los derechos reservados.
+      </footer>
 
       {/* Modal de confirmación ante error de opción */}
       {renderMismatchModal()}

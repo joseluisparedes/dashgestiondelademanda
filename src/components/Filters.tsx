@@ -332,9 +332,12 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
         <input
           type="text"
           placeholder="Buscar por ID, título u objetivo de la iniciativa..."
-          value={filters.busqueda || ''}
+          value={filters.busqueda?.startsWith('ids:') ? '📍 Alertas vigentes del BP TI' : (filters.busqueda || '')}
           onChange={e => setFilters(prev => ({ ...prev, busqueda: e.target.value }))}
-          className="w-full pl-10 pr-10 py-2.5 bg-gray-50/50 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-gray-400 text-gray-700"
+          className={`w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-gray-400 text-gray-700 ${
+            filters.busqueda?.startsWith('ids:') ? 'bg-[#fff0ed] border-[#EB5F46]/30 text-[#EB5F46] font-semibold cursor-default' : 'bg-gray-50/50'
+          }`}
+          readOnly={filters.busqueda?.startsWith('ids:')}
         />
         {filters.busqueda && (
           <button

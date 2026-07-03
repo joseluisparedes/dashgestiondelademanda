@@ -212,6 +212,11 @@ export function DataTable({ iniciativas, expandedId: propExpandedId, onExpandedI
 
   const orderedColumns = columnOrder.map(id => COLUMNS.find(c => c.id === id)!).filter(Boolean) as ColumnDef[];
 
+  // Resetear el orden de columnas al cambiar el modo
+  useEffect(() => {
+    setColumnOrder(COLUMNS.map(c => c.id));
+  }, [mode, COLUMNS]);
+
   // Resetear a página 1 y limpiar selección cuando cambia el conjunto de datos (al filtrar)
   useEffect(() => {
     setPage(1);

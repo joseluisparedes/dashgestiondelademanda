@@ -81,7 +81,7 @@ function matchesAllFilters(
       (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
   }
 
-  // Búsqueda por texto insensible a tildes y mayúsculas (Título, Objetivo o ID)
+  // Búsqueda exhaustiva por texto insensible a tildes y mayúsculas en ABSOLUTAMENTE TODOS los campos
   let passesSearch = true;
   if (filters.busqueda && excludeField !== 'busqueda') {
     const term = stripAccents(filters.busqueda.toLowerCase().trim());
@@ -92,11 +92,32 @@ function matchesAllFilters(
         const paddedIdStr = idStr.padStart(4, '0');
         passesSearch = idsList.includes(idStr) || idsList.includes(paddedIdStr);
       } else {
-        const title = stripAccents((t.titulo || '').toLowerCase());
-        const obj   = stripAccents((t.objetivo || '').toLowerCase());
-        const idStr = String(t.id);
-        const paddedIdStr = idStr.padStart(4, '0');
-        passesSearch = title.includes(term) || obj.includes(term) || idStr.includes(term) || paddedIdStr.includes(term);
+        const tokens = term.split(/\s+/).filter(Boolean);
+        const values: string[] = [];
+
+        // 1. Recorrer todas las propiedades nativas de la iniciativa
+        for (const [k, v] of Object.entries(t)) {
+          if (k === 'raw_fields') continue;
+          if (v !== null && v !== undefined && v !== '') {
+            values.push(String(v));
+          }
+        }
+
+        // 2. ID con ceros a la izquierda (ej: 0042)
+        values.push(String(t.id).padStart(4, '0'));
+
+        // 3. Recorrer ABSOLUTAMENTE TODOS los campos originales de Excel en raw_fields
+        if (t.raw_fields) {
+          for (const [rawKey, rawVal] of Object.entries(t.raw_fields)) {
+            if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+              values.push(String(rawVal));
+              values.push(rawKey);
+            }
+          }
+        }
+
+        const corpus = stripAccents(values.join(' ').toLowerCase());
+        passesSearch = corpus.includes(term) || tokens.every(token => corpus.includes(token));
       }
     }
   }

@@ -71,6 +71,9 @@ export interface Iniciativa {
   ticket_sn_rit?: string | null;
   id_jira?: string | null;
   motivo_replanificacion?: string | null;
+
+  /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
+  raw_fields?: Record<string, unknown>;
 }
 
 export interface DashboardData {

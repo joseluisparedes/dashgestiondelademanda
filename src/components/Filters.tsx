@@ -331,7 +331,7 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
         </div>
         <input
           type="text"
-          placeholder="Buscar por ID, título u objetivo de la iniciativa..."
+          placeholder="Buscar en todos los campos (ID, título, solicitante, BP, descripción, enlaces, etc.)..."
           value={filters.busqueda?.startsWith('ids:') ? '📍 Alertas vigentes del BP TI' : (filters.busqueda || '')}
           onChange={e => setFilters(prev => ({ ...prev, busqueda: e.target.value }))}
           className={`w-full pl-10 pr-10 py-2.5 border border-gray-200 rounded-lg text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-400 transition-all placeholder-gray-400 text-gray-700 ${

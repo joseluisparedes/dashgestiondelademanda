@@ -34,12 +34,33 @@ function getVal(row: Record<string, unknown>, ...keys: string[]): unknown {
 function formatDt(val: unknown): string | null {
   if (!val) return null;
   try {
+    if (typeof val === 'number' && val > 25000 && val < 70000) {
+      const dt = new Date(Math.round((val - 25569) * 86400 * 1000));
+      if (!isNaN(dt.getTime())) return dt.toISOString();
+    }
     const dt = val instanceof Date ? val : new Date(String(val));
     if (isNaN(dt.getTime())) return null;
     return dt.toISOString();
   } catch {
     return null;
   }
+}
+
+/** Extrae todos los campos presentes en la fila de Excel de forma limpia. */
+function extractRawFields(row: Record<string, unknown>): Record<string, unknown> {
+  const raw: Record<string, unknown> = {};
+  for (const [key, val] of Object.entries(row)) {
+    if (key.startsWith('__EMPTY')) continue;
+    const cleanKey = key.replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+    if (val !== undefined && val !== null && val !== '') {
+      if (val instanceof Date) {
+        raw[cleanKey] = val.toISOString();
+      } else {
+        raw[cleanKey] = val;
+      }
+    }
+  }
+  return raw;
 }
 
 /**
@@ -367,12 +388,20 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 parseStr(g('Presupuesto Habilitado', 'Presupuesto habilitado')),
               planificacion_aprobada:
                 parseStr(g('Planificación aprobada', 'Planificacion aprobada')),
+              raw_fields: extractRawFields(row),
             };
 
-            // Deduplicación: conservar la etapa más avanzada para el mismo ID
+            // Deduplicación: conservar la etapa más avanzada para el mismo ID y fusionar campos originales
             const existing = seenIds.get(id);
+            const mergedRaw = existing
+              ? { ...existing.iniciativa.raw_fields, ...iniciativa.raw_fields }
+              : iniciativa.raw_fields;
+            iniciativa.raw_fields = mergedRaw;
+
             if (!existing || etapaIndex > existing.etapaIndex) {
               seenIds.set(id, { iniciativa, etapaIndex });
+            } else {
+              existing.iniciativa.raw_fields = mergedRaw;
             }
           });
         });
@@ -515,7 +544,14 @@ export function parsePlanificadasExcelFile(file: File): Promise<DashboardData> {
             ticket_sn_rit: parseStr(g('Ticket SN (RIT)')),
             id_jira: parseStr(g('ID Jira')),
             motivo_replanificacion: parseStr(g('Motivo de Replanificación')),
+            raw_fields: extractRawFields(row),
           };
+
+          const existing = seenIds.get(id);
+          const mergedRaw = existing
+            ? { ...existing.raw_fields, ...ini.raw_fields }
+            : ini.raw_fields;
+          ini.raw_fields = mergedRaw;
 
           seenIds.set(id, ini);
         });

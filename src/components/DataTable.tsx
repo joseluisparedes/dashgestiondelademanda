@@ -27,6 +27,12 @@ import {
   Info,
   Link as LinkIcon,
   CheckCircle2,
+  AlertTriangle,
+  ClipboardCheck,
+  RefreshCw,
+  Banknote,
+  CalendarCheck,
+  ClipboardList,
 } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
@@ -79,6 +85,66 @@ function fmtUSD(v: number | null | undefined): string {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers para etiquetas amigables de URLs
+// ---------------------------------------------------------------------------
+function getFriendlyUrlLabel(rawUrl: string): string {
+  try {
+    const urlObj = new URL(rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`);
+
+    // 1. Buscar si tiene parámetro 'file' o 'filename' en query params (SharePoint / OneDrive / GDrive)
+    const fileParam = urlObj.searchParams.get('file') || urlObj.searchParams.get('filename') || urlObj.searchParams.get('name');
+    if (fileParam) {
+      try {
+        return decodeURIComponent(fileParam);
+      } catch {
+        return fileParam;
+      }
+    }
+
+    // 2. Buscar si el pathname termina en un archivo (ej: /docs/archivo.pdf)
+    const pathSegments = urlObj.pathname.split('/').filter(Boolean);
+    if (pathSegments.length > 0) {
+      const lastSegment = pathSegments[pathSegments.length - 1];
+      if (/\.[a-zA-Z0-9]{2,5}$/.test(lastSegment) && !lastSegment.includes('aspx') && !lastSegment.includes('php')) {
+        try {
+          return decodeURIComponent(lastSegment);
+        } catch {
+          return lastSegment;
+        }
+      }
+    }
+
+    // 3. Casos según dominio
+    const host = urlObj.hostname.toLowerCase();
+    if (host.includes('sharepoint.com') || host.includes('onedrive')) {
+      return 'Ver documento en SharePoint';
+    }
+    if (host.includes('jira') || host.includes('atlassian')) {
+      return 'Ver ticket en Jira';
+    }
+    if (host.includes('servicenow') || host.includes('service-now')) {
+      return 'Ver en ServiceNow';
+    }
+    if (host.includes('teams.microsoft.com')) {
+      return 'Ver en Microsoft Teams';
+    }
+
+    // 4. Si la URL es larga, mostrar el dominio simplificado
+    if (rawUrl.length > 35) {
+      const cleanHost = urlObj.hostname.replace(/^www\./, '');
+      return `Abrir enlace (${cleanHost})`;
+    }
+
+    return rawUrl;
+  } catch {
+    if (rawUrl.length > 35) {
+      return 'Abrir enlace externo';
+    }
+    return rawUrl;
+  }
+}
+
+// ---------------------------------------------------------------------------
 // Auto-link detector & formatter para URLs y Correos
 // ---------------------------------------------------------------------------
 export function AutoLinkText({ text }: { text: string }) {
@@ -105,6 +171,7 @@ export function AutoLinkText({ text }: { text: string }) {
     const isEmail = /^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/i.test(match);
 
     const href = isHttp ? match : isWww ? `https://${match}` : isEmail ? `mailto:${match}` : match;
+    const label = isEmail ? match : getFriendlyUrlLabel(match);
 
     parts.push(
       <a
@@ -113,10 +180,10 @@ export function AutoLinkText({ text }: { text: string }) {
         target={isEmail ? '_self' : '_blank'}
         rel="noopener noreferrer"
         onClick={e => e.stopPropagation()}
-        className="inline-flex items-center gap-1 font-semibold text-blue-600 hover:text-blue-800 underline decoration-blue-300 hover:decoration-blue-600 break-all transition-colors bg-blue-50/80 hover:bg-blue-100 px-1.5 py-0.5 rounded text-xs mx-0.5"
+        className="inline-flex items-center gap-1.5 font-medium text-blue-600 hover:text-blue-800 underline decoration-blue-300 hover:decoration-blue-600 transition-colors bg-blue-50/90 hover:bg-blue-100 border border-blue-200/60 px-2.5 py-1 rounded text-xs mx-0.5 max-w-full shadow-2xs"
         title={isEmail ? `Enviar correo a ${match}` : `Abrir enlace: ${match}`}
       >
-        <span>{match}</span>
+        <span className="break-words whitespace-normal leading-snug">{label}</span>
         {isEmail ? (
           <Mail size={11} className="inline shrink-0 opacity-80" />
         ) : (
@@ -228,6 +295,10 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
   const [activeTab, setActiveTab] = useState<'secciones' | 'todos'>('secciones');
   const [fieldSearch, setFieldSearch] = useState('');
   const [copiedAll, setCopiedAll] = useState(false);
+  const [narrativeOpen, setNarrativeOpen] = useState(false);
+  const [registroOpen, setRegistroOpen] = useState(false);
+  const [estimacionOpen, setEstimacionOpen] = useState(true);
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({});
   const [copiedKey, setCopiedKey] = useState<string | null>(null);
 
   // Recolectar todos los campos existentes de la iniciativa y su raw_fields
@@ -348,6 +419,22 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
     return null;
   };
 
+  // Pipeline de estados para el stepper visual (modo demanda).
+  // 'registro_incompleto' NO está en el flujo lineal: es un estado lateral
+  // de observación. La iniciativa vuelve al flujo normal al subsanar sus datos.
+  const PIPELINE_STEPS = [
+    { key: 'por_estimar',               label: 'Por Estimar',      short: 'Por Estimar' },
+    { key: 'por_reestimar',             label: 'Por Reestimar',    short: 'Reestimar'   },
+    { key: 'por_aprobar_estimacion',    label: 'Ap. Estimación',   short: 'Ap. Est.'    },
+    { key: 'por_habilitar_presupuesto', label: 'Hab. Presupuesto', short: 'Presup.'     },
+    { key: 'por_planificar',            label: 'Por Planificar',   short: 'Planificar'  },
+    { key: 'aprobar_planificacion',     label: 'Ap. Planificación',short: 'Ap. Plan.'   },
+    { key: 'planificadas',              label: 'Planificadas',     short: 'Planificada' },
+  ] as const;
+
+  const isRegistroIncompleto = t.etapa_actual === 'registro_incompleto';
+  const currentPipelineIndex = PIPELINE_STEPS.findIndex(s => s.key === t.etapa_actual);
+
   // Secciones estructuradas
   const sections = useMemo(() => {
     if (isPlanificadas) {
@@ -355,6 +442,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         {
           title: 'Información General y Solicitante',
           icon: <User size={15} className="text-blue-500" />,
+          etapaKey: null as string | null,
           fields: [
             { label: 'ID Demanda', value: String(t.id).padStart(4, '0') },
             { label: 'Frente', value: t.frente },
@@ -368,6 +456,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         {
           title: 'Seguimiento y Fechas',
           icon: <Calendar size={15} className="text-emerald-500" />,
+          etapaKey: null as string | null,
           fields: [
             { label: 'Estado', value: <EtapaBadge etapa={t.etapa_actual} mode={mode} /> },
             { label: 'Sub Estado', value: t.sub_estado },
@@ -386,6 +475,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         {
           title: 'Costos, Tickets e Integraciones',
           icon: <DollarSign size={15} className="text-purple-500" />,
+          etapaKey: null as string | null,
           fields: [
             { label: 'Costo Soles', value: fmtMoney(t.costo_soles) },
             { label: 'ID SPO', value: getRawVal('ID SPO') ?? (t.proyecto_spo === 'SI' ? 'Sí' : null) },
@@ -396,33 +486,32 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
       ];
     }
 
-    // DEMANDA
+    // -------------------------------------------------------------------------
+    // DEMANDA: Secciones alineadas a la secuencia de estados del pipeline
+    // Columnas del Excel:
+    //   Registro (A–AA) | Incompleto (motivo: AP) | Estimación (AB–AP)
+    //   Reestimación (AQ–BA) | Ap. Estimación (BB–BC) | Ap. Presupuesto (BD–BE)
+    //   Por Planificar (BF–BG) | Ap. Planificación (BH–BI)
+    // -------------------------------------------------------------------------
     return [
+      // ── 1. REGISTRO DE LA INICIATIVA (Cols A–AA) ────────────────────────────
       {
-        title: 'Información General & Solicitante',
-        icon: <User size={15} className="text-blue-500" />,
+        etapaKey: 'registro',
+        title: '1 · Registro de la Iniciativa',
+        icon: <ClipboardList size={15} className="text-blue-500" />,
         fields: [
           { label: 'ID Iniciativa', value: String(t.id).padStart(4, '0') },
+          { label: 'Fecha de Registro', value: fmtDateTime(t.fecha_registro) },
           { label: 'Institución', value: t.institucion },
           { label: 'VP Solicitante', value: t.vp_solicitante },
-          { label: 'Usuario Solicitante del Negocio', value: t.usuario_negocio },
+          { label: 'Usuario / Gerencia Solicitante', value: t.usuario_negocio },
           { label: 'Correo Solicitante', value: getRawVal('Correo electrónico', 'Email', 'Correo') },
           { label: 'Nombre Solicitante', value: getRawVal('Nombre') },
           { label: 'IT BP Responsable', value: t.it_bp },
-          { label: 'Líder de Dominio', value: t.lider_dominio },
-          { label: 'Asignado por', value: t.asignado_por },
-          { label: 'Fecha de Asignación', value: fmtDate(t.fecha_asignacion) },
-          { label: 'Fecha de Registro', value: fmtDateTime(t.fecha_registro) },
           { label: 'Fecha Entrega Requerida', value: fmtDate(t.fecha_entrega_requerida) },
-        ],
-      },
-      {
-        title: 'Clasificación Estratégica y Alcance',
-        icon: <Layers size={15} className="text-emerald-500" />,
-        fields: [
           { label: 'Tipo de Iniciativa', value: t.tipo_iniciativa },
           { label: 'Pilar Estratégico', value: t.pilar_estrategico },
-          { label: 'Proyecto o Requerimiento', value: t.proyecto_o_req },
+          { label: 'Proyecto o Requerimiento (No BAU)', value: t.proyecto_o_req },
           { label: 'Funcionalidad Nueva', value: t.funcionalidad_nueva },
           { label: 'Proyecto SPO', value: t.proyecto_spo },
           { label: 'Workstream SPO', value: getRawVal('Workstream del proyecto SPO', 'Workstream') },
@@ -433,51 +522,103 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Usuarios Beneficiados / Afectados', value: t.usuarios_beneficiados },
           { label: 'Beneficio Cuantitativo', value: t.beneficio_cuantitativo },
           { label: 'Beneficios Cualitativos', value: getRawVal('Beneficios cualitativos') },
+          { label: 'Evidencia de Aprobación VP / Director', value: getRawVal('Evidencia de la aprobación del VP o Director', 'Evidencia de la aprobación', 'Aprobación') },
+          { label: 'Adjuntos / Documentación', value: getRawVal('Adjuntos', 'Adjuntar') },
         ],
       },
-      {
-        title: 'Estimación, Recursos y Costos',
-        icon: <DollarSign size={15} className="text-purple-500" />,
+
+      // ── 2. REGISTRO INCOMPLETO (motivo en col AP) ────────────────────────────
+      // Solo se muestra si la iniciativa está efectivamente en la pestaña 'Registro incompleto'
+      ...(t.etapa_actual === 'registro_incompleto' ? [{
+        etapaKey: 'registro_incompleto',
+        title: '2 · Registro Incompleto',
+        icon: <AlertTriangle size={15} className="text-red-500" />,
         fields: [
+          { label: 'Motivo de Registro Incompleto', value: getRawVal('Completar información', 'Motivo', 'STRING') },
+          { label: 'Asignado por', value: t.asignado_por },
+          { label: 'Fecha de Asignación', value: fmtDate(t.fecha_asignacion) },
+          { label: 'Líder de Dominio Asignado', value: t.lider_dominio },
+        ],
+      }] : []),
+
+      // ── 3. ESTIMACIÓN (Cols AB–AP) ────────────────────────────────────────────
+      {
+        etapaKey: 'por_estimar',
+        title: '3 · Estimación',
+        icon: <DollarSign size={15} className="text-amber-500" />,
+        fields: [
+          { label: 'Líder de Dominio', value: t.lider_dominio },
+          { label: 'Asignado por', value: t.asignado_por },
+          { label: 'Fecha de Asignación al LD', value: fmtDate(t.fecha_asignacion) },
           { label: 'Complejidad Estimada', value: t.complejidad },
           { label: 'Duración Estimada (meses)', value: t.duracion_meses },
+          { label: 'Tipo de Recurso', value: t.tipo_recurso },
           { label: 'Costo Dólares (USD)', value: fmtUSD(t.costo_usd) },
           { label: 'Costo Soles (PEN)', value: fmtMoney(t.costo_soles) },
-          { label: 'Tipo de Recurso', value: t.tipo_recurso },
-          { label: 'Estatus Estimación', value: t.estatus_estimacion },
-          { label: 'Fecha Inicio Estimación', value: fmtDate(getRawVal('Fecha inicio  (estimación)', 'Fecha inicio') as string) },
+          { label: 'Fecha Inicio Estimación', value: fmtDate(getRawVal('Fecha inicio  (estimación)', 'Fecha inicio (estimación)', 'Fecha inicio') as string) },
           { label: 'Fecha Fin Estimación', value: fmtDate(getRawVal('Fecha fin (estimación)', 'Fecha fin') as string) },
+          { label: 'Estatus Estimación', value: t.estatus_estimacion },
+          { label: 'Acción BRM', value: t.accion_brm },
+          { label: 'Prioridad BRM', value: t.prioridad_brm },
         ],
       },
+
+      // ── 4. REESTIMACIÓN (Cols AQ–BA) ─────────────────────────────────────────
       {
-        title: 'Reestimación (si aplica)',
-        icon: <Info size={15} className="text-amber-500" />,
+        etapaKey: 'por_reestimar',
+        title: '4 · Reestimación',
+        icon: <RefreshCw size={15} className="text-orange-500" />,
         fields: [
-          { label: 'Motivo de Reestimación', value: getRawVal('Motivo de Reestimación', 'Reestimación') },
-          { label: 'Complejidad Reestimación', value: getRawVal('Complejidad_1', 'Complejidad reestimación') },
-          { label: 'Fecha Inicio Reestimación', value: fmtDate(getRawVal('Fecha de inicio reestimación') as string) },
-          { label: 'Fecha Fin Reestimación', value: fmtDate(getRawVal('Fecha fin reestimación') as string) },
-          { label: 'Tiempo Reestimado (meses)', value: getRawVal('Tiempo estimado\r\n(meses)_1', 'Tiempo estimado (meses)_1') },
+          { label: 'Motivo de Reestimación', value: getRawVal('Motivo de Reestimación', 'Motivo de Reestimacion', 'Reestimación') },
+          { label: 'Complejidad Reestimada', value: getRawVal('Complejidad_1', 'Complejidad reestimación') },
+          { label: 'Duración Reestimada (meses)', value: getRawVal('Tiempo estimado\r\n(meses)_1', 'Tiempo estimado (meses)_1') },
+          { label: 'Costo Total USD Reestimación', value: getRawVal('Costo total dolares') ? fmtUSD(Number(getRawVal('Costo total dolares'))) : null },
           { label: 'Costo Total Soles Reestimación', value: getRawVal('Costo total Soles') ? fmtMoney(Number(getRawVal('Costo total Soles'))) : null },
+          { label: 'Fecha Inicio Reestimación', value: fmtDate(getRawVal('Fecha de inicio reestimación', 'Fecha inicio reestimación') as string) },
+          { label: 'Fecha Fin Reestimación', value: fmtDate(getRawVal('Fecha fin reestimación') as string) },
           { label: 'Estatus Reestimación', value: getRawVal('Estatus Reestimación', 'Estatus Reestimacion') },
         ],
       },
+
+      // ── 5. POR APROBAR ESTIMACIÓN (Cols BB–BC) ───────────────────────────────
       {
-        title: 'Planificación, Aprobaciones y Evidencias',
-        icon: <Shield size={15} className="text-indigo-500" />,
+        etapaKey: 'por_aprobar_estimacion',
+        title: '5 · Aprobación de Estimación',
+        icon: <ClipboardCheck size={15} className="text-violet-500" />,
         fields: [
-          { label: 'Acción BRM', value: t.accion_brm },
-          { label: 'Prioridad BRM', value: t.prioridad_brm },
+          { label: 'Estado Aprobación Estimación', value: t.aprobar_estimacion },
+          { label: 'Fecha Máxima de Estimación', value: fmtDate(getRawVal('Fecha máxima de estimación', 'Fecha maxima estimacion') as string) },
+        ],
+      },
+
+      // ── 6. POR APROBAR PRESUPUESTO (Cols BD–BE) ──────────────────────────────
+      {
+        etapaKey: 'por_habilitar_presupuesto',
+        title: '6 · Habilitación de Presupuesto',
+        icon: <Banknote size={15} className="text-cyan-600" />,
+        fields: [
+          { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado },
+        ],
+      },
+
+      // ── 7. POR PLANIFICAR (Cols BF–BG) ──────────────────────────────────────
+      {
+        etapaKey: 'por_planificar',
+        title: '7 · Planificación',
+        icon: <Calendar size={15} className="text-emerald-500" />,
+        fields: [
           { label: 'Fecha Inicio Planificada', value: fmtDate(t.fecha_inicio_planificada) },
           { label: 'Fecha Fin Planificada', value: fmtDate(t.fecha_fin_planificada) },
-          { label: 'Aprobar Estimación', value: t.aprobar_estimacion },
-          { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado },
+        ],
+      },
+
+      // ── 8. APROBAR PLANIFICACIÓN (Cols BH–BI) ───────────────────────────────
+      {
+        etapaKey: 'aprobar_planificacion',
+        title: '8 · Aprobación de Planificación',
+        icon: <CalendarCheck size={15} className="text-green-600" />,
+        fields: [
           { label: 'Planificación Aprobada', value: t.planificacion_aprobada },
-          {
-            label: 'Evidencia de Aprobación VP / Director',
-            value: getRawVal('Evidencia de la aprobación del VP o Director', 'Evidencia de la aprobación', 'Aprobación'),
-          },
-          { label: 'Adjuntos / Documentación', value: getRawVal('Adjuntos', 'Adjuntar') },
         ],
       },
     ];
@@ -576,6 +717,67 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         </div>
       </div>
 
+      {/* Stepper visual del pipeline (solo modo demanda) */}
+      {!isPlanificadas && (
+        <div className="overflow-x-auto pb-1">
+          <div className="flex items-center gap-1">
+            {/* Badge lateral: estado Registro Incompleto (fuera del flujo lineal) */}
+            {isRegistroIncompleto && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-red-50 border border-red-200 text-red-700 text-[10px] font-bold mr-2 shrink-0">
+                <AlertTriangle size={11} />
+                <span>Registro Incompleto</span>
+                <span className="text-red-400 font-normal">— Subsanar para retomar flujo</span>
+              </div>
+            )}
+
+            {/* Pasos del pipeline lineal */}
+            <div className="flex items-center min-w-max gap-0">
+              {PIPELINE_STEPS.map((step, idx) => {
+                const isDone = !isRegistroIncompleto && idx < currentPipelineIndex;
+                const isCurrent = !isRegistroIncompleto && idx === currentPipelineIndex;
+                return (
+                  <React.Fragment key={step.key}>
+                    <div className="flex flex-col items-center">
+                      <div
+                        className={`w-5 h-5 rounded-full flex items-center justify-center text-[9px] font-bold transition-all ${
+                          isDone
+                            ? 'bg-emerald-500 text-white'
+                            : isCurrent
+                            ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-200 scale-110'
+                            : isRegistroIncompleto
+                            ? 'bg-red-100 text-red-300'
+                            : 'bg-slate-200 text-slate-400'
+                        }`}
+                      >
+                        {isDone ? <Check size={9} /> : idx + 1}
+                      </div>
+                      <span
+                        className={`mt-0.5 text-[9px] font-semibold whitespace-nowrap ${
+                          isCurrent
+                            ? 'text-blue-600'
+                            : isDone
+                            ? 'text-emerald-600'
+                            : 'text-slate-400'
+                        }`}
+                      >
+                        {step.short}
+                      </span>
+                    </div>
+                    {idx < PIPELINE_STEPS.length - 1 && (
+                      <div
+                        className={`h-[2px] w-6 mx-0.5 mt-[-9px] rounded-full ${
+                          isDone ? 'bg-emerald-400' : 'bg-slate-200'
+                        }`}
+                      />
+                    )}
+                  </React.Fragment>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Selector de Pestañas y Buscador interno */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
         <div className="flex items-center gap-1.5">
@@ -624,65 +826,271 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         </div>
       </div>
 
-      {/* CONTENIDO: TAB 1 (Secciones Estructuradas) */}
+      {/* CONTENIDO: TAB 1 (Secciones por Etapa del Pipeline) */}
       {activeTab === 'secciones' && !fieldSearch && (
-        <div className="space-y-4">
-          {/* Bloques de texto largo (Objetivo, Descripción del problema, etc.) */}
+        <div className="space-y-3">
+          {/* Sección colapsable 1: campos narrativos (Objetivo, Descripción, etc. - ancho completo, minimizado por defecto) */}
           {narrativeFields.length > 0 && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              {narrativeFields.map((nf, idx) => (
-                <div
-                  key={idx}
-                  className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col justify-between"
-                >
-                  <div>
-                    <span className="text-[11px] font-bold uppercase tracking-wider text-slate-500 block mb-1.5">
-                      {nf.label}
-                    </span>
-                    <div className="text-xs text-slate-800 leading-relaxed max-h-48 overflow-y-auto pr-1">
-                      <FormattedFieldValue value={nf.value} />
-                    </div>
-                  </div>
+            <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+              {/* Header toggle */}
+              <button
+                onClick={() => setNarrativeOpen(o => !o)}
+                className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors group"
+              >
+                <div className={`transition-transform duration-200 text-slate-400 group-hover:text-slate-600 ${
+                  narrativeOpen ? 'rotate-90' : ''
+                }`}>
+                  <ChevronRight size={13} />
                 </div>
-              ))}
+                <FileText size={13} className="text-indigo-500" />
+                <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-800 flex-1">
+                  Descripción y Contexto de la Iniciativa
+                </span>
+                <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">
+                  {narrativeFields.length} campo{narrativeFields.length !== 1 ? 's' : ''}
+                </span>
+              </button>
+
+              {/* Contenido expandible */}
+              {narrativeOpen && (
+                <div className="border-t border-slate-100 grid grid-cols-1 md:grid-cols-2 gap-0 divide-x divide-y divide-slate-100 bg-slate-50/20">
+                  {narrativeFields.map((nf, idx) => (
+                    <div key={idx} className="p-3 flex flex-col">
+                      <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400 block mb-1">
+                        {nf.label}
+                      </span>
+                      <div className="text-xs text-slate-800 leading-relaxed max-h-48 overflow-y-auto pr-1">
+                        <FormattedFieldValue value={nf.value} />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
             </div>
           )}
 
-          {/* Secciones en rejilla */}
-          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
-            {sections.map(sec => {
-              // Filtrar campos que tengan valor
-              const validFields = sec.fields.filter(
-                f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—'
-              );
-              if (validFields.length === 0) return null;
+          {/* Sección colapsable 2: Registro de la Iniciativa (Cols A a AA - ancho completo, minimizado por defecto) */}
+          {(() => {
+            const registroSec = !isPlanificadas ? sections.find(s => s.etapaKey === 'registro') : null;
+            if (!registroSec) return null;
+            const validFields = registroSec.fields.filter(
+              f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—'
+            );
+            if (validFields.length === 0) return null;
 
-              return (
-                <div
-                  key={sec.title}
-                  className="bg-white p-4 rounded-xl border border-slate-200/80 shadow-2xs flex flex-col"
+            return (
+              <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+                <button
+                  onClick={() => setRegistroOpen(o => !o)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors group"
                 >
-                  <div className="flex items-center gap-2 pb-2.5 mb-3 border-b border-slate-100">
-                    {sec.icon}
-                    <h4 className="font-bold text-xs text-slate-800 uppercase tracking-wide">
-                      {sec.title}
-                    </h4>
+                  <div className={`transition-transform duration-200 text-slate-400 group-hover:text-slate-600 ${
+                    registroOpen ? 'rotate-90' : ''
+                  }`}>
+                    <ChevronRight size={13} />
                   </div>
-                  <div className="space-y-2 text-xs divide-y divide-slate-50">
+                  <ClipboardList size={13} className="text-blue-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-800 flex-1">
+                    1 · Registro de la Iniciativa (Datos Generales & Clasificación)
+                  </span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">
+                    {validFields.length} campos
+                  </span>
+                  <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 whitespace-nowrap">
+                    ✓ Completado
+                  </span>
+                </button>
+
+                {registroOpen && (
+                  <div className="border-t border-slate-100 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 bg-slate-50/40">
+                    {validFields.map(f => {
+                      const isWideField =
+                        f.label.toLowerCase().includes('adjunt') ||
+                        f.label.toLowerCase().includes('documentac') ||
+                        f.label.toLowerCase().includes('evidencia') ||
+                        f.label.toLowerCase().includes('beneficios cualitativos');
+
+                      return (
+                        <div
+                          key={f.label}
+                          className={`bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs flex flex-col justify-start ${
+                            isWideField ? 'col-span-full' : ''
+                          }`}
+                        >
+                          <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+                            {f.label}
+                          </span>
+                          <div className="text-xs text-slate-800 font-medium leading-relaxed break-words">
+                            <FormattedFieldValue value={f.value} />
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Sección colapsable 3: Estimación (Cols AB a AP - ancho completo) */}
+          {(() => {
+            const estimacionSec = !isPlanificadas ? sections.find(s => s.etapaKey === 'por_estimar') : null;
+            if (!estimacionSec) return null;
+            const validFields = estimacionSec.fields.filter(
+              f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—'
+            );
+            if (validFields.length === 0) return null;
+
+            const isCurrentStage = !isPlanificadas && t.etapa_actual === 'por_estimar';
+            const secPipelineIdx = PIPELINE_STEPS.findIndex(s => s.key === 'por_estimar');
+            const isCompletedStage = secPipelineIdx !== -1 && secPipelineIdx < currentPipelineIndex;
+
+            return (
+              <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs overflow-hidden">
+                <button
+                  onClick={() => setEstimacionOpen(o => !o)}
+                  className="w-full flex items-center gap-2 px-3 py-2 text-left hover:bg-slate-50 transition-colors group"
+                >
+                  <div className={`transition-transform duration-200 text-slate-400 group-hover:text-slate-600 ${
+                    estimacionOpen ? 'rotate-90' : ''
+                  }`}>
+                    <ChevronRight size={13} />
+                  </div>
+                  <DollarSign size={13} className="text-amber-500" />
+                  <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-800 flex-1">
+                    3 · Estimación (Recursos, Costos & Planificación Inicial)
+                  </span>
+                  <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">
+                    {validFields.length} campos
+                  </span>
+                  {isCurrentStage && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap">
+                      ◉ EN CURSO
+                    </span>
+                  )}
+                  {isCompletedStage && !isCurrentStage && (
+                    <span className="text-[8px] font-bold px-1.5 py-0.5 rounded-full bg-emerald-50 text-emerald-600 whitespace-nowrap">
+                      ✓ Completado
+                    </span>
+                  )}
+                </button>
+
+                {estimacionOpen && (
+                  <div className="border-t border-slate-100 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 bg-slate-50/40">
                     {validFields.map(f => (
-                      <div key={f.label} className="pt-2 first:pt-0 flex flex-col">
-                        <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+                      <div
+                        key={f.label}
+                        className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs flex flex-col justify-start"
+                      >
+                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
                           {f.label}
                         </span>
-                        <div className="text-slate-800 font-medium leading-relaxed">
+                        <div className="text-xs text-slate-800 font-medium leading-relaxed break-words">
                           <FormattedFieldValue value={f.value} />
                         </div>
                       </div>
                     ))}
                   </div>
-                </div>
-              );
-            })}
+                )}
+              </div>
+            );
+          })()}
+
+          {/* Secciones del pipeline en rejilla: ABIERTAS por defecto */}
+          <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+            {sections
+              .filter(sec => isPlanificadas || (sec.etapaKey !== 'registro' && sec.etapaKey !== 'por_estimar'))
+              .map(sec => {
+                // Filtrar campos que tengan valor
+                const validFields = sec.fields.filter(
+                  f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—'
+                );
+                if (validFields.length === 0) return null;
+
+                const isCurrentStage = !isPlanificadas && sec.etapaKey === t.etapa_actual;
+                const secPipelineIdx = !isPlanificadas
+                  ? PIPELINE_STEPS.findIndex(s => s.key === sec.etapaKey)
+                  : -1;
+                const isCompletedStage = secPipelineIdx !== -1 && secPipelineIdx < currentPipelineIndex;
+                const isRegistroSection = sec.etapaKey === 'registro';
+
+                // ABIERTO POR DEFECTO: Si no está en openSections, vale true (abierto)
+                const isOpen = openSections[sec.title] !== undefined
+                  ? openSections[sec.title]
+                  : true;
+                const toggle = () => setOpenSections(prev => ({ ...prev, [sec.title]: !isOpen }));
+
+                return (
+                  <div
+                    key={sec.title}
+                    className={`bg-white rounded-xl border shadow-2xs overflow-hidden transition-all ${
+                      isCurrentStage
+                        ? 'border-blue-300 ring-2 ring-blue-100 shadow-blue-100/60'
+                        : isCompletedStage || isRegistroSection
+                        ? 'border-emerald-200/70'
+                        : 'border-slate-200/80'
+                    }`}
+                  >
+                    {/* Header clicable */}
+                    <button
+                      onClick={toggle}
+                      className={`w-full flex items-center gap-1.5 px-3 py-2 text-left transition-colors group ${
+                        isCurrentStage
+                          ? 'hover:bg-blue-50/40 bg-blue-50/20'
+                          : 'hover:bg-slate-50'
+                      }`}
+                    >
+                      <div className={`transition-transform duration-200 shrink-0 ${
+                        isOpen ? 'rotate-90' : ''
+                      } ${
+                        isCurrentStage ? 'text-blue-500' : 'text-slate-400 group-hover:text-slate-600'
+                      }`}>
+                        <ChevronRight size={12} />
+                      </div>
+                      {React.cloneElement(sec.icon as React.ReactElement<{ size?: number }>, { size: 12 })}
+                      <span className="font-bold text-[10px] text-slate-600 uppercase tracking-wide flex-1 leading-none">
+                        {sec.title}
+                      </span>
+                      {/* Conteo de campos */}
+                      <span className="text-[8px] font-semibold px-1 py-0.5 rounded-full bg-slate-100 text-slate-400 shrink-0">
+                        {validFields.length}
+                      </span>
+                      {/* Badge de estado */}
+                      {isCurrentStage && (
+                        <span className="text-[8px] font-bold px-1 py-0.5 rounded-full bg-blue-100 text-blue-700 whitespace-nowrap shrink-0">
+                          ◉ EN CURSO
+                        </span>
+                      )}
+                      {(isCompletedStage || isRegistroSection) && !isCurrentStage && (
+                        <span className="text-[8px] font-bold px-1 py-0.5 rounded-full bg-emerald-50 text-emerald-600 whitespace-nowrap shrink-0">
+                          ✓
+                        </span>
+                      )}
+                      {!isCurrentStage && !isCompletedStage && !isRegistroSection && sec.etapaKey && sec.etapaKey !== 'registro' && (
+                        <span className="text-[8px] font-bold px-1 py-0.5 rounded-full bg-slate-100 text-slate-400 whitespace-nowrap shrink-0">
+                          —
+                        </span>
+                      )}
+                    </button>
+
+                    {/* Body expandible */}
+                    {isOpen && (
+                      <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-2 text-xs divide-y divide-slate-50">
+                        {validFields.map(f => (
+                          <div key={f.label} className="pt-2 first:pt-0 flex flex-col">
+                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+                              {f.label}
+                            </span>
+                            <div className="text-slate-800 font-medium leading-relaxed">
+                              <FormattedFieldValue value={f.value} />
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
           </div>
         </div>
       )}

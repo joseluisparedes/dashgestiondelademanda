@@ -422,9 +422,11 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
   // Pipeline de estados para el stepper visual (modo demanda).
   // 'registro_incompleto' NO está en el flujo lineal: es un estado lateral
   // de observación. La iniciativa vuelve al flujo normal al subsanar sus datos.
+  // Pipeline de estados para el stepper visual (modo demanda).
+  // 'registro_incompleto' y 'por_reestimar' NO están en el flujo lineal:
+  // son estados laterales/excepcionales. La iniciativa vuelve al flujo normal al subsanar/actualizar sus datos.
   const PIPELINE_STEPS = [
-    { key: 'por_estimar',               label: 'Por Estimar',      short: 'Por Estimar' },
-    { key: 'por_reestimar',             label: 'Por Reestimar',    short: 'Reestimar'   },
+    { key: 'por_estimar',               label: 'Por Estimar',      short: 'Estimar'     },
     { key: 'por_aprobar_estimacion',    label: 'Ap. Estimación',   short: 'Ap. Est.'    },
     { key: 'por_habilitar_presupuesto', label: 'Hab. Presupuesto', short: 'Presup.'     },
     { key: 'por_planificar',            label: 'Por Planificar',   short: 'Planificar'  },
@@ -433,6 +435,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
   ] as const;
 
   const isRegistroIncompleto = t.etapa_actual === 'registro_incompleto';
+  const isPorReestimar = t.etapa_actual === 'por_reestimar';
+  const isLateralStage = isRegistroIncompleto || isPorReestimar;
   const currentPipelineIndex = PIPELINE_STEPS.findIndex(s => s.key === t.etapa_actual);
 
   // Secciones estructuradas
@@ -487,11 +491,10 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
     }
 
     // -------------------------------------------------------------------------
-    // DEMANDA: Secciones alineadas a la secuencia de estados del pipeline
-    // Columnas del Excel:
-    //   Registro (A–AA) | Incompleto (motivo: AP) | Estimación (AB–AP)
-    //   Reestimación (AQ–BA) | Ap. Estimación (BB–BC) | Ap. Presupuesto (BD–BE)
-    //   Por Planificar (BF–BG) | Ap. Planificación (BH–BI)
+    // DEMANDA: Secciones alineadas a la secuencia lógica de estados
+    // Flujo regular numerado: 1. Registro -> 2. Estimación -> 3. Ap. Estimación
+    //   -> 4. Hab. Presupuesto -> 5. Planificación -> 6. Ap. Planificación
+    // Estados laterales/excepcionales: Registro Incompleto, Reestimación
     // -------------------------------------------------------------------------
     return [
       // ── 1. REGISTRO DE LA INICIATIVA (Cols A–AA) ────────────────────────────
@@ -527,11 +530,11 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       },
 
-      // ── 2. REGISTRO INCOMPLETO (motivo en col AP) ────────────────────────────
+      // ── REGISTRO INCOMPLETO (motivo en col AP) ────────────────────────────
       // Solo se muestra si la iniciativa está efectivamente en la pestaña 'Registro incompleto'
       ...(t.etapa_actual === 'registro_incompleto' ? [{
         etapaKey: 'registro_incompleto',
-        title: '2 · Registro Incompleto',
+        title: 'Observación · Registro Incompleto',
         icon: <AlertTriangle size={15} className="text-red-500" />,
         fields: [
           { label: 'Motivo de Registro Incompleto', value: getRawVal('Completar información', 'Motivo', 'STRING') },
@@ -541,10 +544,10 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       }] : []),
 
-      // ── 3. ESTIMACIÓN (Cols AB–AP) ────────────────────────────────────────────
+      // ── 2. ESTIMACIÓN (Cols AB–AP) ────────────────────────────────────────────
       {
         etapaKey: 'por_estimar',
-        title: '3 · Estimación',
+        title: '2 · Estimación',
         icon: <DollarSign size={15} className="text-amber-500" />,
         fields: [
           { label: 'Líder de Dominio', value: t.lider_dominio },
@@ -563,10 +566,11 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       },
 
-      // ── 4. REESTIMACIÓN (Cols AQ–BA) ─────────────────────────────────────────
-      {
+      // ── REESTIMACIÓN (Cols AQ–BA) ─────────────────────────────────────────
+      // Solo se muestra si la iniciativa está efectivamente en 'por_reestimar'
+      ...(t.etapa_actual === 'por_reestimar' ? [{
         etapaKey: 'por_reestimar',
-        title: '4 · Reestimación',
+        title: 'Ajuste · Reestimación',
         icon: <RefreshCw size={15} className="text-orange-500" />,
         fields: [
           { label: 'Motivo de Reestimación', value: getRawVal('Motivo de Reestimación', 'Motivo de Reestimacion', 'Reestimación') },
@@ -578,12 +582,12 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Fecha Fin Reestimación', value: fmtDate(getRawVal('Fecha fin reestimación') as string) },
           { label: 'Estatus Reestimación', value: getRawVal('Estatus Reestimación', 'Estatus Reestimacion') },
         ],
-      },
+      }] : []),
 
-      // ── 5. POR APROBAR ESTIMACIÓN (Cols BB–BC) ───────────────────────────────
+      // ── 3. POR APROBAR ESTIMACIÓN (Cols BB–BC) ───────────────────────────────
       {
         etapaKey: 'por_aprobar_estimacion',
-        title: '5 · Aprobación de Estimación',
+        title: '3 · Aprobación de Estimación',
         icon: <ClipboardCheck size={15} className="text-violet-500" />,
         fields: [
           { label: 'Estado Aprobación Estimación', value: t.aprobar_estimacion },
@@ -591,20 +595,20 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       },
 
-      // ── 6. POR APROBAR PRESUPUESTO (Cols BD–BE) ──────────────────────────────
+      // ── 4. POR APROBAR PRESUPUESTO (Cols BD–BE) ──────────────────────────────
       {
         etapaKey: 'por_habilitar_presupuesto',
-        title: '6 · Habilitación de Presupuesto',
+        title: '4 · Habilitación de Presupuesto',
         icon: <Banknote size={15} className="text-cyan-600" />,
         fields: [
           { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado },
         ],
       },
 
-      // ── 7. POR PLANIFICAR (Cols BF–BG) ──────────────────────────────────────
+      // ── 5. POR PLANIFICAR (Cols BF–BG) ──────────────────────────────────────
       {
         etapaKey: 'por_planificar',
-        title: '7 · Planificación',
+        title: '5 · Planificación',
         icon: <Calendar size={15} className="text-emerald-500" />,
         fields: [
           { label: 'Fecha Inicio Planificada', value: fmtDate(t.fecha_inicio_planificada) },
@@ -612,10 +616,10 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       },
 
-      // ── 8. APROBAR PLANIFICACIÓN (Cols BH–BI) ───────────────────────────────
+      // ── 6. APROBAR PLANIFICACIÓN (Cols BH–BI) ───────────────────────────────
       {
         etapaKey: 'aprobar_planificacion',
-        title: '8 · Aprobación de Planificación',
+        title: '6 · Aprobación de Planificación',
         icon: <CalendarCheck size={15} className="text-green-600" />,
         fields: [
           { label: 'Planificación Aprobada', value: t.planificacion_aprobada },
@@ -730,11 +734,20 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
               </div>
             )}
 
+            {/* Badge lateral: estado Por Reestimar (fuera del flujo lineal) */}
+            {isPorReestimar && (
+              <div className="flex items-center gap-1.5 px-2.5 py-1 rounded-lg bg-amber-50 border border-amber-200 text-amber-800 text-[10px] font-bold mr-2 shrink-0">
+                <RefreshCw size={11} />
+                <span>Por Reestimar</span>
+                <span className="text-amber-600 font-normal">— Requiere ajuste en estimación</span>
+              </div>
+            )}
+
             {/* Pasos del pipeline lineal */}
             <div className="flex items-center min-w-max gap-0">
               {PIPELINE_STEPS.map((step, idx) => {
-                const isDone = !isRegistroIncompleto && idx < currentPipelineIndex;
-                const isCurrent = !isRegistroIncompleto && idx === currentPipelineIndex;
+                const isDone = !isLateralStage && idx < currentPipelineIndex;
+                const isCurrent = !isLateralStage && idx === currentPipelineIndex;
                 return (
                   <React.Fragment key={step.key}>
                     <div className="flex flex-col items-center">
@@ -744,8 +757,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                             ? 'bg-emerald-500 text-white'
                             : isCurrent
                             ? 'bg-blue-600 text-white shadow-sm ring-2 ring-blue-200 scale-110'
-                            : isRegistroIncompleto
-                            ? 'bg-red-100 text-red-300'
+                            : isLateralStage
+                            ? 'bg-slate-100 text-slate-300'
                             : 'bg-slate-200 text-slate-400'
                         }`}
                       >
@@ -958,7 +971,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                   </div>
                   <DollarSign size={13} className="text-amber-500" />
                   <span className="text-[10px] font-bold uppercase tracking-wide text-slate-600 group-hover:text-slate-800 flex-1">
-                    3 · Estimación (Recursos, Costos & Planificación Inicial)
+                    2 · Estimación (Recursos, Costos & Planificación Inicial)
                   </span>
                   <span className="text-[9px] font-semibold px-1.5 py-0.5 rounded-full bg-slate-100 text-slate-400">
                     {validFields.length} campos

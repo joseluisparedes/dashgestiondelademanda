@@ -590,7 +590,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         title: '3 · Aprobación de Estimación',
         icon: <ClipboardCheck size={15} className="text-violet-500" />,
         fields: [
-          { label: 'Estado Aprobación Estimación', value: t.aprobar_estimacion },
+          { label: 'Estado Aprobación Estimación', value: t.aprobar_estimacion ?? getRawVal('Aprobar estimación', 'Aprobar estimacion', 'Aprobación de estimación') ?? '—' },
           { label: 'Fecha Máxima de Estimación', value: fmtDate(getRawVal('Fecha máxima de estimación', 'Fecha maxima estimacion') as string) },
         ],
       },
@@ -601,7 +601,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         title: '4 · Habilitación de Presupuesto',
         icon: <Banknote size={15} className="text-cyan-600" />,
         fields: [
-          { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado },
+          { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado ?? getRawVal('Presupuesto Habilitado', 'Presupuesto habilitado', 'Habilitación de presupuesto', 'Presupuesto') ?? '—' },
         ],
       },
 
@@ -622,7 +622,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         title: '6 · Aprobación de Planificación',
         icon: <CalendarCheck size={15} className="text-green-600" />,
         fields: [
-          { label: 'Planificación Aprobada', value: t.planificacion_aprobada },
+          { label: 'Planificación Aprobada', value: t.planificacion_aprobada ?? getRawVal('Planificación aprobada', 'Planificacion aprobada', 'Aprobar planificación') ?? '—' },
         ],
       },
     ];
@@ -1018,7 +1018,14 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                 const validFields = sec.fields.filter(
                   f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—'
                 );
-                if (validFields.length === 0) return null;
+
+                // Las secciones laterales/excepcionales (Incompleto / Reestimación) solo se muestran si tienen datos
+                if (validFields.length === 0 && (sec.etapaKey === 'registro_incompleto' || sec.etapaKey === 'por_reestimar')) {
+                  return null;
+                }
+
+                // Para las secciones fijas del pipeline regular (3, 4, 5, 6), siempre se muestran sus campos
+                const displayFields = validFields.length > 0 ? validFields : sec.fields;
 
                 const isCurrentStage = !isPlanificadas && sec.etapaKey === t.etapa_actual;
                 const secPipelineIdx = !isPlanificadas
@@ -1066,7 +1073,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                       </span>
                       {/* Conteo de campos */}
                       <span className="text-[8px] font-semibold px-1 py-0.5 rounded-full bg-slate-100 text-slate-400 shrink-0">
-                        {validFields.length}
+                        {displayFields.length}
                       </span>
                       {/* Badge de estado */}
                       {isCurrentStage && (
@@ -1089,7 +1096,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                     {/* Body expandible */}
                     {isOpen && (
                       <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-2 text-xs divide-y divide-slate-50">
-                        {validFields.map(f => (
+                        {displayFields.map(f => (
                           <div key={f.label} className="pt-2 first:pt-0 flex flex-col">
                             <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
                               {f.label}

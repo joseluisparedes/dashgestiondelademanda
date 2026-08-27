@@ -359,8 +359,11 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
       if (t.costo_soles !== null) map.set('Costo en Soles (PEN)', fmtMoney(t.costo_soles));
       if (t.tipo_recurso) map.set('Tipo de Recurso', t.tipo_recurso);
       if (t.proyecto_o_req) map.set('Proyecto o Requerimiento', t.proyecto_o_req);
-      if (t.funcionalidad_nueva) map.set('Funcionalidad Nueva', t.funcionalidad_nueva);
       if (t.estatus_estimacion) map.set('Estatus Estimación', t.estatus_estimacion);
+      if (t.fecha_inicio_estimacion) map.set('Fecha Inicio Estimación', fmtDate(t.fecha_inicio_estimacion));
+      if (t.fecha_fin_estimacion) map.set('Fecha Fin Estimación', fmtDate(t.fecha_fin_estimacion));
+      if (t.fecha_inicio_reestimacion) map.set('Fecha Inicio Reestimación', fmtDate(t.fecha_inicio_reestimacion));
+      if (t.fecha_fin_reestimacion) map.set('Fecha Fin Reestimación', fmtDate(t.fecha_fin_reestimacion));
       if (t.accion_brm) map.set('Acción BRM', t.accion_brm);
       if (t.prioridad_brm) map.set('Prioridad BRM', t.prioridad_brm);
       if (t.fecha_inicio_planificada) map.set('Fecha Inicio Planificada', fmtDate(t.fecha_inicio_planificada));
@@ -408,14 +411,14 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
     setTimeout(() => setCopiedAll(false), 2000);
   };
 
-  // Helper para buscar valor en raw_fields por varias posibles claves
+  // Helper para buscar valor en raw_fields por varias posibles claves (coincidencia exacta)
   const getRawVal = (...keys: string[]): unknown => {
     if (!t.raw_fields) return null;
     for (const key of keys) {
+      const normSearch = key.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
       const found = Object.keys(t.raw_fields).find(k => {
         const normK = k.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
-        const normSearch = key.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
-        return normK === normSearch || normK.includes(normSearch);
+        return normK === normSearch;
       });
       if (found !== undefined && t.raw_fields[found] !== undefined && t.raw_fields[found] !== '') {
         return t.raw_fields[found];
@@ -563,8 +566,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Tipo de Recurso', value: t.tipo_recurso },
           { label: 'Costo Dólares (USD)', value: fmtUSD(t.costo_usd) },
           { label: 'Costo Soles (PEN)', value: fmtMoney(t.costo_soles) },
-          { label: 'Fecha Inicio Estimación', value: fmtDate(getRawVal('Fecha inicio  (estimación)', 'Fecha inicio (estimación)', 'Fecha inicio') as string) },
-          { label: 'Fecha Fin Estimación', value: fmtDate(getRawVal('Fecha fin (estimación)', 'Fecha fin') as string) },
+          { label: 'Fecha Inicio Estimación', value: fmtDate(t.fecha_inicio_estimacion) },
+          { label: 'Fecha Fin Estimación', value: fmtDate(t.fecha_fin_estimacion) },
           { label: 'Estatus Estimación', value: t.estatus_estimacion },
           { label: 'Acción BRM', value: t.accion_brm },
           { label: 'Prioridad BRM', value: t.prioridad_brm },
@@ -583,8 +586,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Duración Reestimada (meses)', value: getRawVal('Tiempo estimado\r\n(meses)_1', 'Tiempo estimado (meses)_1') },
           { label: 'Costo Total USD Reestimación', value: getRawVal('Costo total dolares') ? fmtUSD(Number(getRawVal('Costo total dolares'))) : null },
           { label: 'Costo Total Soles Reestimación', value: getRawVal('Costo total Soles') ? fmtMoney(Number(getRawVal('Costo total Soles'))) : null },
-          { label: 'Fecha Inicio Reestimación', value: fmtDate(getRawVal('Fecha de inicio reestimación', 'Fecha inicio reestimación') as string) },
-          { label: 'Fecha Fin Reestimación', value: fmtDate(getRawVal('Fecha fin reestimación') as string) },
+          { label: 'Fecha Inicio Reestimación', value: fmtDate(t.fecha_inicio_reestimacion) },
+          { label: 'Fecha Fin Reestimación', value: fmtDate(t.fecha_fin_reestimacion) },
           { label: 'Estatus Reestimación', value: getRawVal('Estatus Reestimación', 'Estatus Reestimacion') },
         ],
       }] : []),

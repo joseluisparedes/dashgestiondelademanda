@@ -43,6 +43,8 @@ import {
   ArrowLeft,
   Columns3,
   ArrowUpDown,
+  Search,
+  GripVertical,
 } from 'lucide-react';
 import { IniciativaDetailModal } from './DataTable';
 
@@ -167,33 +169,95 @@ function checkFueraFechaEstimacion(
   i: Iniciativa,
   refDate: Date = new Date()
 ): { isOutOfDate: boolean; reason: string; delayDays: number } {
-  // Ignorar etapas terminales o posteriores a la estimación
-  if (
-    i.etapa_actual === 'eliminadas' ||
-    i.etapa_actual === 'planificadas' ||
-    i.etapa_actual === 'aprobar_planificacion' ||
-    i.etapa_actual === 'por_planificar' ||
-    i.etapa_actual === 'por_habilitar_presupuesto' ||
-    i.etapa_actual === 'por_aprobar_estimacion'
-  ) {
+  // REGLA: Solo considerar iniciativas estrictamente en etapa "Por Estimar"
+  if (i.etapa_actual !== 'por_estimar') {
     return { isOutOfDate: false, reason: '', delayDays: 0 };
   }
 
-  // En etapa Por Estimar o Registro Incompleto: Comparar ÚNICAMENTE Fecha Fin de Estimación vs HOY
-  if (i.etapa_actual === 'por_estimar' || i.etapa_actual === 'registro_incompleto') {
-    if (i.fecha_fin_estimacion) {
-      try {
-        const finDate = parseISO(i.fecha_fin_estimacion);
-        if (finDate < refDate) {
-          return {
-            isOutOfDate: true,
-            reason: 'Fecha Fin de Estimación vencida respecto a hoy',
-            delayDays: Math.max(1, differenceInCalendarDays(refDate, finDate)),
-          };
-        }
-      } catch {
-        // ignore
+  const hasAsig = Boolean(i.fecha_asignacion);
+  const hasFin = Boolean(i.fecha_fin_estimacion);
+
+  // Caso 1: Sin fecha de asignación al LD ni fecha fin de estimación
+  if (!hasAsig && !hasFin) {
+    return {
+      isOutOfDate: true,
+      reason: 'Pendiente de estimar: Sin fecha de asignación al LD ni fecha fin',
+      delayDays: 0,
+    };
+  }
+
+  // Caso 2: Sin fecha de asignación de Líder de Dominio (pero con fecha fin)
+  if (!hasAsig && hasFin) {
+    try {
+      const finDate = parseISO(i.fecha_fin_estimacion!);
+      if (finDate < refDate) {
+        return {
+          isOutOfDate: true,
+          reason: 'Fecha Fin de Estimación vencida respecto a hoy (sin asignación LD)',
+          delayDays: Math.max(1, differenceInCalendarDays(refDate, finDate)),
+        };
       }
+    } catch {
+      // ignore
+    }
+    return {
+      isOutOfDate: true,
+      reason: 'Pendiente de estimar: Sin fecha de asignación al Líder de Dominio',
+      delayDays: 0,
+    };
+  }
+
+  // Caso 3: Tiene fecha de asignación de Líder de Dominio pero NO tiene fecha fin de estimación
+  if (hasAsig && !hasFin) {
+    try {
+      const asigDate = parseISO(i.fecha_asignacion!);
+      const daysSinceAsig = differenceInCalendarDays(refDate, asigDate);
+      if (daysSinceAsig <= 5) {
+        return {
+          isOutOfDate: true,
+          reason: `Pendiente de estimar: En plazo SLA (asignado hace ${Math.max(0, daysSinceAsig)} d, sin fecha fin)`,
+          delayDays: 0,
+        };
+      } else {
+        return {
+          isOutOfDate: true,
+          reason: `Pendiente de estimar: Fuera de SLA (> 5 días de asignado al LD, sin fecha fin)`,
+          delayDays: Math.max(1, daysSinceAsig - 5),
+        };
+      }
+    } catch {
+      return {
+        isOutOfDate: true,
+        reason: 'Pendiente de estimar: Sin fecha fin de estimación programada',
+        delayDays: 0,
+      };
+    }
+  }
+
+  // Caso 4: Tiene ambas fechas (asignación y fecha fin)
+  if (hasAsig && hasFin) {
+    try {
+      const finDate = parseISO(i.fecha_fin_estimacion!);
+      if (finDate < refDate) {
+        return {
+          isOutOfDate: true,
+          reason: 'Fecha Fin de Estimación vencida respecto a hoy',
+          delayDays: Math.max(1, differenceInCalendarDays(refDate, finDate)),
+        };
+      }
+
+      // Si la fecha fin no ha vencido, pero se asignó recientemente dentro de los 5 días de SLA
+      const asigDate = parseISO(i.fecha_asignacion!);
+      const daysSinceAsig = differenceInCalendarDays(refDate, asigDate);
+      if (daysSinceAsig <= 5 && daysSinceAsig >= 0) {
+        return {
+          isOutOfDate: true,
+          reason: `Pendiente de estimar: En plazo SLA (asignado hace ${daysSinceAsig} d)`,
+          delayDays: 0,
+        };
+      }
+    } catch {
+      // ignore
     }
   }
 
@@ -237,27 +301,195 @@ function checkFueraFechaPlanificacion(
   i: Iniciativa,
   refDate: Date = new Date()
 ): { isOutOfDate: boolean; reason: string; delayDays: number } {
-  if (i.etapa_actual === 'eliminadas') {
+  // REGLA: Solo considerar iniciativas en estado "Por Planificar" que tienen fechas de inicio y/o fin vacías
+  if (i.etapa_actual !== 'por_planificar') {
     return { isOutOfDate: false, reason: '', delayDays: 0 };
   }
 
-  // Evaluar cualquier iniciativa que tenga Fecha Fin Planificada vs HOY
-  if (i.fecha_fin_planificada) {
-    try {
-      const finDate = parseISO(i.fecha_fin_planificada);
-      if (finDate < refDate) {
-        return {
-          isOutOfDate: true,
-          reason: 'Fecha Fin Planificada vencida respecto a hoy',
-          delayDays: Math.max(1, differenceInCalendarDays(refDate, finDate)),
-        };
+  const sinInicio = !i.fecha_inicio_planificada;
+  const sinFin = !i.fecha_fin_planificada;
+
+  // Si tiene ambas fechas de inicio y fin de planificación vacías
+  if (sinInicio && sinFin) {
+    let delay = 0;
+    if (i.fecha_asignacion) {
+      try {
+        delay = Math.max(0, differenceInCalendarDays(refDate, parseISO(i.fecha_asignacion)));
+      } catch {
+        delay = 0;
       }
-    } catch {
-      // ignore
     }
+    return {
+      isOutOfDate: true,
+      reason: 'Por Planificar: Sin fecha de inicio ni fin de planificación',
+      delayDays: delay,
+    };
+  }
+
+  // Si tiene fecha fin de planificación vacía
+  if (sinFin) {
+    return {
+      isOutOfDate: true,
+      reason: 'Por Planificar: Sin fecha fin de planificación',
+      delayDays: 0,
+    };
+  }
+
+  // Si tiene fecha inicio de planificación vacía
+  if (sinInicio) {
+    return {
+      isOutOfDate: true,
+      reason: 'Por Planificar: Sin fecha inicio de planificación',
+      delayDays: 0,
+    };
   }
 
   return { isOutOfDate: false, reason: '', delayDays: 0 };
+}
+
+// ---------------------------------------------------------------------------
+// Configuración Centralizada de Colores y Estilos para Motivos / Diagnósticos
+// ---------------------------------------------------------------------------
+export interface MotivoStyleConfig {
+  bg: string;
+  border: string;
+  color: string;
+  dotColor: string;
+  badgeLabel?: string;
+}
+
+export function getMotivoStyle(reason: string = '', category?: OutOfDateCategory): MotivoStyleConfig {
+  const r = (reason || '').toLowerCase();
+
+  // 1. En plazo SLA (<= 5 días de asignación al LD)
+  if (r.includes('en plazo sla')) {
+    return {
+      bg: '#dcfce7',
+      border: '#86efac',
+      color: '#166534',
+      dotColor: '#10b981',
+      badgeLabel: 'En plazo SLA',
+    };
+  }
+
+  // 2. Fuera de SLA (> 5 días de asignación al LD)
+  if (r.includes('fuera de sla')) {
+    return {
+      bg: '#ffedd5',
+      border: '#fed7aa',
+      color: '#9a3412',
+      dotColor: '#f97316',
+      badgeLabel: 'Fuera de SLA',
+    };
+  }
+
+  // 3. Planificación (Sin fechas, sin fin, sin inicio)
+  if (category === 'planificacion' || r.includes('planificar')) {
+    return {
+      bg: '#ffe4e6',
+      border: '#fda4af',
+      color: '#9f1239',
+      dotColor: '#f43f5e',
+      badgeLabel: 'Planificación sin fechas',
+    };
+  }
+
+  // 4. Re-estimación
+  if (category === 'reestimacion' || r.includes('reestimación') || r.includes('re-estimación')) {
+    if (r.includes('vencida')) {
+      return {
+        bg: '#fee2e2',
+        border: '#fca5a5',
+        color: '#991b1b',
+        dotColor: '#ef4444',
+        badgeLabel: 'Re-estimación vencida',
+      };
+    }
+    return {
+      bg: '#ede9fe',
+      border: '#c4b5fd',
+      color: '#5b21b6',
+      dotColor: '#8b5cf6',
+      badgeLabel: 'Re-estimación sin fin',
+    };
+  }
+
+  // 5. Fecha Fin Vencida respecto a hoy
+  if (r.includes('vencida')) {
+    return {
+      bg: '#fee2e2',
+      border: '#fca5a5',
+      color: '#991b1b',
+      dotColor: '#ef4444',
+      badgeLabel: 'Fecha fin vencida',
+    };
+  }
+
+  // 6. Sin fechas de asignación o fin
+  if (r.includes('sin fecha') || r.includes('sin asignación')) {
+    return {
+      bg: '#fef9c3',
+      border: '#fde047',
+      color: '#854d0e',
+      dotColor: '#eab308',
+      badgeLabel: 'Sin fechas',
+    };
+  }
+
+  // Fallback por defecto
+  return {
+    bg: '#f1f5f9',
+    border: '#cbd5e1',
+    color: '#334155',
+    dotColor: '#64748b',
+    badgeLabel: 'Pendiente',
+  };
+}
+
+export function MotivoBadgeChip({
+  reason,
+  category,
+  fullText = true,
+  style,
+}: {
+  reason: string;
+  category?: OutOfDateCategory;
+  fullText?: boolean;
+  style?: React.CSSProperties;
+}) {
+  const conf = getMotivoStyle(reason, category);
+  return (
+    <span
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 5,
+        fontSize: 10.5,
+        fontWeight: 700,
+        padding: '2.5px 8px',
+        borderRadius: 6,
+        backgroundColor: conf.bg,
+        border: `1px solid ${conf.border}`,
+        color: conf.color,
+        lineHeight: 1.3,
+        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+        whiteSpace: fullText ? 'normal' : 'nowrap',
+        textAlign: 'left',
+        ...style,
+      }}
+    >
+      <span
+        style={{
+          width: 6,
+          height: 6,
+          borderRadius: '50%',
+          backgroundColor: conf.dotColor,
+          flexShrink: 0,
+        }}
+      />
+      <span>{fullText ? reason : conf.badgeLabel || reason}</span>
+    </span>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -270,6 +502,7 @@ interface MacroMultiSelectProps {
   onChange: (next: string[]) => void;
   icon?: React.ReactNode;
   labelFn?: (v: string) => string;
+  isMotivoSelect?: boolean;
 }
 
 function MacroMultiSelect({
@@ -279,6 +512,7 @@ function MacroMultiSelect({
   onChange,
   icon,
   labelFn,
+  isMotivoSelect = false,
 }: MacroMultiSelectProps) {
   const [open, setOpen] = useState(false);
   const ref = useRef<HTMLDivElement>(null);
@@ -368,34 +602,76 @@ function MacroMultiSelect({
 
       {/* Chips de selección */}
       {hasSelection && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 3, marginTop: 5 }}>
-          {selected.map(v => (
-            <span
-              key={v}
-              style={{
-                display: 'inline-flex',
-                alignItems: 'center',
-                gap: 4,
-                fontSize: 9,
-                padding: '2px 7px',
-                borderRadius: 20,
-                background: '#eff6ff',
-                color: '#1d4ed8',
-                fontWeight: 700,
-                border: '1px solid #bfdbfe',
-              }}
-            >
-              <span style={{ maxWidth: 95, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                {displayLabel(v)}
-              </span>
-              <button
-                onClick={e => { e.stopPropagation(); toggle(v); }}
-                style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#3b82f6' }}
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
+          {selected.map(v => {
+            if (isMotivoSelect) {
+              const conf = getMotivoStyle(v);
+              return (
+                <span
+                  key={v}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 4,
+                    fontSize: 9.5,
+                    padding: '2px 7px',
+                    borderRadius: 6,
+                    background: conf.bg,
+                    color: conf.color,
+                    fontWeight: 700,
+                    border: `1px solid ${conf.border}`,
+                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                  }}
+                >
+                  <span
+                    style={{
+                      width: 5,
+                      height: 5,
+                      borderRadius: '50%',
+                      backgroundColor: conf.dotColor,
+                      flexShrink: 0,
+                    }}
+                  />
+                  <span style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {displayLabel(v)}
+                  </span>
+                  <button
+                    onClick={e => { e.stopPropagation(); toggle(v); }}
+                    style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: conf.color }}
+                  >
+                    <X size={10} />
+                  </button>
+                </span>
+              );
+            }
+            return (
+              <span
+                key={v}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 4,
+                  fontSize: 9,
+                  padding: '2px 7px',
+                  borderRadius: 20,
+                  background: '#eff6ff',
+                  color: '#1d4ed8',
+                  fontWeight: 700,
+                  border: '1px solid #bfdbfe',
+                }}
               >
-                <X size={9} />
-              </button>
-            </span>
-          ))}
+                <span style={{ maxWidth: 95, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {displayLabel(v)}
+                </span>
+                <button
+                  onClick={e => { e.stopPropagation(); toggle(v); }}
+                  style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#3b82f6' }}
+                >
+                  <X size={9} />
+                </button>
+              </span>
+            );
+          })}
         </div>
       )}
 
@@ -411,8 +687,9 @@ function MacroMultiSelect({
             border: '1px solid #e2e8f0',
             borderRadius: 10,
             boxShadow: '0 12px 28px -4px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.04)',
-            minWidth: 220,
-            maxHeight: 270,
+            minWidth: isMotivoSelect ? 280 : 220,
+            maxWidth: isMotivoSelect ? 360 : 280,
+            maxHeight: 280,
             overflowY: 'auto',
             zIndex: 99999,
           }}
@@ -438,6 +715,60 @@ function MacroMultiSelect({
           )}
           {options.map(opt => {
             const isSelected = selected.includes(opt);
+            if (isMotivoSelect) {
+              const conf = getMotivoStyle(opt);
+              return (
+                <label
+                  key={opt}
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: 8,
+                    padding: '6px 10px',
+                    cursor: 'pointer',
+                    background: isSelected ? '#f8fafc' : 'transparent',
+                    borderBottom: '1px solid #f8fafc',
+                    transition: 'background 0.1s',
+                  }}
+                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = isSelected ? '#f8fafc' : 'transparent'; }}
+                >
+                  <input
+                    type="checkbox"
+                    checked={isSelected}
+                    onChange={() => toggle(opt)}
+                    style={{ width: 13, height: 13, accentColor: conf.dotColor, flexShrink: 0 }}
+                  />
+                  <span
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 5,
+                      fontSize: 10.5,
+                      fontWeight: isSelected ? 800 : 600,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      backgroundColor: conf.bg,
+                      border: `1px solid ${conf.border}`,
+                      color: conf.color,
+                      lineHeight: 1.25,
+                      textAlign: 'left',
+                    }}
+                  >
+                    <span
+                      style={{
+                        width: 5.5,
+                        height: 5.5,
+                        borderRadius: '50%',
+                        backgroundColor: conf.dotColor,
+                        flexShrink: 0,
+                      }}
+                    />
+                    {displayLabel(opt)}
+                  </span>
+                </label>
+              );
+            }
             return (
               <label
                 key={opt}
@@ -699,6 +1030,246 @@ function ClickableCard({
   );
 }
 
+// Interfaz y Helpers para insignias estructuradas y coloridas de motivos
+interface MotivoBadgeItem {
+  key: string;
+  count: number;
+  label: string;
+  bg: string;
+  border: string;
+  color: string;
+  dotColor?: string;
+}
+
+function getEstimacionBadgeItems(items: OutOfDateItem[]): MotivoBadgeItem[] {
+  let vencidas = 0;
+  let enSLA = 0;
+  let fueraSLA = 0;
+  let sinAsignacion = 0;
+  let sinFin = 0;
+
+  items.forEach(it => {
+    const r = (it.reason || '').toLowerCase();
+    if (r.includes('en plazo sla')) {
+      enSLA++;
+    } else if (r.includes('fuera de sla')) {
+      fueraSLA++;
+    } else if (r.includes('vencida')) {
+      vencidas++;
+    } else if (r.includes('sin fecha de asignación') && r.includes('ni fecha fin')) {
+      sinAsignacion++;
+      sinFin++;
+    } else if (r.includes('sin fecha de asignación') || r.includes('sin asignación')) {
+      sinAsignacion++;
+    } else if (r.includes('sin fecha fin')) {
+      sinFin++;
+    } else {
+      vencidas++;
+    }
+  });
+
+  const badges: MotivoBadgeItem[] = [];
+
+  if (vencidas > 0) {
+    badges.push({
+      key: 'vencidas',
+      count: vencidas,
+      label: `${vencidas} vencida${vencidas > 1 ? 's' : ''}`,
+      bg: '#fee2e2',
+      border: '#fca5a5',
+      color: '#991b1b',
+      dotColor: '#ef4444',
+    });
+  }
+
+  if (enSLA > 0) {
+    badges.push({
+      key: 'enSLA',
+      count: enSLA,
+      label: `${enSLA} en SLA`,
+      bg: '#dcfce7',
+      border: '#86efac',
+      color: '#166534',
+      dotColor: '#10b981',
+    });
+  }
+
+  if (fueraSLA > 0) {
+    badges.push({
+      key: 'fueraSLA',
+      count: fueraSLA,
+      label: `${fueraSLA} fuera SLA`,
+      bg: '#ffedd5',
+      border: '#fed7aa',
+      color: '#9a3412',
+      dotColor: '#f97316',
+    });
+  }
+
+  if (sinAsignacion > 0 && sinFin > 0 && vencidas === 0 && enSLA === 0 && fueraSLA === 0) {
+    badges.push({
+      key: 'sinFechas',
+      count: items.length,
+      label: `${items.length} sin fechas`,
+      bg: '#fef9c3',
+      border: '#fde047',
+      color: '#854d0e',
+      dotColor: '#eab308',
+    });
+  } else {
+    if (sinAsignacion > 0 && !badges.some(b => b.key === 'sinFechas')) {
+      badges.push({
+        key: 'sinAsig',
+        count: sinAsignacion,
+        label: `${sinAsignacion} sin asig.`,
+        bg: '#fef9c3',
+        border: '#fde047',
+        color: '#854d0e',
+        dotColor: '#eab308',
+      });
+    }
+    if (sinFin > 0 && !badges.some(b => b.key === 'sinFechas')) {
+      badges.push({
+        key: 'sinFin',
+        count: sinFin,
+        label: `${sinFin} sin fin`,
+        bg: '#fef9c3',
+        border: '#fde047',
+        color: '#854d0e',
+        dotColor: '#eab308',
+      });
+    }
+  }
+
+  return badges;
+}
+
+function getReestimacionBadgeItems(items: OutOfDateItem[]): MotivoBadgeItem[] {
+  let vencidas = 0;
+  let sinFin = 0;
+
+  items.forEach(it => {
+    if ((it.reason || '').toLowerCase().includes('vencida')) vencidas++;
+    else sinFin++;
+  });
+
+  const badges: MotivoBadgeItem[] = [];
+  if (vencidas > 0) {
+    badges.push({
+      key: 'reestVencidas',
+      count: vencidas,
+      label: `${vencidas} vencida${vencidas > 1 ? 's' : ''}`,
+      bg: '#ede9fe',
+      border: '#c4b5fd',
+      color: '#5b21b6',
+      dotColor: '#8b5cf6',
+    });
+  }
+  if (sinFin > 0) {
+    badges.push({
+      key: 'reestSinFin',
+      count: sinFin,
+      label: `${sinFin} sin fin`,
+      bg: '#f5f3ff',
+      border: '#ddd6fe',
+      color: '#6d28d9',
+      dotColor: '#a78bfa',
+    });
+  }
+  return badges;
+}
+
+function getPlanificacionBadgeItems(items: OutOfDateItem[]): MotivoBadgeItem[] {
+  let sinAmbas = 0;
+  let sinFin = 0;
+  let sinInicio = 0;
+
+  items.forEach(it => {
+    const r = (it.reason || '').toLowerCase();
+    if (r.includes('ni fin')) sinAmbas++;
+    else if (r.includes('fin')) sinFin++;
+    else if (r.includes('inicio')) sinInicio++;
+    else sinAmbas++;
+  });
+
+  const badges: MotivoBadgeItem[] = [];
+  if (sinAmbas > 0) {
+    badges.push({
+      key: 'planSinFechas',
+      count: sinAmbas,
+      label: `${sinAmbas} sin fechas`,
+      bg: '#ffe4e6',
+      border: '#fda4af',
+      color: '#9f1239',
+      dotColor: '#f43f5e',
+    });
+  }
+  if (sinFin > 0) {
+    badges.push({
+      key: 'planSinFin',
+      count: sinFin,
+      label: `${sinFin} sin fin`,
+      bg: '#fff1f2',
+      border: '#fecdd3',
+      color: '#be123c',
+      dotColor: '#fb7185',
+    });
+  }
+  if (sinInicio > 0) {
+    badges.push({
+      key: 'planSinInicio',
+      count: sinInicio,
+      label: `${sinInicio} sin inicio`,
+      bg: '#fff1f2',
+      border: '#fecdd3',
+      color: '#be123c',
+      dotColor: '#fb7185',
+    });
+  }
+  return badges;
+}
+
+function MotivosBadgesList({ badges }: { badges: MotivoBadgeItem[] }) {
+  if (badges.length === 0) return null;
+  return (
+    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, justifyContent: 'center', marginTop: 4 }}>
+      {badges.map(b => (
+        <span
+          key={b.key}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 4,
+            fontSize: 10,
+            fontWeight: 700,
+            padding: '2px 7px',
+            borderRadius: 6,
+            backgroundColor: b.bg,
+            border: `1px solid ${b.border}`,
+            color: b.color,
+            whiteSpace: 'nowrap',
+            lineHeight: 1.2,
+            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+          }}
+        >
+          {b.dotColor && (
+            <span
+              style={{
+                width: 5,
+                height: 5,
+                borderRadius: '50%',
+                backgroundColor: b.dotColor,
+                flexShrink: 0,
+              }}
+            />
+          )}
+          {b.label}
+        </span>
+      ))}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // NUEVO COMPONENTE: Control y Seguimiento de Tiempos por Líder de Dominio
 // ---------------------------------------------------------------------------
@@ -744,7 +1315,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
 
   const refDate = useMemo(() => new Date(), []);
 
-  // Calcular ítems fuera de fecha para cada etapa
+  // Calcular ítems fuera de fecha para cada etapa (alimentado por las iniciativas ya filtradas)
   const {
     itemsEstimacion,
     itemsReestimacion,
@@ -984,8 +1555,8 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
         ? summaryByLider.find(s => s.lider === liderName)?.itemsAll || []
         : allOutOfDateItems;
     } else if (cat === 'estimacion') {
-      title = liderName ? `Fuera de Fecha de Estimación: ${optLabel(liderName)}` : 'Iniciativas Fuera de Fecha de Estimación (Fecha Fin Estimación)';
-      subtitle = 'Iniciativas en etapa Por Estimar con fecha fin de estimación vencida respecto a la fecha de hoy';
+      title = liderName ? `Auditoría de Estimación: ${optLabel(liderName)}` : 'Iniciativas en Estimación (Pendientes, SLA y Vencidas)';
+      subtitle = 'Iniciativas en etapa Por Estimar sin fecha de asignación/fin, en plazo SLA (≤ 5 días) o con fecha fin vencida';
       items = liderName
         ? summaryByLider.find(s => s.lider === liderName)?.itemsEst || []
         : itemsEstimacion;
@@ -996,8 +1567,8 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
         ? summaryByLider.find(s => s.lider === liderName)?.itemsReest || []
         : itemsReestimacion;
     } else if (cat === 'planificacion') {
-      title = liderName ? `Fuera de Fecha de Planificación: ${optLabel(liderName)}` : 'Iniciativas Fuera de Fecha de Planificación (Fecha Fin Planificada)';
-      subtitle = 'Iniciativas en etapas de planificación con fecha fin planificada vencida respecto a la fecha de hoy';
+      title = liderName ? `Iniciativas Por Planificar Sin Fechas: ${optLabel(liderName)}` : 'Iniciativas Por Planificar (Sin Fechas de Planificación)';
+      subtitle = 'Iniciativas en estado "Por Planificar" que tienen fechas de inicio y/o fin de planificación vacías';
       items = liderName
         ? summaryByLider.find(s => s.lider === liderName)?.itemsPlan || []
         : itemsPlanificacion;
@@ -1261,12 +1832,12 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
           onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e' }}>Fecha Fin Estimación</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#92400e' }}>Estimación (SLA y Desfases)</span>
             <Clock size={15} style={{ color: '#d97706' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 800, color: '#b45309' }}>{itemsEstimacion.length}</span>
-            <span style={{ fontSize: 11, color: '#92400e', opacity: 0.8 }}>fuera de fecha vs hoy</span>
+            <span style={{ fontSize: 11, color: '#92400e', opacity: 0.8 }}>en Por Estimar</span>
           </div>
           <span style={{ fontSize: 10, color: '#b45309', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
             <ExternalLink size={9} /> Ver detalle de Estimaciones
@@ -1319,12 +1890,12 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
           onMouseLeave={e => (e.currentTarget.style.boxShadow = 'none')}
         >
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#9f1239' }}>Fecha Fin Planificada</span>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#9f1239' }}>Planificación (Sin Fechas)</span>
             <CalendarX size={15} style={{ color: '#e11d48' }} />
           </div>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 4 }}>
             <span style={{ fontSize: 22, fontWeight: 800, color: '#be123c' }}>{itemsPlanificacion.length}</span>
-            <span style={{ fontSize: 11, color: '#9f1239', opacity: 0.8 }}>fuera de fecha vs hoy</span>
+            <span style={{ fontSize: 11, color: '#9f1239', opacity: 0.8 }}>en Por Planificar</span>
           </div>
           <span style={{ fontSize: 10, color: '#be123c', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 3 }}>
             <ExternalLink size={9} /> Ver detalle de Planificaciones
@@ -1533,98 +2104,167 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                 ) : (
                   consolidatedRows.map((row, idx) => {
                     const { visibleTotal } = getRowVisibleMetrics(row);
+                    const estBadges = getEstimacionBadgeItems(row.itemsEst);
+                    const reestBadges = getReestimacionBadgeItems(row.itemsReest);
+                    const planBadges = getPlanificacionBadgeItems(row.itemsPlan);
+
                     return (
                       <tr key={row.lider} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
                         {!hiddenConsolidatedCols.has('lider') && (
-                          <td style={{ padding: '8px 12px' }}>
+                          <td style={{ padding: '10px 12px' }}>
                             <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('consolidado', row.lider)} title={`Ver detalle de iniciativas de: ${optLabel(row.lider)}`} />
                           </td>
                         )}
                         {!hiddenConsolidatedCols.has('estimacion') && (
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {row.estimacionCount > 0 ? (
-                              <span
+                              <div
                                 onClick={() => handleOpenCategory('estimacion', row.lider)}
                                 style={{
                                   display: 'inline-flex',
+                                  flexDirection: 'column',
                                   alignItems: 'center',
-                                  gap: 3,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: 20,
-                                  background: '#fef3c7',
-                                  color: '#b45309',
+                                  gap: 4,
                                   cursor: 'pointer',
+                                  padding: '3px 8px',
+                                  borderRadius: 8,
+                                  transition: 'background 0.12s',
                                 }}
-                                title="Ver estimaciones fuera de fecha"
+                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fef3c744')}
+                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                title={`Ver estimaciones de ${optLabel(row.lider)}`}
                               >
-                                {row.estimacionCount}
-                              </span>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    padding: '2px 9px',
+                                    borderRadius: 20,
+                                    background: '#fef3c7',
+                                    color: '#b45309',
+                                    border: '1px solid #fde68a',
+                                  }}
+                                >
+                                  {row.estimacionCount}
+                                </span>
+                                <MotivosBadgesList badges={estBadges} />
+                              </div>
                             ) : (
                               <span style={{ color: '#cbd5e1' }}>—</span>
                             )}
                           </td>
                         )}
                         {!hiddenConsolidatedCols.has('reestimacion') && (
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {row.reestimacionCount > 0 ? (
-                              <span
+                              <div
                                 onClick={() => handleOpenCategory('reestimacion', row.lider)}
                                 style={{
                                   display: 'inline-flex',
+                                  flexDirection: 'column',
                                   alignItems: 'center',
-                                  gap: 3,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: 20,
-                                  background: '#f5f3ff',
-                                  color: '#6d28d9',
+                                  gap: 4,
                                   cursor: 'pointer',
+                                  padding: '3px 8px',
+                                  borderRadius: 8,
+                                  transition: 'background 0.12s',
                                 }}
-                                title="Ver re-estimaciones fuera de fecha"
+                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#f5f3ff44')}
+                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                title={`Ver re-estimaciones de ${optLabel(row.lider)}`}
                               >
-                                {row.reestimacionCount}
-                              </span>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    padding: '2px 9px',
+                                    borderRadius: 20,
+                                    background: '#f5f3ff',
+                                    color: '#6d28d9',
+                                    border: '1px solid #ddd6fe',
+                                  }}
+                                >
+                                  {row.reestimacionCount}
+                                </span>
+                                <MotivosBadgesList badges={reestBadges} />
+                              </div>
                             ) : (
                               <span style={{ color: '#cbd5e1' }}>—</span>
                             )}
                           </td>
                         )}
                         {!hiddenConsolidatedCols.has('planificacion') && (
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             {row.planificacionCount > 0 ? (
-                              <span
+                              <div
                                 onClick={() => handleOpenCategory('planificacion', row.lider)}
                                 style={{
                                   display: 'inline-flex',
+                                  flexDirection: 'column',
                                   alignItems: 'center',
-                                  gap: 3,
-                                  fontSize: 11,
-                                  fontWeight: 700,
-                                  padding: '2px 8px',
-                                  borderRadius: 20,
-                                  background: '#ffe4e6',
-                                  color: '#be123c',
+                                  gap: 4,
                                   cursor: 'pointer',
+                                  padding: '3px 8px',
+                                  borderRadius: 8,
+                                  transition: 'background 0.12s',
                                 }}
-                                title="Ver planificaciones fuera de fecha"
+                                onMouseEnter={e => (e.currentTarget.style.backgroundColor = '#fff1f244')}
+                                onMouseLeave={e => (e.currentTarget.style.backgroundColor = 'transparent')}
+                                title={`Ver planificaciones de ${optLabel(row.lider)}`}
                               >
-                                {row.planificacionCount}
-                              </span>
+                                <span
+                                  style={{
+                                    display: 'inline-flex',
+                                    alignItems: 'center',
+                                    gap: 3,
+                                    fontSize: 12,
+                                    fontWeight: 800,
+                                    padding: '2px 9px',
+                                    borderRadius: 20,
+                                    background: '#ffe4e6',
+                                    color: '#be123c',
+                                    border: '1px solid #fecdd3',
+                                  }}
+                                >
+                                  {row.planificacionCount}
+                                </span>
+                                <MotivosBadgesList badges={planBadges} />
+                              </div>
                             ) : (
                               <span style={{ color: '#cbd5e1' }}>—</span>
                             )}
                           </td>
                         )}
                         {!hiddenConsolidatedCols.has('total') && (
-                          <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#0f172a' }}>
-                            {visibleTotal}
+                          <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                              <span style={{ fontSize: 13, fontWeight: 800, color: '#0f172a' }}>
+                                {visibleTotal}
+                              </span>
+                              <span
+                                style={{
+                                  fontSize: 10,
+                                  fontWeight: 600,
+                                  color: '#475569',
+                                  backgroundColor: '#f1f5f9',
+                                  border: '1px solid #e2e8f0',
+                                  padding: '2px 7px',
+                                  borderRadius: 6,
+                                }}
+                              >
+                                {visibleTotal === 1 ? '1 iniciativa' : `${visibleTotal} iniciativas`}
+                              </span>
+                            </div>
                           </td>
                         )}
                         {!hiddenConsolidatedCols.has('accion') && (
-                          <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                          <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                             <button
                               onClick={() => handleOpenCategory('consolidado', row.lider)}
                               style={{
@@ -1634,7 +2274,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                                 background: '#eff6ff',
                                 border: '1px solid #bfdbfe',
                                 borderRadius: 6,
-                                padding: '3px 10px',
+                                padding: '4px 12px',
                                 cursor: 'pointer',
                               }}
                             >
@@ -1650,19 +2290,47 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               <tfoot>
                 <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
                   {!hiddenConsolidatedCols.has('lider') && (
-                    <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                    <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
                   )}
                   {!hiddenConsolidatedCols.has('estimacion') && (
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#b45309' }}>{itemsEstimacion.length}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                        <span style={{ fontWeight: 800, color: '#b45309', fontSize: 13 }}>{itemsEstimacion.length}</span>
+                        {itemsEstimacion.length > 0 && (
+                          <MotivosBadgesList badges={getEstimacionBadgeItems(itemsEstimacion)} />
+                        )}
+                      </div>
+                    </td>
                   )}
                   {!hiddenConsolidatedCols.has('reestimacion') && (
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#6d28d9' }}>{itemsReestimacion.length}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                        <span style={{ fontWeight: 800, color: '#6d28d9', fontSize: 13 }}>{itemsReestimacion.length}</span>
+                        {itemsReestimacion.length > 0 && (
+                          <MotivosBadgesList badges={getReestimacionBadgeItems(itemsReestimacion)} />
+                        )}
+                      </div>
+                    </td>
                   )}
                   {!hiddenConsolidatedCols.has('planificacion') && (
-                    <td style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 800, color: '#be123c' }}>{itemsPlanificacion.length}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
+                        <span style={{ fontWeight: 800, color: '#be123c', fontSize: 13 }}>{itemsPlanificacion.length}</span>
+                        {itemsPlanificacion.length > 0 && (
+                          <MotivosBadgesList badges={getPlanificacionBadgeItems(itemsPlanificacion)} />
+                        )}
+                      </div>
+                    </td>
                   )}
                   {!hiddenConsolidatedCols.has('total') && (
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{consolidatedGrandTotal}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                        <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>{consolidatedGrandTotal}</span>
+                        <span style={{ fontSize: 10, fontWeight: 600, color: '#475569', backgroundColor: '#e2e8f0', padding: '2px 7px', borderRadius: 6 }}>
+                          Total general
+                        </span>
+                      </div>
+                    </td>
                   )}
                   {!hiddenConsolidatedCols.has('accion') && <td />}
                 </tr>
@@ -1678,18 +2346,18 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
           <div style={{ background: '#fffbeb', border: '1px solid #fef3c7', borderRadius: 8, padding: '8px 14px', fontSize: 11, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
             <Clock size={15} style={{ flexShrink: 0, color: '#d97706' }} />
             <span>
-              <strong>Campos auditados:</strong> <code>Fecha Inicio Estimación</code> y <code>Fecha Fin Estimación</code>.
-              Evalúa iniciativas en etapa "Por Estimar" cuya fecha fin de estimación ha vencido respecto a la fecha de hoy.
+              <strong>Campos auditados:</strong> <code>Fecha de Asignación LD</code> y <code>Fecha Fin Estimación</code>.
+              Evalúa iniciativas en etapa "Por Estimar" sin fecha de asignación/fin, dentro de plazo SLA (≤ 5 días de asignación) o con fecha fin de estimación vencida vs hoy.
             </span>
           </div>
 
           <div>
             <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Iniciativas con Fecha Fin de Estimación Vencida por Líder de Dominio
+              Iniciativas Por Estimar (Sin Fechas, en SLA o Vencidas) por Líder de Dominio
             </p>
             {chartDataEstimacion.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
-                🎉 No hay iniciativas con estimaciones fuera de fecha.
+                🎉 No hay iniciativas con estimaciones fuera de fecha o pendientes.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(220, chartDataEstimacion.length * 36 + 30)}>
@@ -1698,7 +2366,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
-                  <Bar dataKey="value" name="Estimaciones Vencidas" fill="#f59e0b" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="value" name="Por Estimar" fill="#f59e0b" radius={[0, 4, 4, 0]}>
                     <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#b45309' }} />
                   </Bar>
                 </BarChart>
@@ -1714,7 +2382,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Líder de Dominio <SortIcon field="lider" /></span>
                   </th>
                   <th onClick={() => toggleSort('total')} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Estimaciones Vencidas <SortIcon field="total" /></span>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Iniciativas Por Estimar <SortIcon field="total" /></span>
                   </th>
                   <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
                   <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
@@ -1723,18 +2391,23 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               <tbody>
                 {sortedSummary.filter(s => s.estimacionCount > 0).map((row, idx) => (
                   <tr key={row.lider} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '8px 12px' }}>
-                      <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('estimacion', row.lider)} title={`Ver estimaciones atrasadas de: ${optLabel(row.lider)}`} />
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('estimacion', row.lider)} title={`Ver iniciativas de: ${optLabel(row.lider)}`} />
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#b45309' }}>
-                      {row.estimacionCount}
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                        <span style={{ fontWeight: 800, color: '#b45309', fontSize: 13 }}>
+                          {row.estimacionCount}
+                        </span>
+                        <MotivosBadgesList badges={getEstimacionBadgeItems(row.itemsEst)} />
+                      </div>
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '1px 8px', borderRadius: 20 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 20 }}>
                         {Math.round((row.estimacionCount / (itemsEstimacion.length || 1)) * 100)}%
                       </span>
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <button
                         onClick={() => handleOpenCategory('estimacion', row.lider)}
                         style={{
@@ -1744,7 +2417,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                           background: '#fef3c7',
                           border: '1px solid #fde68a',
                           borderRadius: 6,
-                          padding: '3px 10px',
+                          padding: '4px 12px',
                           cursor: 'pointer',
                         }}
                       >
@@ -1756,9 +2429,16 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
-                  <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#b45309' }}>{itemsEstimacion.length}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#b45309' }}>100%</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#b45309' }}>{itemsEstimacion.length}</span>
+                      {itemsEstimacion.length > 0 && (
+                        <MotivosBadgesList badges={getEstimacionBadgeItems(itemsEstimacion)} />
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#b45309' }}>100%</td>
                   <td />
                 </tr>
               </tfoot>
@@ -1821,18 +2501,23 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                 ) : (
                   sortedSummary.filter(s => s.reestimacionCount > 0).map((row, idx) => (
                     <tr key={row.lider} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '8px 12px' }}>
+                      <td style={{ padding: '10px 12px' }}>
                         <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('reestimacion', row.lider)} title={`Ver re-estimaciones atrasadas de: ${optLabel(row.lider)}`} />
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#6d28d9' }}>
-                        {row.reestimacionCount}
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                          <span style={{ fontWeight: 800, color: '#6d28d9', fontSize: 13 }}>
+                            {row.reestimacionCount}
+                          </span>
+                          <MotivosBadgesList badges={getReestimacionBadgeItems(row.itemsReest)} />
+                        </div>
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', padding: '1px 8px', borderRadius: 20 }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', padding: '2px 8px', borderRadius: 20 }}>
                           {Math.round((row.reestimacionCount / (itemsReestimacion.length || 1)) * 100)}%
                         </span>
                       </td>
-                      <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                         <button
                           onClick={() => handleOpenCategory('reestimacion', row.lider)}
                           style={{
@@ -1842,7 +2527,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                             background: '#f5f3ff',
                             border: '1px solid #ddd6fe',
                             borderRadius: 6,
-                            padding: '3px 10px',
+                            padding: '4px 12px',
                             cursor: 'pointer',
                           }}
                         >
@@ -1855,9 +2540,16 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
-                  <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#6d28d9' }}>{itemsReestimacion.length}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#6d28d9' }}>100%</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#6d28d9' }}>{itemsReestimacion.length}</span>
+                      {itemsReestimacion.length > 0 && (
+                        <MotivosBadgesList badges={getReestimacionBadgeItems(itemsReestimacion)} />
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#6d28d9' }}>100%</td>
                   <td />
                 </tr>
               </tfoot>
@@ -1873,17 +2565,17 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
             <CalendarX size={15} style={{ flexShrink: 0, color: '#e11d48' }} />
             <span>
               <strong>Campos auditados:</strong> <code>Fecha Inicio Planificada</code> y <code>Fecha Fin Planificada</code>.
-              Audita plazos en etapas de planificación con fecha fin planificada vencida respecto a la fecha de hoy.
+              Evalúa iniciativas en estado "Por Planificar" que tienen fechas de inicio y/o fin de planificación vacías.
             </span>
           </div>
 
           <div>
             <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
-              Iniciativas con Fecha Fin Planificada Vencida por Líder de Dominio
+              Iniciativas en estado Por Planificar sin Fechas por Líder de Dominio
             </p>
             {chartDataPlanificacion.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
-                🎉 No hay iniciativas con planificación fuera de fecha.
+                🎉 No hay iniciativas en Por Planificar sin fechas.
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(220, chartDataPlanificacion.length * 36 + 30)}>
@@ -1892,7 +2584,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
-                  <Bar dataKey="value" name="Planificaciones Vencidas" fill="#f43f5e" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="value" name="Por Planificar sin Fechas" fill="#f43f5e" radius={[0, 4, 4, 0]}>
                     <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#be123c' }} />
                   </Bar>
                 </BarChart>
@@ -1908,7 +2600,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                     <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>Líder de Dominio <SortIcon field="lider" /></span>
                   </th>
                   <th onClick={() => toggleSort('total')} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Planificaciones Vencidas <SortIcon field="total" /></span>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Por Planificar sin Fechas <SortIcon field="total" /></span>
                   </th>
                   <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
                   <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
@@ -1917,18 +2609,23 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               <tbody>
                 {sortedSummary.filter(s => s.planificacionCount > 0).map((row, idx) => (
                   <tr key={row.lider} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '8px 12px' }}>
-                      <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('planificacion', row.lider)} title={`Ver planificaciones atrasadas de: ${optLabel(row.lider)}`} />
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.lider)} onClick={() => handleOpenCategory('planificacion', row.lider)} title={`Ver iniciativas de: ${optLabel(row.lider)}`} />
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, color: '#be123c' }}>
-                      {row.planificacionCount}
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                        <span style={{ fontWeight: 800, color: '#be123c', fontSize: 13 }}>
+                          {row.planificacionCount}
+                        </span>
+                        <MotivosBadgesList badges={getPlanificacionBadgeItems(row.itemsPlan)} />
+                      </div>
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#be123c', background: '#ffe4e6', padding: '1px 8px', borderRadius: 20 }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#be123c', background: '#ffe4e6', padding: '2px 8px', borderRadius: 20 }}>
                         {Math.round((row.planificacionCount / (itemsPlanificacion.length || 1)) * 100)}%
                       </span>
                     </td>
-                    <td style={{ padding: '8px 12px', textAlign: 'center' }}>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
                       <button
                         onClick={() => handleOpenCategory('planificacion', row.lider)}
                         style={{
@@ -1938,7 +2635,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                           background: '#ffe4e6',
                           border: '1px solid #fecdd3',
                           borderRadius: 6,
-                          padding: '3px 10px',
+                          padding: '4px 12px',
                           cursor: 'pointer',
                         }}
                       >
@@ -1950,9 +2647,16 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
-                  <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#be123c' }}>{itemsPlanificacion.length}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#be123c' }}>100%</td>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 3 }}>
+                      <span style={{ fontWeight: 800, fontSize: 13, color: '#be123c' }}>{itemsPlanificacion.length}</span>
+                      {itemsPlanificacion.length > 0 && (
+                        <MotivosBadgesList badges={getPlanificacionBadgeItems(itemsPlanificacion)} />
+                      )}
+                    </div>
+                  </td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#be123c' }}>100%</td>
                   <td />
                 </tr>
               </tfoot>
@@ -2387,6 +3091,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [macroVPs,           setMacroVPs]           = useState<string[]>([]);
   const [macroEtapas,        setMacroEtapas]        = useState<string[]>([]);
   const [macroLideres,       setMacroLideres]       = useState<string[]>([]);
+  const [macroMotivos,       setMacroMotivos]       = useState<string[]>([]);
 
   // ---- Estado del popup de iniciativas standard ----
   const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
@@ -2396,7 +3101,14 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [hiddenModalCols, setHiddenModalCols] = useState<Set<string>>(new Set());
   const [showModalColPicker, setShowModalColPicker] = useState(false);
 
-  const MODAL_OUT_OF_DATE_COLS = [
+  // ---- Filtros y búsqueda interactiva del Modal de Auditoría ----
+  const [modalSearchQuery, setModalSearchQuery] = useState('');
+  const [modalFilterAsigMonth, setModalFilterAsigMonth] = useState<string>('all');
+  const [modalFilterInicioMonth, setModalFilterInicioMonth] = useState<string>('all');
+  const [modalFilterFinMonth, setModalFilterFinMonth] = useState<string>('all');
+  const [modalFilterMotivo, setModalFilterMotivo] = useState<string>('all');
+
+  const DEFAULT_MODAL_COLS = [
     { id: 'id', label: 'ID' },
     { id: 'titulo', label: 'Título de la Iniciativa' },
     { id: 'it_bp', label: 'IT BP' },
@@ -2404,10 +3116,46 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     { id: 'solicitante', label: 'Solicitante' },
     { id: 'lider_dominio', label: 'Líder de Dominio' },
     { id: 'etapa_actual', label: 'Etapa Pipeline' },
-    { id: 'fechas', label: 'Fechas de Etapa' },
-    { id: 'motivo', label: 'Diagnóstico' },
+    { id: 'fecha_asignacion', label: 'F. Asignación LD' },
+    { id: 'fecha_inicio', label: 'F. Inicio' },
+    { id: 'fecha_fin', label: 'F. Fin' },
+    { id: 'motivo', label: 'Diagnóstico / Motivo' },
     { id: 'desfase', label: 'Desfase vs HOY' },
   ];
+
+  const [modalColOrder, setModalColOrder] = useState<string[]>(() => DEFAULT_MODAL_COLS.map(c => c.id));
+  const [draggingColId, setDraggingColId] = useState<string | null>(null);
+  const [dragOverColId, setDragOverColId] = useState<string | null>(null);
+
+  const reorderModalCols = (sourceId: string, targetId: string) => {
+    if (!sourceId || !targetId || sourceId === targetId) return;
+    setModalColOrder(prev => {
+      const next = [...prev];
+      const sourceIdx = next.indexOf(sourceId);
+      const targetIdx = next.indexOf(targetId);
+      if (sourceIdx === -1 || targetIdx === -1) return prev;
+      next.splice(sourceIdx, 1);
+      next.splice(targetIdx, 0, sourceId);
+      return next;
+    });
+  };
+
+  const moveModalCol = (id: string, direction: 'up' | 'down') => {
+    setModalColOrder(prev => {
+      const next = [...prev];
+      const idx = next.indexOf(id);
+      if (idx === -1) return prev;
+      const targetIdx = direction === 'up' ? idx - 1 : idx + 1;
+      if (targetIdx < 0 || targetIdx >= next.length) return prev;
+      const [removed] = next.splice(idx, 1);
+      next.splice(targetIdx, 0, removed);
+      return next;
+    });
+  };
+
+  const resetModalColOrder = () => {
+    setModalColOrder(DEFAULT_MODAL_COLS.map(c => c.id));
+  };
 
   const toggleModalCol = (id: string) => {
     setHiddenModalCols(prev => {
@@ -2415,7 +3163,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       if (next.has(id)) {
         next.delete(id);
       } else {
-        if (MODAL_OUT_OF_DATE_COLS.length - next.size > 1) {
+        if (DEFAULT_MODAL_COLS.length - next.size > 1) {
           next.add(id);
         }
       }
@@ -2427,6 +3175,174 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setHiddenModalCols(new Set());
   };
 
+  // Helper para extraer fechas de cualquier item del modal
+  const getModalItemDates = (item: OutOfDateItem) => {
+    const t = item.iniciativa;
+    const asig = t.fecha_asignacion || null;
+    let inicio: string | null = null;
+    let fin: string | null = null;
+
+    if (item.category === 'estimacion') {
+      inicio = t.fecha_inicio_estimacion || null;
+      fin = t.fecha_fin_estimacion || null;
+    } else if (item.category === 'reestimacion') {
+      inicio = t.fecha_inicio_reestimacion || null;
+      fin = t.fecha_fin_reestimacion || null;
+    } else if (item.category === 'planificacion') {
+      inicio = t.fecha_inicio_planificada || null;
+      fin = t.fecha_fin_planificada || null;
+    } else {
+      inicio = t.fecha_inicio_planificada || t.fecha_inicio_estimacion || null;
+      fin = t.fecha_fin_planificada || t.fecha_fin_estimacion || null;
+    }
+
+    return { asig, inicio, fin };
+  };
+
+  // Helper para formatear etiqueta de mes
+  const fmtMonthLabel = (yyyyMM: string): string => {
+    try {
+      const [y, m] = yyyyMM.split('-');
+      const d = new Date(parseInt(y, 10), parseInt(m, 10) - 1, 1);
+      const mName = format(d, 'MMM yyyy', { locale: es });
+      return mName.charAt(0).toUpperCase() + mName.slice(1);
+    } catch {
+      return yyyyMM;
+    }
+  };
+
+  // Opciones dinámicas de meses y motivos presentes en los datos del modal abierto
+  const modalFilterOptions = useMemo(() => {
+    if (!popupCustomData) {
+      return { asigMonths: [], inicioMonths: [], finMonths: [], hasEmptyAsig: false, hasEmptyIni: false, hasEmptyFin: false, motivos: [] };
+    }
+    const asigSet = new Set<string>();
+    const iniSet = new Set<string>();
+    const finSet = new Set<string>();
+    const motivoSet = new Set<string>();
+
+    let hasEmptyAsig = false;
+    let hasEmptyIni = false;
+    let hasEmptyFin = false;
+
+    popupCustomData.items.forEach(it => {
+      const { asig, inicio, fin } = getModalItemDates(it);
+      if (asig) {
+        try { asigSet.add(format(parseISO(asig), 'yyyy-MM')); } catch {}
+      } else {
+        hasEmptyAsig = true;
+      }
+      if (inicio) {
+        try { iniSet.add(format(parseISO(inicio), 'yyyy-MM')); } catch {}
+      } else {
+        hasEmptyIni = true;
+      }
+      if (fin) {
+        try { finSet.add(format(parseISO(fin), 'yyyy-MM')); } catch {}
+      } else {
+        hasEmptyFin = true;
+      }
+      if (it.reason) motivoSet.add(it.reason);
+    });
+
+    return {
+      asigMonths: Array.from(asigSet).sort(),
+      inicioMonths: Array.from(iniSet).sort(),
+      finMonths: Array.from(finSet).sort(),
+      hasEmptyAsig,
+      hasEmptyIni,
+      hasEmptyFin,
+      motivos: Array.from(motivoSet),
+    };
+  }, [popupCustomData]);
+
+  // Filtro de items dentro del modal
+  const filteredModalCustomItems = useMemo(() => {
+    if (!popupCustomData) return [];
+    let items = popupCustomData.items;
+
+    // 1. Buscador global
+    if (modalSearchQuery.trim()) {
+      const q = modalSearchQuery.toLowerCase().trim();
+      items = items.filter(it => {
+        const t = it.iniciativa;
+        const { asig, inicio, fin } = getModalItemDates(it);
+        const asigStr = fmtDateShort(asig);
+        const iniStr = fmtDateShort(inicio);
+        const finStr = fmtDateShort(fin);
+        return (
+          String(t.id).includes(q) ||
+          (t.titulo || '').toLowerCase().includes(q) ||
+          (t.it_bp || '').toLowerCase().includes(q) ||
+          (t.vp_solicitante || '').toLowerCase().includes(q) ||
+          (t.usuario_negocio || '').toLowerCase().includes(q) ||
+          (t.lider_dominio || '').toLowerCase().includes(q) ||
+          (t.etapa_actual || '').toLowerCase().includes(q) ||
+          (it.reason || '').toLowerCase().includes(q) ||
+          asigStr.toLowerCase().includes(q) ||
+          iniStr.toLowerCase().includes(q) ||
+          finStr.toLowerCase().includes(q)
+        );
+      });
+    }
+
+    // 2. Filtro mes Asignación
+    if (modalFilterAsigMonth !== 'all') {
+      items = items.filter(it => {
+        const { asig } = getModalItemDates(it);
+        if (modalFilterAsigMonth === 'empty') return !asig;
+        if (!asig) return false;
+        try {
+          return format(parseISO(asig), 'yyyy-MM') === modalFilterAsigMonth;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // 3. Filtro mes Inicio
+    if (modalFilterInicioMonth !== 'all') {
+      items = items.filter(it => {
+        const { inicio } = getModalItemDates(it);
+        if (modalFilterInicioMonth === 'empty') return !inicio;
+        if (!inicio) return false;
+        try {
+          return format(parseISO(inicio), 'yyyy-MM') === modalFilterInicioMonth;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // 4. Filtro mes Fin
+    if (modalFilterFinMonth !== 'all') {
+      items = items.filter(it => {
+        const { fin } = getModalItemDates(it);
+        if (modalFilterFinMonth === 'empty') return !fin;
+        if (!fin) return false;
+        try {
+          return format(parseISO(fin), 'yyyy-MM') === modalFilterFinMonth;
+        } catch {
+          return false;
+        }
+      });
+    }
+
+    // 5. Filtro Motivo
+    if (modalFilterMotivo !== 'all') {
+      items = items.filter(it => it.reason === modalFilterMotivo);
+    }
+
+    return items;
+  }, [
+    popupCustomData,
+    modalSearchQuery,
+    modalFilterAsigMonth,
+    modalFilterInicioMonth,
+    modalFilterFinMonth,
+    modalFilterMotivo,
+  ]);
+
   // ---- Estado de ordenamiento del modal popup custom (fechas) ----
   type ModalSortField =
     | 'id'
@@ -2436,6 +3352,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     | 'solicitante'
     | 'lider_dominio'
     | 'etapa_actual'
+    | 'fecha_asignacion'
     | 'fecha_inicio'
     | 'fecha_fin'
     | 'motivo'
@@ -2454,10 +3371,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   };
 
   const sortedModalCustomItems = useMemo(() => {
-    if (!popupCustomData) return [];
-    return [...popupCustomData.items].sort((a, b) => {
+    return [...filteredModalCustomItems].sort((a, b) => {
       const tA = a.iniciativa;
       const tB = b.iniciativa;
+      const datesA = getModalItemDates(a);
+      const datesB = getModalItemDates(b);
 
       let cmp = 0;
       switch (modalSortField) {
@@ -2482,64 +3400,36 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
         case 'etapa_actual':
           cmp = (tA.etapa_actual || '').localeCompare(tB.etapa_actual || '', 'es');
           break;
+        case 'fecha_asignacion':
+          if (!datesA.asig && !datesB.asig) cmp = 0;
+          else if (!datesA.asig) return 1;
+          else if (!datesB.asig) return -1;
+          else cmp = datesA.asig.localeCompare(datesB.asig);
+          break;
+        case 'fecha_inicio':
+          if (!datesA.inicio && !datesB.inicio) cmp = 0;
+          else if (!datesA.inicio) return 1;
+          else if (!datesB.inicio) return -1;
+          else cmp = datesA.inicio.localeCompare(datesB.inicio);
+          break;
+        case 'fecha_fin':
+          if (!datesA.fin && !datesB.fin) cmp = 0;
+          else if (!datesA.fin) return 1;
+          else if (!datesB.fin) return -1;
+          else cmp = datesA.fin.localeCompare(datesB.fin);
+          break;
         case 'motivo':
           cmp = (a.reason || '').localeCompare(b.reason || '', 'es');
           break;
         case 'desfase':
           cmp = a.delayDays - b.delayDays;
           break;
-        case 'fecha_inicio': {
-          const dateA =
-            a.category === 'estimacion'
-              ? tA.fecha_inicio_estimacion
-              : a.category === 'reestimacion'
-              ? tA.fecha_inicio_reestimacion
-              : a.category === 'planificacion'
-              ? tA.fecha_inicio_planificada
-              : tA.fecha_inicio_planificada || tA.fecha_inicio_estimacion;
-          const dateB =
-            b.category === 'estimacion'
-              ? tB.fecha_inicio_estimacion
-              : b.category === 'reestimacion'
-              ? tB.fecha_inicio_reestimacion
-              : b.category === 'planificacion'
-              ? tB.fecha_inicio_planificada
-              : tB.fecha_inicio_planificada || tB.fecha_inicio_estimacion;
-          if (!dateA && !dateB) cmp = 0;
-          else if (!dateA) cmp = 1;
-          else if (!dateB) cmp = -1;
-          else cmp = new Date(dateA).getTime() - new Date(dateB).getTime();
-          break;
-        }
-        case 'fecha_fin': {
-          const dateA =
-            a.category === 'estimacion'
-              ? tA.fecha_fin_estimacion
-              : a.category === 'reestimacion'
-              ? tA.fecha_fin_reestimacion
-              : a.category === 'planificacion'
-              ? tA.fecha_fin_planificada
-              : tA.fecha_fin_planificada || tA.fecha_fin_estimacion;
-          const dateB =
-            b.category === 'estimacion'
-              ? tB.fecha_fin_estimacion
-              : b.category === 'reestimacion'
-              ? tB.fecha_fin_reestimacion
-              : b.category === 'planificacion'
-              ? tB.fecha_fin_planificada
-              : tB.fecha_fin_planificada || tB.fecha_fin_estimacion;
-          if (!dateA && !dateB) cmp = 0;
-          else if (!dateA) cmp = 1;
-          else if (!dateB) cmp = -1;
-          else cmp = new Date(dateA).getTime() - new Date(dateB).getTime();
-          break;
-        }
         default:
           cmp = 0;
       }
       return modalSortDir === 'asc' ? cmp : -cmp;
     });
-  }, [popupCustomData, modalSortField, modalSortDir]);
+  }, [filteredModalCustomItems, modalSortField, modalSortDir]);
 
   // ---- Estado para ver detalle completo de la iniciativa (modal) ----
   const [detailModalIniciativa, setDetailModalIniciativa] = useState<Iniciativa | null>(null);
@@ -2548,6 +3438,25 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   type ReportId = 'fuera_fecha' | 'vp' | 'estados' | 'it_bp';
   const [selectedReport, setSelectedReport] = useState<ReportId | null>(null);
 
+  // ---- Motivos únicos de auditoría de fechas ----
+  const allMotivosOptions = useMemo(() => {
+    const ref = new Date();
+    const map = new Map<string, number>();
+    iniciativas.forEach(i => {
+      const resEst = checkFueraFechaEstimacion(i, ref);
+      if (resEst.isOutOfDate && resEst.reason) map.set(resEst.reason, (map.get(resEst.reason) || 0) + 1);
+
+      const resReest = checkFueraFechaReestimacion(i, ref);
+      if (resReest.isOutOfDate && resReest.reason) map.set(resReest.reason, (map.get(resReest.reason) || 0) + 1);
+
+      const resPlan = checkFueraFechaPlanificacion(i, ref);
+      if (resPlan.isOutOfDate && resPlan.reason) map.set(resPlan.reason, (map.get(resPlan.reason) || 0) + 1);
+    });
+    return Array.from(map.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([r]) => r);
+  }, [iniciativas]);
+
   // ---- Opciones (de todo el dataset) ----
   const opts = useMemo(() => ({
     instituciones: buildMacroOptions(iniciativas, i => i.institucion),
@@ -2555,13 +3464,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     vps:           buildMacroOptions(iniciativas, i => i.vp_solicitante),
     etapas:        Array.from(new Set(iniciativas.map(i => i.etapa_actual))),
     lideres:       buildMacroOptions(iniciativas, i => i.lider_dominio),
-  }), [iniciativas]);
+    motivos:       allMotivosOptions,
+  }), [iniciativas, allMotivosOptions]);
 
   // ---- Label para etapas en el dropdown ----
   const etapaLabel = (v: string) => ETAPAS_MAP.get(v as EtapaPipeline)?.label || ETAPAS_PLANIFICADAS_MAP.get(v as EtapaPipeline)?.label || v;
 
   // ---- Aplicar filtros macro ----
   const filtered = useMemo(() => {
+    const ref = new Date();
     return iniciativas.filter(i => {
       if (macroInstituciones.length && !macroInstituciones.includes(normalize(i.institucion))) return false;
       if (macroSPO.length           && !macroSPO.includes(normalize(i.proyecto_spo)))          return false;
@@ -2569,9 +3480,21 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       if (macroVPs.length           && !macroVPs.includes(normalize(i.vp_solicitante)))         return false;
       if (macroEtapas.length        && !macroEtapas.includes(i.etapa_actual))                  return false;
       if (macroLideres.length       && !macroLideres.includes(normalize(i.lider_dominio)))      return false;
+      if (macroMotivos.length) {
+        const resEst = checkFueraFechaEstimacion(i, ref);
+        const resReest = checkFueraFechaReestimacion(i, ref);
+        const resPlan = checkFueraFechaPlanificacion(i, ref);
+        const reasons = [
+          resEst.isOutOfDate ? resEst.reason : null,
+          resReest.isOutOfDate ? resReest.reason : null,
+          resPlan.isOutOfDate ? resPlan.reason : null,
+        ].filter(Boolean) as string[];
+        const hasMatch = reasons.some(r => macroMotivos.includes(r));
+        if (!hasMatch) return false;
+      }
       return true;
     });
-  }, [iniciativas, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres]);
+  }, [iniciativas, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos]);
 
   // ---- Métricas para las tarjetas del catálogo ----
   const fueraFechaMetrics = useMemo(() => {
@@ -2699,7 +3622,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const totalActive =
     macroInstituciones.length + macroSPO.length +
     macroITBPs.length + macroVPs.length +
-    macroEtapas.length + macroLideres.length;
+    macroEtapas.length + macroLideres.length +
+    macroMotivos.length;
 
   const clearAll = () => {
     setMacroInstituciones([]);
@@ -2708,6 +3632,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setMacroVPs([]);
     setMacroEtapas([]);
     setMacroLideres([]);
+    setMacroMotivos([]);
   };
 
   return (
@@ -2930,6 +3855,18 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                 onChange={setMacroLideres}
                 icon={<Users size={10} />}
               />
+
+              {/* Motivo / Diagnóstico */}
+              {selectedReport === 'fuera_fecha' && (
+                <MacroMultiSelect
+                  label="Motivo / Diagnóstico"
+                  options={opts.motivos}
+                  selected={macroMotivos}
+                  onChange={setMacroMotivos}
+                  icon={<AlertTriangle size={10} />}
+                  isMotivoSelect={true}
+                />
+              )}
 
               {/* Proyecto SPO */}
               <SpoToggle selected={macroSPO} onChange={setMacroSPO} />
@@ -3176,6 +4113,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+                flexWrap: 'wrap',
+                gap: 12,
               }}
             >
               <div>
@@ -3186,11 +4125,78 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                   </h3>
                 </div>
                 <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
-                  {popupCustomData.subtitle} ({popupCustomData.items.length} iniciativas)
+                  {popupCustomData.subtitle} ({sortedModalCustomItems.length === popupCustomData.items.length ? `${popupCustomData.items.length} iniciativas` : `mostrando ${sortedModalCustomItems.length} de ${popupCustomData.items.length} iniciativas`})
                 </p>
               </div>
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {/* Search box */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search size={12} style={{ position: 'absolute', left: 8, color: '#94a3b8', pointerEvents: 'none' }} />
+                  <input
+                    type="text"
+                    placeholder="Buscar en resultados..."
+                    value={modalSearchQuery}
+                    onChange={e => setModalSearchQuery(e.target.value)}
+                    style={{
+                      padding: '5px 24px 5px 26px',
+                      fontSize: 11,
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      outline: 'none',
+                      width: 160,
+                      color: '#1e293b',
+                      background: '#fff',
+                    }}
+                  />
+                  {modalSearchQuery && (
+                    <button
+                      onClick={() => setModalSearchQuery('')}
+                      style={{
+                        position: 'absolute',
+                        right: 6,
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        color: '#94a3b8',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      title="Limpiar búsqueda"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
+
+                {/* Reset filters button */}
+                {(Boolean(modalSearchQuery.trim()) || modalFilterAsigMonth !== 'all' || modalFilterInicioMonth !== 'all' || modalFilterFinMonth !== 'all' || modalFilterMotivo !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalSearchQuery('');
+                      setModalFilterAsigMonth('all');
+                      setModalFilterInicioMonth('all');
+                      setModalFilterFinMonth('all');
+                      setModalFilterMotivo('all');
+                    }}
+                    style={{
+                      fontSize: 10,
+                      color: '#ef4444',
+                      fontWeight: 700,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                    }}
+                    title="Restablecer todos los filtros del modal"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+
                 {/* Sort selector toolbar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
                   <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Ordenar por:</span>
@@ -3215,6 +4221,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                     <option value="solicitante">Solicitante</option>
                     <option value="lider_dominio">Líder de Dominio</option>
                     <option value="etapa_actual">Etapa Pipeline</option>
+                    <option value="fecha_asignacion">F. Asignación LD</option>
                     <option value="fecha_inicio">Fecha de Inicio</option>
                     <option value="fecha_fin">Fecha de Fin</option>
                     <option value="motivo">Diagnóstico / Motivo</option>
@@ -3260,10 +4267,10 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                       cursor: 'pointer',
                       boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
                     }}
-                    title="Ocultar / Mostrar columnas del modal"
+                    title="Ocultar / Mostrar y reordenar columnas del modal"
                   >
                     <Columns3 size={13} style={{ color: hiddenModalCols.size > 0 ? '#2563eb' : '#64748b' }} />
-                    <span>Columnas ({MODAL_OUT_OF_DATE_COLS.length - hiddenModalCols.size}/{MODAL_OUT_OF_DATE_COLS.length})</span>
+                    <span>Columnas ({DEFAULT_MODAL_COLS.length - hiddenModalCols.size}/{DEFAULT_MODAL_COLS.length})</span>
                     <ChevronDown size={11} />
                   </button>
 
@@ -3278,7 +4285,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                           position: 'absolute',
                           right: 0,
                           marginTop: 4,
-                          width: 230,
+                          width: 260,
                           background: '#fff',
                           border: '1px solid #e2e8f0',
                           borderRadius: 10,
@@ -3288,57 +4295,101 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                         }}
                       >
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, marginBottom: 6, borderBottom: '1px solid #f1f5f9' }}>
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>Columnas Visibles</span>
-                          {hiddenModalCols.size > 0 && (
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>Columnas & Orden</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                             <button
                               type="button"
-                              onClick={showAllModalCols}
-                              style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                              onClick={resetModalColOrder}
+                              style={{ fontSize: 10, color: '#64748b', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                              title="Restablecer orden predeterminado"
                             >
-                              Mostrar todas
+                              Restablecer
                             </button>
-                          )}
+                            {hiddenModalCols.size > 0 && (
+                              <button
+                                type="button"
+                                onClick={showAllModalCols}
+                                style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                Ver todas
+                              </button>
+                            )}
+                          </div>
                         </div>
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: 4, maxHeight: 220, overflowY: 'auto' }}>
-                          {MODAL_OUT_OF_DATE_COLS.map(col => {
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 250, overflowY: 'auto' }}>
+                          {modalColOrder.map((colId, idx) => {
+                            const col = DEFAULT_MODAL_COLS.find(c => c.id === colId);
+                            if (!col) return null;
                             const isVis = !hiddenModalCols.has(col.id);
                             return (
-                              <label
+                              <div
                                 key={col.id}
                                 style={{
                                   display: 'flex',
                                   alignItems: 'center',
                                   justifyContent: 'space-between',
-                                  padding: '5px 8px',
+                                  padding: '4px 6px',
                                   borderRadius: 6,
                                   fontSize: 11,
-                                  cursor: 'pointer',
-                                  background: isVis ? 'transparent' : '#f8fafc',
-                                  userSelect: 'none',
+                                  background: isVis ? '#ffffff' : '#f8fafc',
+                                  border: '1px solid #f1f5f9',
                                 }}
                               >
-                                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1, minWidth: 0 }}>
                                   <input
                                     type="checkbox"
                                     checked={isVis}
                                     onChange={() => toggleModalCol(col.id)}
                                     style={{ cursor: 'pointer', accentColor: '#2563eb' }}
                                   />
-                                  <span style={{ color: isVis ? '#1e293b' : '#94a3b8', textDecoration: isVis ? 'none' : 'line-through', fontWeight: isVis ? 500 : 400 }}>
+                                  <span style={{ color: isVis ? '#1e293b' : '#94a3b8', textDecoration: isVis ? 'none' : 'line-through', fontWeight: isVis ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                                     {col.label}
                                   </span>
+                                </label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveModalCol(col.id, 'up')}
+                                    style={{
+                                      border: '1px solid #e2e8f0',
+                                      background: idx === 0 ? '#f8fafc' : '#ffffff',
+                                      borderRadius: 4,
+                                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === 0 ? 0.3 : 0.85,
+                                      padding: '1px 5px',
+                                      fontSize: 9,
+                                      color: '#475569',
+                                    }}
+                                    title="Mover columna a la izquierda"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === modalColOrder.length - 1}
+                                    onClick={() => moveModalCol(col.id, 'down')}
+                                    style={{
+                                      border: '1px solid #e2e8f0',
+                                      background: idx === modalColOrder.length - 1 ? '#f8fafc' : '#ffffff',
+                                      borderRadius: 4,
+                                      cursor: idx === modalColOrder.length - 1 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === modalColOrder.length - 1 ? 0.3 : 0.85,
+                                      padding: '1px 5px',
+                                      fontSize: 9,
+                                      color: '#475569',
+                                    }}
+                                    title="Mover columna a la derecha"
+                                  >
+                                    ▼
+                                  </button>
                                 </div>
-                                {!isVis && (
-                                  <span style={{ fontSize: 9, fontWeight: 700, color: '#d97706', background: '#fef3c7', padding: '1px 4px', borderRadius: 4 }}>
-                                    Oculta
-                                  </span>
-                                )}
-                              </label>
+                              </div>
                             );
                           })}
                         </div>
                         <div style={{ paddingTop: 6, marginTop: 6, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
-                          <span>{hiddenModalCols.size} columna(s) oculta(s)</span>
+                          <span>Tip: También puedes arrastrar encabezados</span>
                           <button
                             type="button"
                             onClick={() => setShowModalColPicker(false)}
@@ -3376,220 +4427,367 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             </div>
 
             {/* Content List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '18px 24px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
               {sortedModalCustomItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
-                  No se encontraron iniciativas con desfase para esta selección.
+                  No se encontraron iniciativas con los filtros aplicados en esta selección.
                 </div>
               ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
                     <thead>
-                      <tr style={{ borderBottom: '2px solid #f1f5f9', textAlign: 'left', color: '#475569', background: '#f8fafc' }}>
-                        <th style={{ padding: '10px 8px', width: 36, textAlign: 'center' }} title="Ver detalle completo en modal">
+                      <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
                           <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
                         </th>
-                        {!hiddenModalCols.has('id') && (
-                          <th
-                            onClick={() => toggleModalSort('id')}
-                            style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por ID"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              ID
-                              {modalSortField === 'id' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
+                        {modalColOrder.map(colId => {
+                          if (hiddenModalCols.has(colId)) return null;
+                          const isDragging = draggingColId === colId;
+                          const isDragOver = dragOverColId === colId;
+
+                          const baseThStyle: React.CSSProperties = {
+                            padding: '6px 8px',
+                            whiteSpace: 'nowrap',
+                            userSelect: 'none',
+                            verticalAlign: 'top',
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: '#475569',
+                            backgroundColor: isDragOver ? '#dbeafe' : isDragging ? '#f1f5f9' : '#f8fafc',
+                            borderRight: isDragOver ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                            cursor: 'grab',
+                            transition: 'background-color 0.15s',
+                            opacity: isDragging ? 0.4 : 1,
+                          };
+
+                          const dragHandlers = {
+                            draggable: true,
+                            onDragStart: (e: React.DragEvent) => {
+                              e.dataTransfer.setData('text/plain', colId);
+                              e.dataTransfer.effectAllowed = 'move';
+                              setDraggingColId(colId);
+                            },
+                            onDragOver: (e: React.DragEvent) => {
+                              e.preventDefault();
+                              e.dataTransfer.dropEffect = 'move';
+                              if (dragOverColId !== colId) setDragOverColId(colId);
+                            },
+                            onDragLeave: () => {
+                              if (dragOverColId === colId) setDragOverColId(null);
+                            },
+                            onDrop: (e: React.DragEvent) => {
+                              e.preventDefault();
+                              const srcId = e.dataTransfer.getData('text/plain') || draggingColId;
+                              if (srcId && srcId !== colId) {
+                                reorderModalCols(srcId, colId);
+                              }
+                              setDraggingColId(null);
+                              setDragOverColId(null);
+                            },
+                            onDragEnd: () => {
+                              setDraggingColId(null);
+                              setDragOverColId(null);
+                            },
+                          };
+
+                          const dragHandle = (
+                            <span style={{ display: 'inline-flex', alignItems: 'center', opacity: 0.35, cursor: 'grab', marginRight: 2 }} title="Arrastrar para mover columna">
+                              <GripVertical size={11} />
                             </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('titulo') && (
-                          <th
-                            onClick={() => toggleModalSort('titulo')}
-                            style={{ padding: '10px 12px', fontWeight: 600, minWidth: 240, cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Título"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              Título de la Iniciativa
-                              {modalSortField === 'titulo' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('it_bp') && (
-                          <th
-                            onClick={() => toggleModalSort('it_bp')}
-                            style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por IT BP"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              IT BP
-                              {modalSortField === 'it_bp' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('vp_solicitante') && (
-                          <th
-                            onClick={() => toggleModalSort('vp_solicitante')}
-                            style={{ padding: '10px 12px', fontWeight: 600, minWidth: 160, cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por VP Área Solicitante"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              VP Área Solicitante
-                              {modalSortField === 'vp_solicitante' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('solicitante') && (
-                          <th
-                            onClick={() => toggleModalSort('solicitante')}
-                            style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Solicitante"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              Solicitante
-                              {modalSortField === 'solicitante' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('lider_dominio') && (
-                          <th
-                            onClick={() => toggleModalSort('lider_dominio')}
-                            style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Líder de Dominio"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              Líder de Dominio
-                              {modalSortField === 'lider_dominio' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('etapa_actual') && (
-                          <th
-                            onClick={() => toggleModalSort('etapa_actual')}
-                            style={{ padding: '10px 12px', fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Etapa Pipeline"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              Etapa Pipeline
-                              {modalSortField === 'etapa_actual' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('fechas') && (
-                          <th style={{ padding: '8px 12px', fontWeight: 600, whiteSpace: 'nowrap', userSelect: 'none' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                              <span style={{ fontSize: 11 }}>
-                                {popupCustomData.category === 'estimacion'
-                                  ? 'F. Inicio / Fin Estimación'
-                                  : popupCustomData.category === 'reestimacion'
-                                  ? 'F. Inicio / Fin Re-estimación'
-                                  : popupCustomData.category === 'planificacion'
-                                  ? 'F. Inicio / Fin Planificada'
-                                  : 'Fechas del Hito'}
-                              </span>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleModalSort('fecha_inicio')}
-                                  style={{
-                                    fontSize: 10,
-                                    padding: '2px 7px',
-                                    borderRadius: 4,
-                                    fontWeight: modalSortField === 'fecha_inicio' ? 700 : 500,
-                                    color: modalSortField === 'fecha_inicio' ? '#1d4ed8' : '#475569',
-                                    background: modalSortField === 'fecha_inicio' ? '#dbeafe' : '#f1f5f9',
-                                    border: modalSortField === 'fecha_inicio' ? '1px solid #93c5fd' : '1px solid #e2e8f0',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 2,
-                                  }}
-                                  title="Ordenar por Fecha de Inicio"
-                                >
-                                  Ini {modalSortField === 'fecha_inicio' ? (modalSortDir === 'asc' ? '↑' : '↓') : '↕'}
-                                </button>
-                                <button
-                                  type="button"
-                                  onClick={() => toggleModalSort('fecha_fin')}
-                                  style={{
-                                    fontSize: 10,
-                                    padding: '2px 7px',
-                                    borderRadius: 4,
-                                    fontWeight: modalSortField === 'fecha_fin' ? 700 : 500,
-                                    color: modalSortField === 'fecha_fin' ? '#1d4ed8' : '#475569',
-                                    background: modalSortField === 'fecha_fin' ? '#dbeafe' : '#f1f5f9',
-                                    border: modalSortField === 'fecha_fin' ? '1px solid #93c5fd' : '1px solid #e2e8f0',
-                                    cursor: 'pointer',
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 2,
-                                  }}
-                                  title="Ordenar por Fecha de Fin"
-                                >
-                                  Fin {modalSortField === 'fecha_fin' ? (modalSortDir === 'asc' ? '↑' : '↓') : '↕'}
-                                </button>
-                              </div>
-                            </div>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('motivo') && (
-                          <th
-                            onClick={() => toggleModalSort('motivo')}
-                            style={{ padding: '10px 12px', fontWeight: 600, cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Diagnóstico / Motivo"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                              Diagnóstico / Motivo
-                              {modalSortField === 'motivo' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
-                        {!hiddenModalCols.has('desfase') && (
-                          <th
-                            onClick={() => toggleModalSort('desfase')}
-                            style={{ padding: '10px 12px', fontWeight: 600, textAlign: 'right', whiteSpace: 'nowrap', cursor: 'pointer', userSelect: 'none' }}
-                            title="Ordenar por Desfase a fecha de HOY"
-                          >
-                            <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>
-                              Desfase a fecha de HOY
-                              {modalSortField === 'desfase' ? (
-                                modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
-                              ) : (
-                                <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-                              )}
-                            </span>
-                          </th>
-                        )}
+                          );
+
+                          switch (colId) {
+                            case 'id':
+                              return (
+                                <th key="id" {...dragHandlers} style={{ ...baseThStyle, minWidth: 60, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('id')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'id' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>ID</span>
+                                    {modalSortField === 'id' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'titulo':
+                              return (
+                                <th key="titulo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 200, maxWidth: 300, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('titulo')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'titulo' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Título de la Iniciativa</span>
+                                    {modalSortField === 'titulo' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'it_bp':
+                              return (
+                                <th key="it_bp" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('it_bp')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'it_bp' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>IT BP</span>
+                                    {modalSortField === 'it_bp' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'vp_solicitante':
+                              return (
+                                <th key="vp_solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 120, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('vp_solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'vp_solicitante' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>VP Área Solicitante</span>
+                                    {modalSortField === 'vp_solicitante' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'solicitante':
+                              return (
+                                <th key="solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'solicitante' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Solicitante</span>
+                                    {modalSortField === 'solicitante' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'lider_dominio':
+                              return (
+                                <th key="lider_dominio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 100, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('lider_dominio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'lider_dominio' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Líder de Dominio</span>
+                                    {modalSortField === 'lider_dominio' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'etapa_actual':
+                              return (
+                                <th key="etapa_actual" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('etapa_actual')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'etapa_actual' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Etapa</span>
+                                    {modalSortField === 'etapa_actual' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'fecha_asignacion':
+                              return (
+                                <th key="fecha_asignacion" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                    <div onClick={() => toggleModalSort('fecha_asignacion')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_asignacion' ? '#2563eb' : '#475569' }}>
+                                      {dragHandle}
+                                      <span>F. Asig. LD</span>
+                                      {modalSortField === 'fecha_asignacion' ? (
+                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      ) : (
+                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      )}
+                                    </div>
+                                    {modalFilterOptions.asigMonths.length > 0 && (
+                                      <select
+                                        value={modalFilterAsigMonth}
+                                        onChange={e => setModalFilterAsigMonth(e.target.value)}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{
+                                          fontSize: 9.5,
+                                          padding: '1px 3px',
+                                          borderRadius: 4,
+                                          border: modalFilterAsigMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                                          background: modalFilterAsigMonth !== 'all' ? '#eff6ff' : '#fff',
+                                          color: modalFilterAsigMonth !== 'all' ? '#1d4ed8' : '#64748b',
+                                          fontWeight: modalFilterAsigMonth !== 'all' ? 700 : 400,
+                                          cursor: 'pointer',
+                                          maxWidth: 88,
+                                        }}
+                                      >
+                                        <option value="all">Mes: Todos</option>
+                                        {modalFilterOptions.hasEmptyAsig && <option value="empty">(Sin fecha)</option>}
+                                        {modalFilterOptions.asigMonths.map(m => (
+                                          <option key={m} value={m}>{fmtMonthLabel(m)}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'fecha_inicio':
+                              return (
+                                <th key="fecha_inicio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                    <div onClick={() => toggleModalSort('fecha_inicio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_inicio' ? '#2563eb' : '#475569' }}>
+                                      {dragHandle}
+                                      <span>
+                                        {popupCustomData.category === 'estimacion'
+                                          ? 'F. Inicio Est.'
+                                          : popupCustomData.category === 'reestimacion'
+                                          ? 'F. Inicio Reest.'
+                                          : popupCustomData.category === 'planificacion'
+                                          ? 'F. Inicio Plan.'
+                                          : 'F. Inicio'}
+                                      </span>
+                                      {modalSortField === 'fecha_inicio' ? (
+                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      ) : (
+                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      )}
+                                    </div>
+                                    {modalFilterOptions.inicioMonths.length > 0 && (
+                                      <select
+                                        value={modalFilterInicioMonth}
+                                        onChange={e => setModalFilterInicioMonth(e.target.value)}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{
+                                          fontSize: 9.5,
+                                          padding: '1px 3px',
+                                          borderRadius: 4,
+                                          border: modalFilterInicioMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                                          background: modalFilterInicioMonth !== 'all' ? '#eff6ff' : '#fff',
+                                          color: modalFilterInicioMonth !== 'all' ? '#1d4ed8' : '#64748b',
+                                          fontWeight: modalFilterInicioMonth !== 'all' ? 700 : 400,
+                                          cursor: 'pointer',
+                                          maxWidth: 88,
+                                        }}
+                                      >
+                                        <option value="all">Mes: Todos</option>
+                                        {modalFilterOptions.hasEmptyIni && <option value="empty">(Sin fecha)</option>}
+                                        {modalFilterOptions.inicioMonths.map(m => (
+                                          <option key={m} value={m}>{fmtMonthLabel(m)}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'fecha_fin':
+                              return (
+                                <th key="fecha_fin" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                                    <div onClick={() => toggleModalSort('fecha_fin')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_fin' ? '#2563eb' : '#475569' }}>
+                                      {dragHandle}
+                                      <span>
+                                        {popupCustomData.category === 'estimacion'
+                                          ? 'F. Fin Est.'
+                                          : popupCustomData.category === 'reestimacion'
+                                          ? 'F. Fin Reest.'
+                                          : popupCustomData.category === 'planificacion'
+                                          ? 'F. Fin Plan.'
+                                          : 'F. Fin'}
+                                      </span>
+                                      {modalSortField === 'fecha_fin' ? (
+                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      ) : (
+                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      )}
+                                    </div>
+                                    {modalFilterOptions.finMonths.length > 0 && (
+                                      <select
+                                        value={modalFilterFinMonth}
+                                        onChange={e => setModalFilterFinMonth(e.target.value)}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{
+                                          fontSize: 9.5,
+                                          padding: '1px 3px',
+                                          borderRadius: 4,
+                                          border: modalFilterFinMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                                          background: modalFilterFinMonth !== 'all' ? '#eff6ff' : '#fff',
+                                          color: modalFilterFinMonth !== 'all' ? '#1d4ed8' : '#64748b',
+                                          fontWeight: modalFilterFinMonth !== 'all' ? 700 : 400,
+                                          cursor: 'pointer',
+                                          maxWidth: 88,
+                                        }}
+                                      >
+                                        <option value="all">Mes: Todos</option>
+                                        {modalFilterOptions.hasEmptyFin && <option value="empty">(Sin fecha)</option>}
+                                        {modalFilterOptions.finMonths.map(m => (
+                                          <option key={m} value={m}>{fmtMonthLabel(m)}</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'motivo':
+                              return (
+                                <th key="motivo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 150, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                                    <div onClick={() => toggleModalSort('motivo')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'motivo' ? '#2563eb' : '#475569' }}>
+                                      {dragHandle}
+                                      <span>Diagnóstico / Motivo</span>
+                                      {modalSortField === 'motivo' ? (
+                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      ) : (
+                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      )}
+                                    </div>
+                                    {modalFilterOptions.motivos.length > 1 && (
+                                      <select
+                                        value={modalFilterMotivo}
+                                        onChange={e => setModalFilterMotivo(e.target.value)}
+                                        onClick={e => e.stopPropagation()}
+                                        style={{
+                                          fontSize: 9.5,
+                                          padding: '1px 3px',
+                                          borderRadius: 4,
+                                          border: modalFilterMotivo !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+                                          background: modalFilterMotivo !== 'all' ? '#eff6ff' : '#fff',
+                                          color: modalFilterMotivo !== 'all' ? '#1d4ed8' : '#64748b',
+                                          fontWeight: modalFilterMotivo !== 'all' ? 700 : 400,
+                                          cursor: 'pointer',
+                                          maxWidth: 125,
+                                        }}
+                                      >
+                                        <option value="all">Motivo: Todos</option>
+                                        {modalFilterOptions.motivos.map(mot => (
+                                          <option key={mot} value={mot}>{mot.slice(0, 30)}...</option>
+                                        ))}
+                                      </select>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'desfase':
+                              return (
+                                <th key="desfase" {...dragHandlers} style={{ ...baseThStyle, minWidth: 80, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('desfase')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'desfase' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Desfase</span>
+                                    {modalSortField === 'desfase' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            default:
+                              return null;
+                          }
+                        })}
                       </tr>
                     </thead>
                     <tbody>
@@ -3597,17 +4795,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                         const t = item.iniciativa;
                         const idStr = String(t.id).padStart(4, '0');
                         const cfg = ETAPAS_MAP.get(t.etapa_actual);
+                        const { asig, inicio, fin } = getModalItemDates(item);
+                        const isSLA = item.reason.includes('En plazo SLA');
 
-                        let datesText = '—';
-                        if (item.category === 'estimacion') {
-                          datesText = `${fmtDateShort(t.fecha_inicio_estimacion)} → ${fmtDateShort(t.fecha_fin_estimacion)}`;
-                        } else if (item.category === 'reestimacion') {
-                          datesText = `${fmtDateShort(t.fecha_inicio_reestimacion)} → ${fmtDateShort(t.fecha_fin_reestimacion)}`;
-                        } else if (item.category === 'planificacion') {
-                          datesText = `${fmtDateShort(t.fecha_inicio_planificada)} → ${fmtDateShort(t.fecha_fin_planificada)}`;
-                        } else {
-                          datesText = `${fmtDateShort(t.fecha_inicio_planificada || t.fecha_inicio_estimacion)} → ${fmtDateShort(t.fecha_fin_planificada || t.fecha_fin_estimacion)}`;
-                        }
+                        const cellBaseStyle: React.CSSProperties = {
+                          padding: '6px 8px',
+                          fontSize: 11,
+                          verticalAlign: 'middle',
+                          borderRight: '1px solid #f1f5f9',
+                        };
 
                         return (
                           <tr
@@ -3620,7 +4816,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                             onMouseOver={e => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                             onMouseOut={e => (e.currentTarget.style.backgroundColor = idx % 2 === 0 ? '#ffffff' : '#f8fafc')}
                           >
-                            <td style={{ padding: '10px 8px', textAlign: 'center' }}>
+                            <td style={{ padding: '6px', textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #f1f5f9' }}>
                               <button
                                 type="button"
                                 onClick={() => setDetailModalIniciativa(t)}
@@ -3628,8 +4824,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                   background: '#eff6ff',
                                   border: '1px solid #bfdbfe',
                                   borderRadius: 6,
-                                  width: 28,
-                                  height: 28,
+                                  width: 26,
+                                  height: 26,
                                   display: 'inline-flex',
                                   alignItems: 'center',
                                   justifyContent: 'center',
@@ -3647,103 +4843,139 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                 }}
                                 title="Abrir detalle completo de la iniciativa"
                               >
-                                <Eye size={14} />
+                                <Eye size={13} />
                               </button>
                             </td>
-                            {!hiddenModalCols.has('id') && (
-                              <td style={{ padding: '12px 12px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap' }}>
-                                {idStr}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('titulo') && (
-                              <td style={{ padding: '12px 12px', fontWeight: 600, color: '#1e293b', minWidth: 240, lineHeight: 1.45, wordBreak: 'break-word' }}>
-                                {t.titulo}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('it_bp') && (
-                              <td style={{ padding: '12px 12px', color: '#475569', fontSize: 11, whiteSpace: 'nowrap' }}>
-                                {t.it_bp || '—'}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('vp_solicitante') && (
-                              <td style={{ padding: '12px 12px', color: '#475569', fontSize: 11, minWidth: 160 }}>
-                                {t.vp_solicitante || '—'}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('solicitante') && (
-                              <td style={{ padding: '12px 12px', color: '#475569', fontSize: 11, whiteSpace: 'nowrap' }}>
-                                {t.usuario_negocio || '—'}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('lider_dominio') && (
-                              <td style={{ padding: '12px 12px', color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap' }}>
-                                {t.lider_dominio || '(Sin asignar)'}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('etapa_actual') && (
-                              <td style={{ padding: '12px 12px' }}>
-                                {cfg ? (
-                                  <span
-                                    style={{
-                                      fontSize: 10,
-                                      padding: '2px 8px',
-                                      borderRadius: 20,
-                                      backgroundColor: cfg.bgColor,
-                                      color: cfg.textColor,
-                                      fontWeight: 600,
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    {cfg.label}
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: 10, color: '#64748b' }}>{t.etapa_actual}</span>
-                                )}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('fechas') && (
-                              <td style={{ padding: '12px 12px', color: '#475569', fontSize: 11, whiteSpace: 'nowrap' }}>
-                                {datesText}
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('motivo') && (
-                              <td style={{ padding: '12px 12px', fontSize: 11 }}>
-                                <span
-                                  style={{
-                                    display: 'inline-flex',
-                                    alignItems: 'center',
-                                    gap: 4,
-                                    color: item.category === 'estimacion' ? '#b45309' : item.category === 'reestimacion' ? '#6d28d9' : '#be123c',
-                                    fontWeight: 500,
-                                  }}
-                                >
-                                  {item.reason}
-                                </span>
-                              </td>
-                            )}
-                            {!hiddenModalCols.has('desfase') && (
-                              <td style={{ padding: '12px 12px', textAlign: 'right' }}>
-                                {item.delayDays > 0 ? (
-                                  <span
-                                    style={{
-                                      display: 'inline-block',
-                                      fontSize: 10,
-                                      fontWeight: 700,
-                                      padding: '2px 8px',
-                                      borderRadius: 20,
-                                      background: '#fef2f2',
-                                      color: '#ef4444',
-                                      border: '1px solid #fecaca',
-                                      whiteSpace: 'nowrap',
-                                    }}
-                                  >
-                                    +{item.delayDays} días
-                                  </span>
-                                ) : (
-                                  <span style={{ color: '#94a3b8', fontSize: 11 }}>—</span>
-                                )}
-                              </td>
-                            )}
+
+                            {modalColOrder.map(colId => {
+                              if (hiddenModalCols.has(colId)) return null;
+                              switch (colId) {
+                                case 'id':
+                                  return (
+                                    <td key="id" style={{ ...cellBaseStyle, fontWeight: 700, color: '#3b82f6', textAlign: 'center', whiteSpace: 'nowrap' }}>
+                                      {idStr}
+                                    </td>
+                                  );
+                                case 'titulo':
+                                  return (
+                                    <td key="titulo" style={{ ...cellBaseStyle, fontWeight: 600, color: '#1e293b', minWidth: 200, maxWidth: 300, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                                      {t.titulo}
+                                    </td>
+                                  );
+                                case 'it_bp':
+                                  return (
+                                    <td key="it_bp" style={{ ...cellBaseStyle, color: '#475569', whiteSpace: 'nowrap' }}>
+                                      {t.it_bp || '—'}
+                                    </td>
+                                  );
+                                case 'vp_solicitante':
+                                  return (
+                                    <td key="vp_solicitante" style={{ ...cellBaseStyle, color: '#475569', minWidth: 120, lineHeight: 1.3 }}>
+                                      {t.vp_solicitante || '—'}
+                                    </td>
+                                  );
+                                case 'solicitante':
+                                  return (
+                                    <td key="solicitante" style={{ ...cellBaseStyle, color: '#475569', whiteSpace: 'nowrap' }}>
+                                      {t.usuario_negocio || '—'}
+                                    </td>
+                                  );
+                                case 'lider_dominio':
+                                  return (
+                                    <td key="lider_dominio" style={{ ...cellBaseStyle, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                      {t.lider_dominio || '(Sin asignar)'}
+                                    </td>
+                                  );
+                                case 'etapa_actual':
+                                  return (
+                                    <td key="etapa_actual" style={{ ...cellBaseStyle, textAlign: 'center' }}>
+                                      {cfg ? (
+                                        <span
+                                          style={{
+                                            fontSize: 9.5,
+                                            padding: '2px 7px',
+                                            borderRadius: 20,
+                                            backgroundColor: cfg.bgColor,
+                                            color: cfg.textColor,
+                                            fontWeight: 600,
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          {cfg.label}
+                                        </span>
+                                      ) : (
+                                        <span style={{ fontSize: 9.5, color: '#64748b' }}>{t.etapa_actual}</span>
+                                      )}
+                                    </td>
+                                  );
+                                case 'fecha_asignacion':
+                                  return (
+                                    <td key="fecha_asignacion" style={{ ...cellBaseStyle, color: asig ? '#334155' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: asig ? 500 : 400, textAlign: 'center' }}>
+                                      {asig ? fmtDateShort(asig) : '—'}
+                                    </td>
+                                  );
+                                case 'fecha_inicio':
+                                  return (
+                                    <td key="fecha_inicio" style={{ ...cellBaseStyle, color: inicio ? '#334155' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: inicio ? 500 : 400, textAlign: 'center' }}>
+                                      {inicio ? fmtDateShort(inicio) : '—'}
+                                    </td>
+                                  );
+                                case 'fecha_fin':
+                                  return (
+                                    <td key="fecha_fin" style={{ ...cellBaseStyle, color: fin ? '#0f172a' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: fin ? 600 : 400, textAlign: 'center' }}>
+                                      {fin ? fmtDateShort(fin) : '—'}
+                                    </td>
+                                  );
+                                case 'motivo':
+                                  return (
+                                    <td key="motivo" style={{ ...cellBaseStyle }}>
+                                      <MotivoBadgeChip reason={item.reason} category={item.category} fullText={true} />
+                                    </td>
+                                  );
+                                case 'desfase':
+                                  return (
+                                    <td key="desfase" style={{ ...cellBaseStyle, textAlign: 'center' }}>
+                                      {item.delayDays > 0 ? (
+                                        <span
+                                          style={{
+                                            display: 'inline-block',
+                                            fontSize: 9.5,
+                                            fontWeight: 700,
+                                            padding: '2px 7px',
+                                            borderRadius: 20,
+                                            background: '#fef2f2',
+                                            color: '#ef4444',
+                                            border: '1px solid #fecaca',
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          +{item.delayDays} días
+                                        </span>
+                                      ) : isSLA ? (
+                                        <span
+                                          style={{
+                                            display: 'inline-block',
+                                            fontSize: 9.5,
+                                            fontWeight: 700,
+                                            padding: '2px 7px',
+                                            borderRadius: 20,
+                                            background: '#ecfdf5',
+                                            color: '#059669',
+                                            border: '1px solid #a7f3d0',
+                                            whiteSpace: 'nowrap',
+                                          }}
+                                        >
+                                          En SLA
+                                        </span>
+                                      ) : (
+                                        <span style={{ color: '#94a3b8', fontSize: 11 }}>—</span>
+                                      )}
+                                    </td>
+                                  );
+                                default:
+                                  return null;
+                              }
+                            })}
                           </tr>
                         );
                       })}

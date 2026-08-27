@@ -15,13 +15,13 @@ import { HOJAS_OPERATIVAS } from '../constants';
 // Helpers de parseo
 // ---------------------------------------------------------------------------
 
-/** Busca una clave en la fila usando comparación exacta o parcial (case-insensitive), normalizando espacios/saltos de línea. */
+/** Busca una clave en la fila usando comparación exacta (case-insensitive), normalizando espacios/saltos de línea. */
 function getVal(row: Record<string, unknown>, ...keys: string[]): unknown {
   for (const key of keys) {
+    const normSearch = key.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
     const found = Object.keys(row).find(k => {
-      const normK = k.toLowerCase().replace(/\s+/g, ' ').trim();
-      const normSearch = key.toLowerCase().replace(/\s+/g, ' ').trim();
-      return normK === normSearch || normK.includes(normSearch);
+      const normK = k.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
+      return normK === normSearch;
     });
     if (found !== undefined && row[found] !== undefined && row[found] !== '') {
       return row[found];
@@ -386,11 +386,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               estatus_estimacion:
                 parseStr(g('Estatus Estimación')),
               fecha_inicio_estimacion:
-                formatDt(g('Fecha inicio  (estimación)', 'Fecha inicio (estimación)', 'Fecha inicio (estimacion)'))
-                || (['por_estimar', 'por_aprobar_estimacion', 'registro_incompleto'].includes(etapa) ? formatDt(g('Fecha inicio')) : null),
+                formatDt(g('Fecha inicio  (estimación)', 'Fecha inicio (estimación)', 'Fecha inicio (estimacion)', 'Fecha inicio')),
               fecha_fin_estimacion:
-                formatDt(g('Fecha fin (estimación)', 'Fecha fin (estimacion)'))
-                || (['por_estimar', 'por_aprobar_estimacion', 'registro_incompleto'].includes(etapa) ? formatDt(g('Fecha fin')) : null),
+                formatDt(g('Fecha fin (estimación)', 'Fecha fin (estimacion)', 'Fecha fin')),
               fecha_inicio_reestimacion:
                 formatDt(g('Fecha de inicio reestimación', 'Fecha de inicio reestimacion', 'Fecha inicio reestimación', 'Fecha inicio reestimacion')),
               fecha_fin_reestimacion:
@@ -398,23 +396,23 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               estatus_reestimacion:
                 parseStr(g('Estatus Reestimación', 'Estatus Reestimacion')),
               motivo_reestimacion:
-                parseStr(g('Motivo de Reestimación', 'Motivo de Reestimacion', 'Motivo')),
+                parseStr(g('Motivo de Reestimación', 'Motivo de Reestimacion', 'Motivo', 'Reestimación', 'Reestimacion')),
               accion_brm:
-                parseStr(g('Acción (Atender', 'Accion')),
+                parseStr(g('Acción (Atender, desestimar o backlog)', 'Acción (Atender', 'Accion (Atender', 'Accion')),
               prioridad_brm:
-                parseStr(g('Priorización de atención', 'Prioridad', 'Priorización', 'Priorizacion')),
+                parseStr(g('Priorización de atención (A, B, C)', 'Priorización de atención', 'Priorizacion de atencion', 'Prioridad', 'Priorización', 'Priorizacion')),
               fecha_inicio_planificada:
-                formatDt(g('Fecha inicio [Planificada]', 'Fecha inicio\r\n[Planificada]', 'Fecha inicio planificada')),
+                formatDt(g('Fecha inicio [Planificada]', 'Fecha inicio\r\n[Planificada]', 'Fecha inicio\n[Planificada]', 'Fecha inicio planificada')),
               fecha_fin_planificada:
-                formatDt(g('Fecha fin [Planificada]', 'Fecha fin\r\n[Planificada]', 'Fecha fin planificada')),
+                formatDt(g('Fecha fin [Planificada]', 'Fecha fin\r\n[Planificada]', 'Fecha fin\n[Planificada]', 'Fecha fin planificada')),
               impacto_sox:
                 parseSiNo(g('Impacto SOX', 'SOX')),
               aprobar_estimacion:
-                parseStr(g('Aprobar estimación', 'Aprobar estimacion')),
+                parseStr(g('Aprobar Estimación (SI/NO)', 'Aprobar Estimacion (SI/NO)', 'Aprobar Estimación/Reestimación (SI/NO)', 'Aprobar Estimacion/Reestimacion (SI/NO)', 'Aprobar estimación', 'Aprobar estimacion')),
               presupuesto_habilitado:
-                parseStr(g('Presupuesto Habilitado', 'Presupuesto habilitado')),
+                parseStr(g('Presupuesto habilitado (SI/NO)', 'Presupuesto habilitado\r\n(SI/NO)', 'Presupuesto habilitado\n(SI/NO)', 'Presupuesto Habilitado', 'Presupuesto habilitado')),
               planificacion_aprobada:
-                parseStr(g('Planificación aprobada', 'Planificacion aprobada')),
+                parseStr(g('Planificación aprobada (SI/NO)', 'Planificacion aprobada (SI/NO)', 'Planificación aprobada', 'Planificacion aprobada')),
               raw_fields: extractRawFields(row),
             };
 

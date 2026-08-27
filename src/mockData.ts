@@ -78,7 +78,14 @@ export function generateMockData(): DashboardData {
       complejidad: pick(complejidades),
       lider_dominio: pick(lideres),
       asignado_por: Math.random() > 0.3 ? 'PMO' : null,
-      fecha_asignacion: null,
+      fecha_asignacion:
+        etapa === 'por_estimar'
+          ? Math.random() > 0.5
+            ? subDays(today, Math.floor(Math.random() * 4) + 1).toISOString() // 1 a 4 días (dentro de SLA 5 días)
+            : Math.random() > 0.3
+            ? subDays(today, Math.floor(Math.random() * 12) + 6).toISOString() // > 5 días (fuera de SLA)
+            : null
+          : Math.random() > 0.4 ? subDays(today, 10).toISOString() : null,
       duracion_meses: Math.floor(Math.random() * 6) + 1,
       costo_usd,
       costo_soles,
@@ -86,8 +93,8 @@ export function generateMockData(): DashboardData {
       proyecto_o_req: pick(['Proyecto', 'Requerimiento']),
       funcionalidad_nueva: pick(['SI', 'NO']),
       estatus_estimacion: etapa === 'por_estimar' ? pick(['Pendiente', 'En proceso']) : 'Finalizada',
-      fecha_inicio_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? addDays(created, 5).toISOString() : null,
-      fecha_fin_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? addDays(created, etapa === 'por_estimar' ? (Math.random() > 0.5 ? -10 : 20) : 25).toISOString() : null,
+      fecha_inicio_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? (etapa === 'por_estimar' && Math.random() > 0.6 ? null : addDays(created, 5).toISOString()) : null,
+      fecha_fin_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? (etapa === 'por_estimar' && Math.random() > 0.5 ? null : addDays(created, etapa === 'por_estimar' ? (Math.random() > 0.5 ? -10 : 20) : 25).toISOString()) : null,
       fecha_inicio_reestimacion: etapa === 'por_reestimar' ? addDays(created, 30).toISOString() : null,
       fecha_fin_reestimacion: etapa === 'por_reestimar' ? addDays(created, Math.random() > 0.5 ? -5 : 45).toISOString() : null,
       estatus_reestimacion: etapa === 'por_reestimar' ? 'En proceso' : null,
@@ -95,9 +102,9 @@ export function generateMockData(): DashboardData {
       accion_brm: null,
       prioridad_brm: pick(prioridades_brm),
       fecha_inicio_planificada:
-        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.4 ? subDays(today, 15).toISOString() : addDays(today, 10).toISOString()) : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 10).toISOString()) : null,
       fecha_fin_planificada:
-        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.4 ? subDays(today, 5).toISOString() : addDays(today, 120).toISOString()) : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 120).toISOString()) : null,
       impacto_sox: pick(['SI', 'NO', null] as Array<'SI' | 'NO' | null>),
       aprobar_estimacion: null,
       presupuesto_habilitado: null,

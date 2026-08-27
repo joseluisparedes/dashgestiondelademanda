@@ -43,8 +43,8 @@ body {
 ::-webkit-scrollbar-thumb { background: var(--border-2); border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--text-3); }
 
-/* ── Date input dark scheme fix ─────────────────────────────── */
-input[type="date"] { color-scheme: light; }
+/* ── Date and Month input dark scheme fix ────────────────────── */
+input[type="date"], input[type="month"] { color-scheme: light; }
 
 /* ── Arbitrary Tailwind overrides for corporate styles ── */
 .bg-\[\#4F5AF5\] {

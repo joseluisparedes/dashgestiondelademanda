@@ -217,31 +217,338 @@ interface StageDateCardProps {
   setFilters: (f: React.SetStateAction<FilterState>) => void;
 }
 
+const SHORT_MONTHS = [
+  { val: '01', name: 'Ene' },
+  { val: '02', name: 'Feb' },
+  { val: '03', name: 'Mar' },
+  { val: '04', name: 'Abr' },
+  { val: '05', name: 'May' },
+  { val: '06', name: 'Jun' },
+  { val: '07', name: 'Jul' },
+  { val: '08', name: 'Ago' },
+  { val: '09', name: 'Sep' },
+  { val: '10', name: 'Oct' },
+  { val: '11', name: 'Nov' },
+  { val: '12', name: 'Dic' },
+];
+
+const MONTH_NAMES_FULL: Record<string, string> = {
+  '01': 'Enero',
+  '02': 'Febrero',
+  '03': 'Marzo',
+  '04': 'Abril',
+  '05': 'Mayo',
+  '06': 'Junio',
+  '07': 'Julio',
+  '08': 'Agosto',
+  '09': 'Septiembre',
+  '10': 'Octubre',
+  '11': 'Noviembre',
+  '12': 'Diciembre',
+};
+
+interface MonthMultiSelectProps {
+  mesesField: keyof FilterState;
+  filters: FilterState;
+  setFilters: (f: React.SetStateAction<FilterState>) => void;
+  alignRight?: boolean;
+}
+
+function MonthMultiSelect({
+  mesesField,
+  filters,
+  setFilters,
+  alignRight = false,
+}: MonthMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [activeYear, setActiveYear] = useState('2026');
+  const containerRef = useRef<HTMLDivElement>(null);
+  const selected = (filters[mesesField] as string[]) || [];
+
+  // Click outside listener
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    if (open) {
+      document.addEventListener('mousedown', handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener('mousedown', handleClickOutside);
+    };
+  }, [open]);
+
+  const toggleMonth = (ym: string) => {
+    setFilters(prev => {
+      const cur = (prev[mesesField] as string[]) || [];
+      const next = cur.includes(ym) ? cur.filter(x => x !== ym) : [...cur, ym];
+      return { ...prev, [mesesField]: next };
+    });
+  };
+
+  const clearMonths = (e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    setFilters(prev => ({ ...prev, [mesesField]: [] }));
+  };
+
+  // Label formatting
+  let displayLabel = 'Elegir mes';
+  if (selected.length === 1) {
+    const [y, m] = selected[0].split('-');
+    const mName = MONTH_NAMES_FULL[m] || m;
+    displayLabel = `Mes: ${mName} ${y}`;
+  } else if (selected.length > 1) {
+    displayLabel = `Meses: ${selected.length} seleccionados`;
+  }
+
+  return (
+    <div className={`relative ${open ? 'z-50' : 'z-10'}`} ref={containerRef}>
+      <button
+        type="button"
+        onClick={() => setOpen(prev => !prev)}
+        className={`w-full flex items-center justify-between gap-1 px-2 py-1 rounded-md border text-left transition-all cursor-pointer select-none text-[11px] font-semibold ${
+          selected.length > 0
+            ? 'bg-blue-50/95 border-blue-400 text-blue-800 shadow-2xs'
+            : 'bg-white border-slate-200 text-slate-600 hover:border-slate-300'
+        }`}
+        title={selected.length > 0 ? selected.join(', ') : 'Filtrar por uno o varios meses'}
+      >
+        <div className="flex items-center gap-1.5 min-w-0 truncate">
+          <Calendar size={12} className={selected.length > 0 ? 'text-blue-600' : 'text-slate-400'} />
+          <span className="truncate">{displayLabel}</span>
+        </div>
+        <div className="flex items-center gap-0.5 shrink-0">
+          {selected.length > 0 && (
+            <span
+              onClick={clearMonths}
+              className="p-0.5 rounded hover:bg-blue-200 text-blue-700 hover:text-blue-900 cursor-pointer inline-flex items-center"
+              title="Limpiar meses"
+            >
+              <X size={11} />
+            </span>
+          )}
+          <ChevronDown
+            size={12}
+            className={`text-slate-400 transition-transform duration-150 ${open ? 'rotate-180 text-blue-600' : ''}`}
+          />
+        </div>
+      </button>
+
+      {open && (
+        <div
+          className={`absolute top-full mt-1.5 w-60 bg-white border border-slate-200/90 rounded-xl shadow-2xl z-50 p-2.5 text-slate-800 animate-in fade-in-50 zoom-in-95 duration-100 ${
+            alignRight ? 'right-0' : 'left-0'
+          }`}
+        >
+          {/* Header con pestañas de Año */}
+          <div className="flex items-center justify-between pb-1.5 mb-1.5 border-b border-slate-100">
+            <div className="flex items-center gap-1 bg-slate-100 p-0.5 rounded-lg">
+              {['2025', '2026', '2027'].map(yr => (
+                <button
+                  key={yr}
+                  type="button"
+                  onClick={() => setActiveYear(yr)}
+                  className={`text-[10px] font-bold px-2 py-0.5 rounded-md transition-all cursor-pointer ${
+                    activeYear === yr
+                      ? 'bg-white text-blue-700 shadow-2xs'
+                      : 'text-slate-500 hover:text-slate-800'
+                  }`}
+                >
+                  {yr}
+                </button>
+              ))}
+            </div>
+            {selected.length > 0 && (
+              <button
+                type="button"
+                onClick={() => clearMonths()}
+                className="text-[10px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
+              >
+                Limpiar ({selected.length})
+              </button>
+            )}
+          </div>
+
+          {/* Grilla 4x3 de Meses */}
+          <div className="grid grid-cols-4 gap-1.5 py-1">
+            {SHORT_MONTHS.map(m => {
+              const ym = `${activeYear}-${m.val}`;
+              const isSelected = selected.includes(ym);
+              return (
+                <button
+                  key={m.val}
+                  type="button"
+                  onClick={() => toggleMonth(ym)}
+                  className={`py-1.5 rounded-lg text-[10px] font-bold text-center transition-all cursor-pointer select-none ${
+                    isSelected
+                      ? 'bg-blue-600 text-white shadow-xs scale-102 font-extrabold'
+                      : 'bg-slate-50 text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200/60'
+                  }`}
+                  title={`${MONTH_NAMES_FULL[m.val]} ${activeYear}`}
+                >
+                  {m.name}
+                </button>
+              );
+            })}
+          </div>
+
+          {/* Footer */}
+          <div className="pt-2 mt-1 border-t border-slate-100 flex justify-between items-center px-0.5">
+            <span className="text-[10px] text-slate-500 font-medium truncate">
+              {selected.length === 0 ? '0 seleccionados' : `${selected.length} mes(es) act.`}
+            </span>
+            <button
+              type="button"
+              onClick={() => setOpen(false)}
+              className="text-[10px] px-3 py-1 rounded-md bg-blue-600 hover:bg-blue-700 text-white font-bold transition-colors cursor-pointer shadow-xs"
+            >
+              Listo
+            </button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+interface DateRangeBlockProps {
+  label: string;
+  mesesField: keyof FilterState;
+  desdeField: keyof FilterState;
+  hastaField: keyof FilterState;
+  filters: FilterState;
+  setFilters: (f: React.SetStateAction<FilterState>) => void;
+  accentStyles: { focus: string };
+  borderColor: string;
+  bgColor: string;
+  alignRight?: boolean;
+}
+
+function DateRangeBlock({
+  label,
+  mesesField,
+  desdeField,
+  hastaField,
+  filters,
+  setFilters,
+  accentStyles,
+  borderColor,
+  bgColor,
+  alignRight = false,
+}: DateRangeBlockProps) {
+  const selectedMonths = (filters[mesesField] as string[]) || [];
+  const desdeVal = (filters[desdeField] as string) || '';
+  const hastaVal = (filters[hastaField] as string) || '';
+  const hasValue = Boolean(selectedMonths.length > 0 || desdeVal || hastaVal);
+
+  const handleClear = () => {
+    setFilters(prev => ({
+      ...prev,
+      [mesesField]: [],
+      [desdeField]: '',
+      [hastaField]: '',
+    }));
+  };
+
+  return (
+    <div
+      className={`p-2.5 rounded-lg border transition-all flex flex-col gap-2 ${
+        hasValue ? `${borderColor} ${bgColor} shadow-2xs` : 'border-slate-200/80 bg-slate-50/60'
+      }`}
+    >
+      <div className="flex items-center justify-between">
+        <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
+          {label}
+        </span>
+        {hasValue && (
+          <button
+            type="button"
+            onClick={handleClear}
+            className="text-[8px] font-bold text-red-500 hover:text-red-700 hover:underline cursor-pointer"
+          >
+            Borrar
+          </button>
+        )}
+      </div>
+
+      {/* Selector Multi-Mes desplegable */}
+      <MonthMultiSelect
+        mesesField={mesesField}
+        filters={filters}
+        setFilters={setFilters}
+        alignRight={alignRight}
+      />
+
+      {/* Días específicos (Desde / Hasta) */}
+      <div className="flex flex-col gap-1 pt-1.5 border-t border-slate-200/60">
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] font-semibold text-slate-400 w-9 shrink-0">Desde</span>
+          <input
+            type="date"
+            value={desdeVal}
+            onChange={e => setFilters(prev => ({ ...prev, [desdeField]: e.target.value }))}
+            className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
+          />
+        </div>
+        <div className="flex items-center gap-1">
+          <span className="text-[9px] font-semibold text-slate-400 w-9 shrink-0">Hasta</span>
+          <input
+            type="date"
+            value={hastaVal}
+            onChange={e => setFilters(prev => ({ ...prev, [hastaField]: e.target.value }))}
+            className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
+          />
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function StageDateCard({
   title,
   stepNum,
   accent,
+  inicioMesesField,
   inicioDesdeField,
   inicioHastaField,
+  finMesesField,
   finDesdeField,
   finHastaField,
   filters,
   setFilters,
-}: StageDateCardProps) {
+}: {
+  title: string;
+  stepNum: string;
+  accent: 'blue' | 'purple' | 'amber';
+  inicioMesesField: keyof FilterState;
+  inicioDesdeField: keyof FilterState;
+  inicioHastaField: keyof FilterState;
+  finMesesField: keyof FilterState;
+  finDesdeField: keyof FilterState;
+  finHastaField: keyof FilterState;
+  filters: FilterState;
+  setFilters: (f: React.SetStateAction<FilterState>) => void;
+}) {
+  const iniMeses = (filters[inicioMesesField] as string[]) || [];
   const iniDesde = (filters[inicioDesdeField] as string) || '';
   const iniHasta = (filters[inicioHastaField] as string) || '';
+  const finMeses = (filters[finMesesField] as string[]) || [];
   const finDesde = (filters[finDesdeField] as string) || '';
   const finHasta = (filters[finHastaField] as string) || '';
 
-  const hasIni = Boolean(iniDesde || iniHasta);
-  const hasFin = Boolean(finDesde || finHasta);
+  const hasIni = Boolean(iniMeses.length > 0 || iniDesde || iniHasta);
+  const hasFin = Boolean(finMeses.length > 0 || finDesde || finHasta);
   const activeCount = (hasIni ? 1 : 0) + (hasFin ? 1 : 0);
 
   const clearAll = () => {
     setFilters(prev => ({
       ...prev,
+      [inicioMesesField]: [],
       [inicioDesdeField]: '',
       [inicioHastaField]: '',
+      [finMesesField]: [],
       [finDesdeField]: '',
       [finHastaField]: '',
     }));
@@ -290,7 +597,7 @@ function StageDateCard({
           {activeCount > 0 && (
             <button
               onClick={clearAll}
-              className="text-[9px] font-bold text-red-500 hover:text-red-700 flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-red-50"
+              className="text-[9px] font-bold text-red-500 hover:text-red-700 flex items-center gap-0.5 px-1 py-0.5 rounded hover:bg-red-50 cursor-pointer"
               title="Limpiar fechas de esta etapa"
             >
               <X size={10} /> Borrar
@@ -301,83 +608,29 @@ function StageDateCard({
 
       {/* Grid de 2 columnas: Fecha Inicio & Fecha Fin */}
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
-        {/* Sub-bloque Fecha Inicio */}
-        <div className={`p-2 rounded-lg border transition-all ${
-          hasIni ? 'border-blue-300 bg-blue-50/50 shadow-2xs' : 'border-slate-200/80 bg-slate-50/60'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-600">
-              Fecha Inicio
-            </span>
-            {hasIni && (
-              <button
-                onClick={() => setFilters(prev => ({ ...prev, [inicioDesdeField]: '', [inicioHastaField]: '' }))}
-                className="text-[8px] font-bold text-red-500 hover:underline"
-              >
-                Borrar
-              </button>
-            )}
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-semibold text-slate-400 w-8 shrink-0">Desde</span>
-              <input
-                type="date"
-                value={iniDesde}
-                onChange={e => setFilters(prev => ({ ...prev, [inicioDesdeField]: e.target.value }))}
-                className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-semibold text-slate-400 w-8 shrink-0">Hasta</span>
-              <input
-                type="date"
-                value={iniHasta}
-                onChange={e => setFilters(prev => ({ ...prev, [inicioHastaField]: e.target.value }))}
-                className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
-              />
-            </div>
-          </div>
-        </div>
-
-        {/* Sub-bloque Fecha Fin */}
-        <div className={`p-2 rounded-lg border transition-all ${
-          hasFin ? 'border-amber-300 bg-amber-50/50 shadow-2xs' : 'border-slate-200/80 bg-slate-50/60'
-        }`}>
-          <div className="flex items-center justify-between mb-1.5">
-            <span className="text-[10px] font-bold uppercase tracking-wider text-slate-700">
-              Fecha Fin
-            </span>
-            {hasFin && (
-              <button
-                onClick={() => setFilters(prev => ({ ...prev, [finDesdeField]: '', [finHastaField]: '' }))}
-                className="text-[8px] font-bold text-red-500 hover:underline"
-              >
-                Borrar
-              </button>
-            )}
-          </div>
-          <div className="flex flex-col gap-1">
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-semibold text-slate-400 w-8 shrink-0">Desde</span>
-              <input
-                type="date"
-                value={finDesde}
-                onChange={e => setFilters(prev => ({ ...prev, [finDesdeField]: e.target.value }))}
-                className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
-              />
-            </div>
-            <div className="flex items-center gap-1">
-              <span className="text-[9px] font-semibold text-slate-400 w-8 shrink-0">Hasta</span>
-              <input
-                type="date"
-                value={finHasta}
-                onChange={e => setFilters(prev => ({ ...prev, [finHastaField]: e.target.value }))}
-                className={`w-full text-[11px] font-mono border border-slate-200 rounded px-1.5 py-0.5 bg-white text-slate-700 focus:outline-none focus:ring-2 ${accentStyles.focus}`}
-              />
-            </div>
-          </div>
-        </div>
+        <DateRangeBlock
+          label="Fecha Inicio"
+          mesesField={inicioMesesField}
+          desdeField={inicioDesdeField}
+          hastaField={inicioHastaField}
+          filters={filters}
+          setFilters={setFilters}
+          accentStyles={accentStyles}
+          borderColor="border-blue-300"
+          bgColor="bg-blue-50/50"
+        />
+        <DateRangeBlock
+          label="Fecha Fin"
+          mesesField={finMesesField}
+          desdeField={finDesdeField}
+          hastaField={finHastaField}
+          filters={filters}
+          setFilters={setFilters}
+          accentStyles={accentStyles}
+          borderColor="border-amber-300"
+          bgColor="bg-amber-50/50"
+          alignRight={true}
+        />
       </div>
     </div>
   );
@@ -407,24 +660,21 @@ function ToggleFilter({
 
   const toggle = (val: string) => {
     setFilters(prev => {
-      const current = (prev[field] as string[]) || [];
-      const next = current.includes(val)
-        ? current.filter(v => v !== val)
-        : [...current, val];
+      const cur = (prev[field] as string[]) || [];
+      const next = cur.includes(val) ? cur.filter(x => x !== val) : [...cur, val];
       return { ...prev, [field]: next };
     });
   };
 
-  const siStyle = siColor === 'red'
-    ? 'bg-rose-100 border-rose-400 text-rose-800'
-    : 'bg-emerald-100 border-emerald-400 text-emerald-800';
-
-  const buttons: Array<{ val: string; label: string; activeStyle: string; baseStyle: string }> = [
+  const buttons = [
     {
       val: 'SI',
       label: 'SI',
-      activeStyle: siStyle,
-      baseStyle: 'bg-white border-slate-200 text-slate-500',
+      activeStyle:
+        siColor === 'red'
+          ? 'bg-red-500 border-red-600 text-white shadow-xs'
+          : 'bg-emerald-600 border-emerald-700 text-white shadow-xs',
+      baseStyle: 'bg-white border-slate-200 text-slate-700',
     },
     {
       val: 'NO',
@@ -478,6 +728,29 @@ function ToggleFilter({
 // ---------------------------------------------------------------------------
 export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 'demanda' }: FiltersProps) {
   const isPlanificadas = mode === 'planificadas';
+
+  // Estado de secciones colapsables (toggle)
+  const [openSections, setOpenSections] = useState<Record<string, boolean>>({
+    sec1: true,
+    sec2: true,
+    sec3: true,
+    sec4: true,
+  });
+
+  const toggleSection = (key: string) => {
+    setOpenSections(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const allOpen = Object.values(openSections).every(Boolean);
+  const toggleAllSections = () => {
+    const nextVal = !allOpen;
+    setOpenSections({
+      sec1: nextVal,
+      sec2: nextVal,
+      sec3: nextVal,
+      sec4: nextVal,
+    });
+  };
   
   // Conteo de filtros activos por categoría
   const countOrg = 
@@ -490,20 +763,25 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
     (filters.etapas?.length || 0) +
     (filters.complejidades?.length || 0) +
     (filters.pilares?.length || 0) +
-    (filters.tipos_recurso?.length || 0) +
-    (filters.prioridades_brm?.length || 0);
+    (filters.tipos_recurso?.length || 0);
 
   const countFechas =
+    ((filters.fecha_inicio_estimacion_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_inicio_estimacion_desde ? 1 : 0) +
     (filters.fecha_inicio_estimacion_hasta ? 1 : 0) +
+    ((filters.fecha_fin_estimacion_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_fin_estimacion_desde ? 1 : 0) +
     (filters.fecha_fin_estimacion_hasta ? 1 : 0) +
+    ((filters.fecha_inicio_reestimacion_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_inicio_reestimacion_desde ? 1 : 0) +
     (filters.fecha_inicio_reestimacion_hasta ? 1 : 0) +
+    ((filters.fecha_fin_reestimacion_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_fin_reestimacion_desde ? 1 : 0) +
     (filters.fecha_fin_reestimacion_hasta ? 1 : 0) +
+    ((filters.fecha_inicio_planificada_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_inicio_planificada_desde ? 1 : 0) +
     (filters.fecha_inicio_planificada_hasta ? 1 : 0) +
+    ((filters.fecha_fin_planificada_meses?.length || 0) > 0 ? 1 : 0) +
     (filters.fecha_fin_planificada_desde ? 1 : 0) +
     (filters.fecha_fin_planificada_hasta ? 1 : 0);
 
@@ -538,11 +816,22 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
           </div>
         </div>
 
-        <div className="flex items-center gap-3">
+        <div className="flex items-center gap-2.5 flex-wrap">
+          {/* Botón colapsar / expandir todas las secciones */}
+          <button
+            type="button"
+            onClick={toggleAllSections}
+            className="text-xs px-3 py-1.5 rounded-lg border border-slate-200 bg-slate-50 text-slate-600 hover:bg-slate-100 font-semibold transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+            title={allOpen ? 'Colapsar todas las secciones' : 'Expandir todas las secciones'}
+          >
+            <ChevronDown size={13} className={`transition-transform duration-200 ${allOpen ? 'rotate-180' : ''}`} />
+            <span>{allOpen ? 'Colapsar todo' : 'Expandir todo'}</span>
+          </button>
+
           {!isPlanificadas && (
             <button
               onClick={onPendientesBPs}
-              className="text-xs px-3.5 py-1.5 rounded-full border font-bold transition-all shadow-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 flex items-center gap-1.5 cursor-pointer"
+              className="text-xs px-3.5 py-1.5 rounded-lg border font-bold transition-all shadow-xs bg-purple-50 border-purple-200 text-purple-700 hover:bg-purple-100 flex items-center gap-1.5 cursor-pointer"
             >
               <span>🌟 Ver Pendientes de BPs</span>
             </button>
@@ -590,256 +879,328 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
       {/* ================================================================
           SECCIÓN 1: ORGANIZACIÓN Y RESPONSABLES
       ================================================================ */}
-      <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs transition-all">
+        <button
+          type="button"
+          onClick={() => toggleSection('sec1')}
+          className={`w-full flex items-center justify-between p-3.5 hover:bg-slate-50/80 transition-colors text-left cursor-pointer select-none bg-slate-50/40 ${
+            openSections.sec1 ? 'rounded-t-xl' : 'rounded-xl'
+          }`}
+          aria-expanded={openSections.sec1}
+        >
           <div className="flex items-center gap-2">
-            <Building2 size={14} className="text-blue-600" />
+            <Building2 size={15} className="text-blue-600" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
               1. Organización y Responsables
             </span>
           </div>
-          {countOrg > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
-              {countOrg} activo{countOrg !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+          <div className="flex items-center gap-2">
+            {countOrg > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-blue-100 text-blue-700">
+                {countOrg} activo{countOrg !== 1 ? 's' : ''}
+              </span>
+            )}
+            <div className="w-6 h-6 rounded-md bg-slate-100/80 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${openSections.sec1 ? 'rotate-180' : ''}`}
+              />
+            </div>
+          </div>
+        </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
-          <MultiSelect
-            label="Institución"
-            field="instituciones"
-            options={options.instituciones}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-          <MultiSelect
-            label="VP Área Solicitante"
-            field="vp_solicitantes"
-            options={options.vp_solicitantes}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-          <MultiSelect
-            label="IT BP"
-            field="it_bps"
-            options={options.it_bps}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-          <MultiSelect
-            label="Líder de Dominio"
-            field="lideres_dominio"
-            options={options.lideres}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-        </div>
+        {openSections.sec1 && (
+          <div className="p-3.5 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-150">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <MultiSelect
+                label="Institución"
+                field="instituciones"
+                options={options.instituciones}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+              <MultiSelect
+                label="VP Área Solicitante"
+                field="vp_solicitantes"
+                options={options.vp_solicitantes}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+              <MultiSelect
+                label="IT BP"
+                field="it_bps"
+                options={options.it_bps}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+              <MultiSelect
+                label="Líder de Dominio"
+                field="lideres_dominio"
+                options={options.lideres}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ================================================================
           SECCIÓN 2: FLUJO, ESTADO Y CLASIFICACIÓN TÉCNICA
       ================================================================ */}
-      <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs transition-all">
+        <button
+          type="button"
+          onClick={() => toggleSection('sec2')}
+          className={`w-full flex items-center justify-between p-3.5 hover:bg-slate-50/80 transition-colors text-left cursor-pointer select-none bg-slate-50/40 ${
+            openSections.sec2 ? 'rounded-t-xl' : 'rounded-xl'
+          }`}
+          aria-expanded={openSections.sec2}
+        >
           <div className="flex items-center gap-2">
-            <GitBranch size={14} className="text-purple-600" />
+            <GitBranch size={15} className="text-purple-600" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
               2. Flujo, Estado y Clasificación
             </span>
           </div>
-          {countFlujo > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
-              {countFlujo} activo{countFlujo !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
+          <div className="flex items-center gap-2">
+            {countFlujo > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-purple-100 text-purple-700">
+                {countFlujo} activo{countFlujo !== 1 ? 's' : ''}
+              </span>
+            )}
+            <div className="w-6 h-6 rounded-md bg-slate-100/80 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${openSections.sec2 ? 'rotate-180' : ''}`}
+              />
+            </div>
+          </div>
+        </button>
 
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-3">
-          <MultiSelect
-            label={isPlanificadas ? 'Estado' : 'Etapa Pipeline'}
-            field="etapas"
-            options={options.etapas}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-          <MultiSelect
-            label="Complejidad"
-            field="complejidades"
-            options={options.complejidades}
-            filters={filters}
-            setFilters={setFilters}
-            mode={mode}
-          />
-          {!isPlanificadas && (
-            <MultiSelect
-              label="Pilar Estratégico"
-              field="pilares"
-              options={options.pilares}
-              filters={filters}
-              setFilters={setFilters}
-              mode={mode}
-            />
-          )}
-          {!isPlanificadas && (
-            <MultiSelect
-              label="Tipo de Recurso"
-              field="tipos_recurso"
-              options={options.recursos}
-              filters={filters}
-              setFilters={setFilters}
-              mode={mode}
-            />
-          )}
-          {!isPlanificadas && (
-            <MultiSelect
-              label="Prioridad BRM"
-              field="prioridades_brm"
-              options={options.prioridades}
-              filters={filters}
-              setFilters={setFilters}
-              mode={mode}
-            />
-          )}
-        </div>
+        {openSections.sec2 && (
+          <div className="p-3.5 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-150">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <MultiSelect
+                label={isPlanificadas ? 'Estado' : 'Etapa Pipeline'}
+                field="etapas"
+                options={options.etapas}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+              <MultiSelect
+                label="Complejidad"
+                field="complejidades"
+                options={options.complejidades}
+                filters={filters}
+                setFilters={setFilters}
+                mode={mode}
+              />
+              {!isPlanificadas && (
+                <MultiSelect
+                  label="Pilar Estratégico"
+                  field="pilares"
+                  options={options.pilares}
+                  filters={filters}
+                  setFilters={setFilters}
+                  mode={mode}
+                />
+              )}
+              {!isPlanificadas && (
+                <MultiSelect
+                  label="Tipo de Recurso"
+                  field="tipos_recurso"
+                  options={options.recursos}
+                  filters={filters}
+                  setFilters={setFilters}
+                  mode={mode}
+                />
+              )}
+            </div>
+          </div>
+        )}
       </div>
 
       {/* ================================================================
           SECCIÓN 3: FECHAS DE INICIO Y FIN POR ETAPA
       ================================================================ */}
       {!isPlanificadas && (
-        <div className="rounded-xl border border-amber-200/90 bg-amber-50/20 p-3.5 shadow-2xs">
-          <div className="flex items-center justify-between mb-3">
+        <div className="rounded-xl border border-amber-200/90 bg-amber-50/20 shadow-2xs transition-all">
+          <button
+            type="button"
+            onClick={() => toggleSection('sec3')}
+            className={`w-full flex items-center justify-between p-3.5 hover:bg-amber-50/60 transition-colors text-left cursor-pointer select-none bg-amber-50/40 ${
+              openSections.sec3 ? 'rounded-t-xl' : 'rounded-xl'
+            }`}
+            aria-expanded={openSections.sec3}
+          >
             <div className="flex items-center gap-2">
-              <Calendar size={14} className="text-amber-600" />
+              <Calendar size={15} className="text-amber-600" />
               <span className="text-xs font-bold uppercase tracking-wider text-slate-800">
                 3. Fechas de Inicio y Fin por Etapa
               </span>
             </div>
-            {countFechas > 0 && (
-              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
-                {countFechas} rango{countFechas !== 1 ? 's' : ''} activo{countFechas !== 1 ? 's' : ''}
-              </span>
-            )}
-          </div>
+            <div className="flex items-center gap-2">
+              {countFechas > 0 && (
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300">
+                  {countFechas} rango{countFechas !== 1 ? 's' : ''} activo{countFechas !== 1 ? 's' : ''}
+                </span>
+              )}
+              <div className="w-6 h-6 rounded-md bg-amber-100/80 flex items-center justify-center text-amber-700 hover:bg-amber-200 transition-colors">
+                <ChevronDown
+                  size={14}
+                  className={`transition-transform duration-200 ${openSections.sec3 ? 'rotate-180' : ''}`}
+                />
+              </div>
+            </div>
+          </button>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
-            <StageDateCard
-              title="Estimación"
-              stepNum="A"
-              accent="blue"
-              inicioDesdeField="fecha_inicio_estimacion_desde"
-              inicioHastaField="fecha_inicio_estimacion_hasta"
-              finDesdeField="fecha_fin_estimacion_desde"
-              finHastaField="fecha_fin_estimacion_hasta"
-              filters={filters}
-              setFilters={setFilters}
-            />
-            <StageDateCard
-              title="Re-estimación"
-              stepNum="B"
-              accent="purple"
-              inicioDesdeField="fecha_inicio_reestimacion_desde"
-              inicioHastaField="fecha_inicio_reestimacion_hasta"
-              finDesdeField="fecha_fin_reestimacion_desde"
-              finHastaField="fecha_fin_reestimacion_hasta"
-              filters={filters}
-              setFilters={setFilters}
-            />
-            <StageDateCard
-              title="Planificación"
-              stepNum="C"
-              accent="amber"
-              inicioDesdeField="fecha_inicio_planificada_desde"
-              inicioHastaField="fecha_inicio_planificada_hasta"
-              finDesdeField="fecha_fin_planificada_desde"
-              finHastaField="fecha_fin_planificada_hasta"
-              filters={filters}
-              setFilters={setFilters}
-            />
-          </div>
+          {openSections.sec3 && (
+            <div className="p-3.5 pt-2 border-t border-amber-200/60 animate-in fade-in-50 duration-150">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+                <StageDateCard
+                  title="Estimación"
+                  stepNum="A"
+                  accent="blue"
+                  inicioMesesField="fecha_inicio_estimacion_meses"
+                  inicioDesdeField="fecha_inicio_estimacion_desde"
+                  inicioHastaField="fecha_inicio_estimacion_hasta"
+                  finMesesField="fecha_fin_estimacion_meses"
+                  finDesdeField="fecha_fin_estimacion_desde"
+                  finHastaField="fecha_fin_estimacion_hasta"
+                  filters={filters}
+                  setFilters={setFilters}
+                />
+                <StageDateCard
+                  title="Re-estimación"
+                  stepNum="B"
+                  accent="purple"
+                  inicioMesesField="fecha_inicio_reestimacion_meses"
+                  inicioDesdeField="fecha_inicio_reestimacion_desde"
+                  inicioHastaField="fecha_inicio_reestimacion_hasta"
+                  finMesesField="fecha_fin_reestimacion_meses"
+                  finDesdeField="fecha_fin_reestimacion_desde"
+                  finHastaField="fecha_fin_reestimacion_hasta"
+                  filters={filters}
+                  setFilters={setFilters}
+                />
+                <StageDateCard
+                  title="Planificación"
+                  stepNum="C"
+                  accent="amber"
+                  inicioMesesField="fecha_inicio_planificada_meses"
+                  inicioDesdeField="fecha_inicio_planificada_desde"
+                  inicioHastaField="fecha_inicio_planificada_hasta"
+                  finMesesField="fecha_fin_planificada_meses"
+                  finDesdeField="fecha_fin_planificada_desde"
+                  finHastaField="fecha_fin_planificada_hasta"
+                  filters={filters}
+                  setFilters={setFilters}
+                />
+              </div>
+            </div>
+          )}
         </div>
       )}
 
       {/* ================================================================
           SECCIÓN 4: APROBACIONES E INDICADORES CLAVE
       ================================================================ */}
-      <div className="rounded-xl border border-slate-200/80 bg-white p-3.5 shadow-2xs">
-        <div className="flex items-center justify-between mb-3">
+      <div className="rounded-xl border border-slate-200/80 bg-white shadow-2xs transition-all">
+        <button
+          type="button"
+          onClick={() => toggleSection('sec4')}
+          className={`w-full flex items-center justify-between p-3.5 hover:bg-slate-50/80 transition-colors text-left cursor-pointer select-none bg-slate-50/40 ${
+            openSections.sec4 ? 'rounded-t-xl' : 'rounded-xl'
+          }`}
+          aria-expanded={openSections.sec4}
+        >
           <div className="flex items-center gap-2">
-            <ShieldCheck size={14} className="text-emerald-600" />
+            <ShieldCheck size={15} className="text-emerald-600" />
             <span className="text-xs font-bold uppercase tracking-wider text-slate-700">
               {isPlanificadas ? '3. Indicadores Clave' : '4. Aprobaciones e Indicadores'}
             </span>
           </div>
-          {countAprob > 0 && (
-            <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
-              {countAprob} activo{countAprob !== 1 ? 's' : ''}
-            </span>
-          )}
-        </div>
-
-        <div className="flex flex-wrap gap-4 items-start">
-          {!isPlanificadas && (
-            <>
-              <MultiSelect
-                label="Aprobar Estimación"
-                field="aprobar_estimacion"
-                options={options.aprobar_estimacion}
-                filters={filters}
-                setFilters={setFilters}
-                mode={mode}
-              />
-              <MultiSelect
-                label="Presupuesto Habilitado"
-                field="presupuesto_habilitado"
-                options={options.presupuesto_habilitado}
-                filters={filters}
-                setFilters={setFilters}
-                mode={mode}
-              />
-              <MultiSelect
-                label="Planificación Aprobada"
-                field="planificacion_aprobada"
-                options={options.planificacion_aprobada}
-                filters={filters}
-                setFilters={setFilters}
-                mode={mode}
-              />
-            </>
-          )}
-
-          <div className="flex flex-wrap gap-4 items-center pl-2 border-l border-slate-200">
-            {!isPlanificadas && (
-              <ToggleFilter
-                label="Impacto SOX"
-                field="impacto_sox"
-                filters={filters}
-                setFilters={setFilters}
-                siColor="red"
-              />
+          <div className="flex items-center gap-2">
+            {countAprob > 0 && (
+              <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700">
+                {countAprob} activo{countAprob !== 1 ? 's' : ''}
+              </span>
             )}
-            <ToggleFilter
-              label="Proyecto SPO"
-              field="proyecto_spo"
-              filters={filters}
-              setFilters={setFilters}
-            />
-            {!isPlanificadas && (
-              <ToggleFilter
-                label="Estab. SIS"
-                field="estabilizacion_sis"
-                filters={filters}
-                setFilters={setFilters}
+            <div className="w-6 h-6 rounded-md bg-slate-100/80 flex items-center justify-center text-slate-500 hover:bg-slate-200 transition-colors">
+              <ChevronDown
+                size={14}
+                className={`transition-transform duration-200 ${openSections.sec4 ? 'rotate-180' : ''}`}
               />
-            )}
+            </div>
           </div>
-        </div>
+        </button>
+
+        {openSections.sec4 && (
+          <div className="p-3.5 pt-2 border-t border-slate-100 animate-in fade-in-50 duration-150">
+            <div className="flex flex-wrap gap-4 items-start">
+              {!isPlanificadas && (
+                <>
+                  <MultiSelect
+                    label="Aprobar Estimación"
+                    field="aprobar_estimacion"
+                    options={options.aprobar_estimacion}
+                    filters={filters}
+                    setFilters={setFilters}
+                    mode={mode}
+                  />
+                  <MultiSelect
+                    label="Presupuesto Habilitado"
+                    field="presupuesto_habilitado"
+                    options={options.presupuesto_habilitado}
+                    filters={filters}
+                    setFilters={setFilters}
+                    mode={mode}
+                  />
+                  <MultiSelect
+                    label="Planificación Aprobada"
+                    field="planificacion_aprobada"
+                    options={options.planificacion_aprobada}
+                    filters={filters}
+                    setFilters={setFilters}
+                    mode={mode}
+                  />
+                </>
+              )}
+
+              <div className="flex flex-wrap gap-4 items-center pl-2 border-l border-slate-200">
+                {!isPlanificadas && (
+                  <ToggleFilter
+                    label="Impacto SOX"
+                    field="impacto_sox"
+                    filters={filters}
+                    setFilters={setFilters}
+                    siColor="red"
+                  />
+                )}
+                <ToggleFilter
+                  label="Proyecto SPO"
+                  field="proyecto_spo"
+                  filters={filters}
+                  setFilters={setFilters}
+                />
+                {!isPlanificadas && (
+                  <ToggleFilter
+                    label="Estab. SIS"
+                    field="estabilizacion_sis"
+                    filters={filters}
+                    setFilters={setFilters}
+                  />
+                )}
+              </div>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* Leyenda y estado */}

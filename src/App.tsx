@@ -156,54 +156,72 @@ function matchesAllFilters(
     check('estabilizacion_sis', t.estabilizacion_sis) &&
     passesApprovals &&
     // Fechas de inicio y fin por cada etapa
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_inicio_estimacion, filters.fecha_inicio_estimacion_desde, filters.fecha_inicio_estimacion_hasta) &&
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    })(t.fecha_inicio_estimacion, filters.fecha_inicio_estimacion_desde, filters.fecha_inicio_estimacion_hasta, filters.fecha_inicio_estimacion_meses) &&
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_fin_estimacion, filters.fecha_fin_estimacion_desde, filters.fecha_fin_estimacion_hasta) &&
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    })(t.fecha_fin_estimacion, filters.fecha_fin_estimacion_desde, filters.fecha_fin_estimacion_hasta, filters.fecha_fin_estimacion_meses) &&
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_inicio_reestimacion, filters.fecha_inicio_reestimacion_desde, filters.fecha_inicio_reestimacion_hasta) &&
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    })(t.fecha_inicio_reestimacion, filters.fecha_inicio_reestimacion_desde, filters.fecha_inicio_reestimacion_hasta, filters.fecha_inicio_reestimacion_meses) &&
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_fin_reestimacion, filters.fecha_fin_reestimacion_desde, filters.fecha_fin_reestimacion_hasta) &&
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    })(t.fecha_fin_reestimacion, filters.fecha_fin_reestimacion_desde, filters.fecha_fin_reestimacion_hasta, filters.fecha_fin_reestimacion_meses) &&
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_inicio_planificada, filters.fecha_inicio_planificada_desde, filters.fecha_inicio_planificada_hasta) &&
-    ((val, desde, hasta) => {
-      if (!desde && !hasta) return true;
+    })(t.fecha_inicio_planificada, filters.fecha_inicio_planificada_desde, filters.fecha_inicio_planificada_hasta, filters.fecha_inicio_planificada_meses) &&
+    ((val, desde, hasta, meses) => {
+      const hasMeses = Boolean(meses && meses.length > 0);
+      if (!hasMeses && !desde && !hasta) return true;
       if (!val) return false;
       const d = val.slice(0, 10);
+      const ym = val.slice(0, 7);
+      if (hasMeses && !meses?.includes(ym)) return false;
       if (desde && d < desde) return false;
       if (hasta && d > hasta) return false;
       return true;
-    })(t.fecha_fin_planificada, filters.fecha_fin_planificada_desde, filters.fecha_fin_planificada_hasta)
+    })(t.fecha_fin_planificada, filters.fecha_fin_planificada_desde, filters.fecha_fin_planificada_hasta, filters.fecha_fin_planificada_meses)
   );
 }
 

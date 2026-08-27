@@ -166,12 +166,6 @@ export function Charts({ iniciativas }: ChartsProps) {
     return { si, no, pctSi: Math.round((si / total) * 100), pctNo: Math.round((no / total) * 100) };
   }, [iniciativas]);
 
-  // --- 9. Prioridad BRM ---
-  const brmData = useMemo(
-    () => countBy(iniciativas, 'prioridad_brm' as keyof Iniciativa),
-    [iniciativas]
-  );
-
   if (iniciativas.length === 0) {
     return (
       <div className="bg-white rounded-xl border border-gray-100 shadow-sm p-10 text-center text-gray-400 text-sm">
@@ -403,30 +397,6 @@ export function Charts({ iniciativas }: ChartsProps) {
             </div>
           </div>
         </div>
-      </ChartCard>
-
-      {/* 9. Prioridad BRM */}
-      <ChartCard title="9. Prioridad BRM">
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={brmData} margin={{ top: 5, right: 40, left: -20, bottom: 5 }}>
-            <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
-            <XAxis dataKey="name" style={{ fontSize: '12px', fontWeight: 600 }} />
-            <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
-            <Tooltip content={<CustomTooltip />} />
-            <Bar dataKey="value" name="Iniciativas" radius={[4, 4, 0, 0]}>
-              {brmData.map((entry, i) => (
-                <Cell
-                  key={i}
-                  fill={
-                    entry.name === 'A' ? '#ef4444' :
-                    entry.name === 'B' ? '#f59e0b' : '#22c55e'
-                  }
-                />
-              ))}
-              <LabelList dataKey="value" position="top" style={{ fontSize: '11px', fontWeight: 700, fill: '#475569' }} />
-            </Bar>
-          </BarChart>
-        </ResponsiveContainer>
       </ChartCard>
 
     </div>

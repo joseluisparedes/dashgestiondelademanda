@@ -119,18 +119,24 @@ export interface FilterState {
   planificacion_aprobada: string[];
   busqueda: string;
   // Fechas de inicio y fin por cada etapa
+  fecha_inicio_estimacion_meses?: string[];
   fecha_inicio_estimacion_desde?: string;
   fecha_inicio_estimacion_hasta?: string;
+  fecha_fin_estimacion_meses?: string[];
   fecha_fin_estimacion_desde?: string;
   fecha_fin_estimacion_hasta?: string;
 
+  fecha_inicio_reestimacion_meses?: string[];
   fecha_inicio_reestimacion_desde?: string;
   fecha_inicio_reestimacion_hasta?: string;
+  fecha_fin_reestimacion_meses?: string[];
   fecha_fin_reestimacion_desde?: string;
   fecha_fin_reestimacion_hasta?: string;
 
+  fecha_inicio_planificada_meses?: string[];
   fecha_inicio_planificada_desde?: string;
   fecha_inicio_planificada_hasta?: string;
+  fecha_fin_planificada_meses?: string[];
   fecha_fin_planificada_desde?: string;
   fecha_fin_planificada_hasta?: string;
 }

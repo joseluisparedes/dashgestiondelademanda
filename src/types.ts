@@ -51,6 +51,12 @@ export interface Iniciativa {
   proyecto_o_req: string | null;
   funcionalidad_nueva: string | null;
   estatus_estimacion: string | null;
+  fecha_inicio_estimacion?: string | null;
+  fecha_fin_estimacion?: string | null;
+  fecha_inicio_reestimacion?: string | null;
+  fecha_fin_reestimacion?: string | null;
+  estatus_reestimacion?: string | null;
+  motivo_reestimacion?: string | null;
   accion_brm: string | null;
   prioridad_brm: string | null;
   fecha_inicio_planificada: string | null;
@@ -112,4 +118,19 @@ export interface FilterState {
   presupuesto_habilitado: string[];
   planificacion_aprobada: string[];
   busqueda: string;
+  // Fechas de inicio y fin por cada etapa
+  fecha_inicio_estimacion_desde?: string;
+  fecha_inicio_estimacion_hasta?: string;
+  fecha_fin_estimacion_desde?: string;
+  fecha_fin_estimacion_hasta?: string;
+
+  fecha_inicio_reestimacion_desde?: string;
+  fecha_inicio_reestimacion_hasta?: string;
+  fecha_fin_reestimacion_desde?: string;
+  fecha_fin_reestimacion_hasta?: string;
+
+  fecha_inicio_planificada_desde?: string;
+  fecha_inicio_planificada_hasta?: string;
+  fecha_fin_planificada_desde?: string;
+  fecha_fin_planificada_hasta?: string;
 }

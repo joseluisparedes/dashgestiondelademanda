@@ -33,6 +33,7 @@ import {
   Banknote,
   CalendarCheck,
   ClipboardList,
+  Columns3,
 } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
@@ -48,6 +49,10 @@ interface ColumnDef {
   label: string;
   render: (t: Iniciativa) => React.ReactNode;
   sortKey?: keyof Iniciativa;
+  subSort?: {
+    inicioKey: keyof Iniciativa;
+    finKey: keyof Iniciativa;
+  };
   className?: string;
 }
 
@@ -1214,7 +1219,7 @@ export function IniciativaDetailModal({ iniciativa, onClose, mode = 'demanda' }:
         onClick={onClose}
         aria-label="Cerrar modal"
       />
-      <div className="relative bg-white w-full max-w-5xl max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-150">
+      <div className="relative bg-white w-full max-w-6xl max-h-[92vh] rounded-2xl shadow-2xl border border-slate-200 overflow-hidden flex flex-col z-10 animate-in zoom-in-95 duration-150">
         {/* Cabecera del modal */}
         <div className="px-6 py-4 border-b border-slate-100 flex justify-between items-center bg-slate-50/70">
           <div className="flex items-center gap-2.5">
@@ -1282,6 +1287,57 @@ function ExpandedRow({
 }
 
 // ---------------------------------------------------------------------------
+// Celda estilizada para rango de fechas por etapa (Inicio / Fin)
+// ---------------------------------------------------------------------------
+function StageDateCell({
+  inicio,
+  fin,
+  accent = 'blue',
+}: {
+  inicio: string | null | undefined;
+  fin: string | null | undefined;
+  accent?: 'blue' | 'purple' | 'amber' | 'emerald';
+}) {
+  const hasIni = Boolean(inicio);
+  const hasFin = Boolean(fin);
+
+  if (!hasIni && !hasFin) {
+    return <span className="text-slate-300 font-mono text-xs text-center block">—</span>;
+  }
+
+  const borderBg = {
+    blue: 'border-blue-100 bg-blue-50/50',
+    purple: 'border-purple-100 bg-purple-50/50',
+    amber: 'border-amber-100 bg-amber-50/50',
+    emerald: 'border-emerald-100 bg-emerald-50/50',
+  }[accent];
+
+  const tagColor = {
+    blue: 'text-blue-700 font-bold',
+    purple: 'text-purple-700 font-bold',
+    amber: 'text-amber-800 font-bold',
+    emerald: 'text-emerald-800 font-bold',
+  }[accent];
+
+  return (
+    <div className={`flex flex-col gap-1 py-1.5 px-2.5 rounded-lg border ${borderBg} min-w-[130px] shadow-2xs`}>
+      <div className="flex items-center justify-between gap-2 text-[11px] font-mono leading-tight">
+        <span className="text-[9px] font-bold uppercase tracking-wider text-slate-400">Inicio</span>
+        <span className={hasIni ? 'text-slate-700 font-medium' : 'text-slate-300 italic'}>
+          {fmtDate(inicio)}
+        </span>
+      </div>
+      <div className="flex items-center justify-between gap-2 text-[11px] font-mono leading-tight border-t border-slate-200/60 pt-1">
+        <span className={`text-[9px] font-extrabold uppercase tracking-wider ${tagColor}`}>Fin</span>
+        <span className={`font-bold ${hasFin ? 'text-slate-900' : 'text-slate-300 italic'}`}>
+          {fmtDate(fin)}
+        </span>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal DataTable
 // ---------------------------------------------------------------------------
 export function DataTable({
@@ -1328,6 +1384,25 @@ export function DataTable({
           render: t => <EtapaBadge etapa={t.etapa_actual} mode={mode} />,
         },
         {
+          id: 'complejidad',
+          label: 'Complejidad',
+          sortKey: 'complejidad',
+          render: t => {
+            if (!t.complejidad) return '—';
+            const c = t.complejidad.toLowerCase();
+            let colorClass = 'bg-slate-100 text-slate-700 border-slate-200';
+            if (c.includes('alta') || c.includes('muy alta')) colorClass = 'bg-rose-50 text-rose-700 border-rose-200';
+            else if (c.includes('media')) colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+            else if (c.includes('baja')) colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+            return (
+              <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${colorClass} whitespace-nowrap`}>
+                {t.complejidad}
+              </span>
+            );
+          },
+          className: 'whitespace-nowrap',
+        },
+        {
           id: 'sub_estado',
           label: 'Sub Estado',
           sortKey: 'sub_estado' as any,
@@ -1349,39 +1424,22 @@ export function DataTable({
           className: 'whitespace-nowrap text-slate-600',
         },
         {
-          id: 'costo_soles',
-          label: 'Costo Soles',
-          sortKey: 'costo_soles',
-          render: t => fmtMoney(t.costo_soles),
-          className: 'text-right font-mono text-slate-600 whitespace-nowrap',
+          id: 'fechas_planificadas',
+          label: 'Planificación',
+          subSort: {
+            inicioKey: 'fecha_inicio_planificada',
+            finKey: 'fecha_fin_planificada',
+          },
+          render: t => <StageDateCell inicio={t.fecha_inicio_planificada} fin={t.fecha_fin_planificada} accent="amber" />,
         },
         {
-          id: 'fecha_inicio_planificada',
-          label: 'F. Inicio Planificada',
-          sortKey: 'fecha_inicio_planificada',
-          render: t => fmtDate(t.fecha_inicio_planificada),
-          className: 'whitespace-nowrap text-xs text-slate-600',
-        },
-        {
-          id: 'fecha_fin_planificada',
-          label: 'F. Fin Planificada',
-          sortKey: 'fecha_fin_planificada',
-          render: t => fmtDate(t.fecha_fin_planificada),
-          className: 'whitespace-nowrap text-xs text-slate-600',
-        },
-        {
-          id: 'fecha_inicio_real',
-          label: 'F. Inicio Real',
-          sortKey: 'fecha_inicio_real' as any,
-          render: t => fmtDate(t.fecha_inicio_real ?? null),
-          className: 'whitespace-nowrap text-xs text-slate-600',
-        },
-        {
-          id: 'fecha_fin_real',
-          label: 'F. Fin Real',
-          sortKey: 'fecha_fin_real' as any,
-          render: t => fmtDate(t.fecha_fin_real ?? null),
-          className: 'whitespace-nowrap text-xs text-slate-600',
+          id: 'fechas_reales',
+          label: 'Real',
+          subSort: {
+            inicioKey: 'fecha_inicio_real' as any,
+            finKey: 'fecha_fin_real' as any,
+          },
+          render: t => <StageDateCell inicio={t.fecha_inicio_real ?? null} fin={t.fecha_fin_real ?? null} accent="emerald" />,
         },
         {
           id: 'id_jira',
@@ -1389,6 +1447,13 @@ export function DataTable({
           sortKey: 'id_jira' as any,
           render: t => (t.id_jira ? <AutoLinkText text={t.id_jira} /> : '—'),
           className: 'whitespace-nowrap text-xs text-slate-600',
+        },
+        {
+          id: 'costo_soles',
+          label: 'Costo Soles',
+          sortKey: 'costo_soles',
+          render: t => fmtMoney(t.costo_soles),
+          className: 'text-right font-mono text-slate-700 whitespace-nowrap font-semibold',
         },
       ];
     }
@@ -1417,7 +1482,7 @@ export function DataTable({
             <span className="font-medium text-slate-800 leading-snug">{t.titulo}</span>
           </div>
         ),
-        className: 'min-w-[280px]',
+        className: 'min-w-[260px]',
       },
       {
         id: 'etapa_actual',
@@ -1426,11 +1491,30 @@ export function DataTable({
         render: t => <EtapaBadge etapa={t.etapa_actual} mode={mode} />,
       },
       {
+        id: 'complejidad',
+        label: 'Complejidad',
+        sortKey: 'complejidad',
+        render: t => {
+          if (!t.complejidad) return '—';
+          const c = t.complejidad.toLowerCase();
+          let colorClass = 'bg-slate-100 text-slate-700 border-slate-200';
+          if (c.includes('alta') || c.includes('muy alta')) colorClass = 'bg-rose-50 text-rose-700 border-rose-200';
+          else if (c.includes('media')) colorClass = 'bg-amber-50 text-amber-700 border-amber-200';
+          else if (c.includes('baja')) colorClass = 'bg-emerald-50 text-emerald-700 border-emerald-200';
+          return (
+            <span className={`inline-flex px-2 py-0.5 text-[10px] font-bold rounded-full border ${colorClass} whitespace-nowrap`}>
+              {t.complejidad}
+            </span>
+          );
+        },
+        className: 'whitespace-nowrap',
+      },
+      {
         id: 'lider_dominio',
         label: 'Líder de Dominio',
         sortKey: 'lider_dominio',
         render: t => t.lider_dominio || '—',
-        className: 'whitespace-nowrap text-slate-700 min-w-[150px]',
+        className: 'whitespace-nowrap text-slate-700 min-w-[140px]',
       },
       {
         id: 'it_bp',
@@ -1440,39 +1524,70 @@ export function DataTable({
         className: 'whitespace-nowrap text-slate-600',
       },
       {
+        id: 'fechas_estimacion',
+        label: 'Estimación',
+        subSort: {
+          inicioKey: 'fecha_inicio_estimacion' as any,
+          finKey: 'fecha_fin_estimacion' as any,
+        },
+        render: t => (
+          <StageDateCell
+            inicio={t.fecha_inicio_estimacion}
+            fin={t.fecha_fin_estimacion}
+            accent="blue"
+          />
+        ),
+      },
+      {
+        id: 'fechas_reestimacion',
+        label: 'Re-estimación',
+        subSort: {
+          inicioKey: 'fecha_inicio_reestimacion' as any,
+          finKey: 'fecha_fin_reestimacion' as any,
+        },
+        render: t => (
+          <StageDateCell
+            inicio={t.fecha_inicio_reestimacion}
+            fin={t.fecha_fin_reestimacion}
+            accent="purple"
+          />
+        ),
+      },
+      {
+        id: 'fechas_planificacion',
+        label: 'Planificación',
+        subSort: {
+          inicioKey: 'fecha_inicio_planificada',
+          finKey: 'fecha_fin_planificada',
+        },
+        render: t => (
+          <StageDateCell
+            inicio={t.fecha_inicio_planificada}
+            fin={t.fecha_fin_planificada}
+            accent="amber"
+          />
+        ),
+      },
+      {
         id: 'duracion_meses',
-        label: 'Tiempo estimado (meses)',
+        label: 'Duración',
         sortKey: 'duracion_meses',
-        render: t => t.duracion_meses ?? '—',
-        className: 'text-center font-mono text-slate-600',
+        render: t => (t.duracion_meses !== null && t.duracion_meses !== undefined ? `${t.duracion_meses} m` : '—'),
+        className: 'text-center font-mono text-slate-600 whitespace-nowrap',
       },
       {
         id: 'costo_usd',
-        label: 'Costo en dólares',
+        label: 'Costo USD',
         sortKey: 'costo_usd',
-        render: t => (t.costo_usd ? `$ ${t.costo_usd.toLocaleString('en-US')}` : '—'),
-        className: 'text-right font-mono text-slate-600 whitespace-nowrap',
+        render: t => fmtUSD(t.costo_usd),
+        className: 'text-right font-mono text-slate-600 whitespace-nowrap font-medium',
       },
       {
         id: 'costo_soles',
         label: 'Costo Soles',
         sortKey: 'costo_soles',
         render: t => fmtMoney(t.costo_soles),
-        className: 'text-right font-mono text-slate-600 whitespace-nowrap',
-      },
-      {
-        id: 'fecha_inicio_planificada',
-        label: 'Fecha Inicio (planificada)',
-        sortKey: 'fecha_inicio_planificada',
-        render: t => fmtDate(t.fecha_inicio_planificada),
-        className: 'whitespace-nowrap text-xs text-slate-600',
-      },
-      {
-        id: 'fecha_fin_planificada',
-        label: 'Fecha fin (planificada)',
-        sortKey: 'fecha_fin_planificada',
-        render: t => fmtDate(t.fecha_fin_planificada),
-        className: 'whitespace-nowrap text-xs text-slate-600',
+        className: 'text-right font-mono text-slate-700 whitespace-nowrap font-semibold',
       },
     ];
   }, [isPlanificadas, mode]);
@@ -1493,8 +1608,31 @@ export function DataTable({
   const [sortConfig, setSortConfig] = useState<{ key: keyof Iniciativa; direction: 'asc' | 'desc' } | null>(null);
   const [columnOrder, setColumnOrder] = useState<string[]>(COLUMNS.map(c => c.id));
   const [draggedCol, setDraggedCol] = useState<string | null>(null);
+  const [hiddenColumnIds, setHiddenColumnIds] = useState<Set<string>>(new Set());
+  const [showColumnPicker, setShowColumnPicker] = useState(false);
 
   const orderedColumns = columnOrder.map(id => COLUMNS.find(c => c.id === id)!).filter(Boolean) as ColumnDef[];
+  const visibleColumns = useMemo(() => {
+    return orderedColumns.filter(c => !hiddenColumnIds.has(c.id));
+  }, [orderedColumns, hiddenColumnIds]);
+
+  const toggleColumnVisibility = (id: string) => {
+    setHiddenColumnIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) {
+        next.delete(id);
+      } else {
+        if (COLUMNS.length - next.size > 1) {
+          next.add(id);
+        }
+      }
+      return next;
+    });
+  };
+
+  const showAllColumns = () => {
+    setHiddenColumnIds(new Set());
+  };
 
   useEffect(() => {
     setColumnOrder(COLUMNS.map(c => c.id));
@@ -1670,16 +1808,27 @@ export function DataTable({
     let sortableItems = [...iniciativas];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
-        let aValue = a[sortConfig.key];
-        let bValue = b[sortConfig.key];
+        const aValue = a[sortConfig.key];
+        const bValue = b[sortConfig.key];
 
-        if (aValue === null || aValue === undefined) aValue = '';
-        if (bValue === null || bValue === undefined) bValue = '';
+        const aEmpty = aValue === null || aValue === undefined || aValue === '';
+        const bEmpty = bValue === null || bValue === undefined || bValue === '';
 
-        if (aValue < bValue) {
+        if (aEmpty && bEmpty) return 0;
+        if (aEmpty) return 1;
+        if (bEmpty) return -1;
+
+        if (typeof aValue === 'number' && typeof bValue === 'number') {
+          return sortConfig.direction === 'asc' ? aValue - bValue : bValue - aValue;
+        }
+
+        const aStr = String(aValue).toLowerCase();
+        const bStr = String(bValue).toLowerCase();
+
+        if (aStr < bStr) {
           return sortConfig.direction === 'asc' ? -1 : 1;
         }
-        if (aValue > bValue) {
+        if (aStr > bStr) {
           return sortConfig.direction === 'asc' ? 1 : -1;
         }
         return 0;
@@ -1705,9 +1854,9 @@ export function DataTable({
       );
     }
     return sortConfig.direction === 'asc' ? (
-      <ArrowUp size={13} className="inline-block ml-1 text-blue-600" />
+      <ArrowUp size={13} className="inline-block ml-1 text-blue-600 font-bold" />
     ) : (
-      <ArrowDown size={13} className="inline-block ml-1 text-blue-600" />
+      <ArrowDown size={13} className="inline-block ml-1 text-blue-600 font-bold" />
     );
   };
 
@@ -1716,13 +1865,15 @@ export function DataTable({
 
     const rows = sortedIniciativas.map(t =>
       orderedColumns.map(col => {
-        const val = t[col.sortKey as keyof Iniciativa];
+        const key = col.sortKey || col.subSort?.finKey;
+        const val = key ? t[key as keyof Iniciativa] : '';
         if (val === null || val === undefined) return '';
         if (
-          col.sortKey === 'fecha_inicio_planificada' ||
-          col.sortKey === 'fecha_fin_planificada' ||
-          col.sortKey === 'fecha_registro' ||
-          col.sortKey === 'fecha_entrega_requerida'
+          key === 'fecha_inicio_planificada' ||
+          key === 'fecha_fin_planificada' ||
+          key === 'fecha_registro' ||
+          key === 'fecha_inicio_estimacion' ||
+          key === 'fecha_fin_estimacion'
         ) {
           return escapeCsvField(fmtDate(val as string));
         }
@@ -1746,7 +1897,7 @@ export function DataTable({
   return (
     <div className="bg-white rounded-xl shadow-xs border border-gray-100 overflow-hidden">
       {/* Cabecera de la tabla */}
-      <div className="p-4 border-b border-gray-100 flex justify-between items-center bg-gray-50/50">
+      <div className="p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50/50">
         <div>
           <h3 className="font-semibold text-gray-800">Detalle de Iniciativas</h3>
           <p className="text-xs text-gray-400 mt-0.5">
@@ -1754,7 +1905,86 @@ export function DataTable({
             {totalPages > 1 && ` · Página ${page} de ${totalPages}`}
           </p>
         </div>
-        <div className="flex gap-2">
+
+        <div className="flex flex-wrap items-center gap-2.5">
+          {/* Selector rápido de ordenamiento por fechas u otros campos */}
+          <div className="flex items-center gap-1.5 bg-white border border-slate-200 rounded-lg px-2.5 py-1 text-xs shadow-2xs">
+            <ArrowUpDown size={12} className="text-slate-400 shrink-0" />
+            <span className="text-[11px] font-semibold text-slate-500 hidden sm:inline">Ordenar por:</span>
+            <select
+              value={sortConfig?.key || ''}
+              onChange={e => {
+                const val = e.target.value as keyof Iniciativa;
+                if (!val) {
+                  setSortConfig(null);
+                } else {
+                  setSortConfig({ key: val, direction: sortConfig?.direction || 'asc' });
+                }
+              }}
+              className="text-xs bg-transparent border-none text-slate-800 font-semibold focus:outline-none cursor-pointer pr-1"
+            >
+              <option value="">(Orden por defecto)</option>
+              {!isPlanificadas && (
+                <>
+                  <optgroup label="Fechas de Planificación">
+                    <option value="fecha_fin_planificada">Planificación · Fecha Fin (Límite)</option>
+                    <option value="fecha_inicio_planificada">Planificación · Fecha Inicio</option>
+                  </optgroup>
+                  <optgroup label="Fechas de Estimación">
+                    <option value="fecha_fin_estimacion">Estimación · Fecha Fin (Límite)</option>
+                    <option value="fecha_inicio_estimacion">Estimación · Fecha Inicio</option>
+                  </optgroup>
+                  <optgroup label="Fechas de Re-estimación">
+                    <option value="fecha_fin_reestimacion">Re-estimación · Fecha Fin (Límite)</option>
+                    <option value="fecha_inicio_reestimacion">Re-estimación · Fecha Inicio</option>
+                  </optgroup>
+                </>
+              )}
+              {isPlanificadas && (
+                <>
+                  <optgroup label="Fechas Planificadas / Reales">
+                    <option value="fecha_fin_planificada">Planificación · Fecha Fin</option>
+                    <option value="fecha_inicio_planificada">Planificación · Fecha Inicio</option>
+                    <option value="fecha_fin_real">Real · Fecha Fin</option>
+                    <option value="fecha_inicio_real">Real · Fecha Inicio</option>
+                  </optgroup>
+                </>
+              )}
+              <optgroup label="Otros Campos">
+                <option value="id">ID</option>
+                <option value="institucion">Institución</option>
+                <option value="titulo">Título</option>
+                <option value="complejidad">Complejidad</option>
+                <option value="lider_dominio">Líder de Dominio</option>
+                <option value="it_bp">IT BP</option>
+                <option value="costo_soles">Costo Soles</option>
+                {!isPlanificadas && <option value="costo_usd">Costo USD</option>}
+              </optgroup>
+            </select>
+
+            {sortConfig && (
+              <button
+                type="button"
+                onClick={() => setSortConfig(prev => prev ? { ...prev, direction: prev.direction === 'asc' ? 'desc' : 'asc' } : null)}
+                className="px-1.5 py-0.5 rounded bg-blue-50 hover:bg-blue-100 text-blue-700 font-mono text-[10px] font-bold transition-colors cursor-pointer border border-blue-200"
+                title={`Cambiar dirección a ${sortConfig.direction === 'asc' ? 'Descendente' : 'Ascendente'}`}
+              >
+                {sortConfig.direction === 'asc' ? '↑ ASC' : '↓ DESC'}
+              </button>
+            )}
+
+            {sortConfig && (
+              <button
+                type="button"
+                onClick={() => setSortConfig(null)}
+                className="text-slate-400 hover:text-red-500 transition-colors p-0.5 cursor-pointer"
+                title="Quitar ordenamiento"
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
           {selectedIds.size > 0 && (
             <button
               onClick={handleSendEmail}
@@ -1764,6 +1994,84 @@ export function DataTable({
               Enviar mail ({selectedIds.size})
             </button>
           )}
+
+          {/* Selector de Columnas Visibles */}
+          <div className="relative">
+            <button
+              type="button"
+              onClick={() => setShowColumnPicker(prev => !prev)}
+              className={`text-xs px-2.5 py-1.5 rounded-lg border shadow-2xs flex items-center gap-1.5 font-medium transition-colors cursor-pointer ${
+                hiddenColumnIds.size > 0
+                  ? 'bg-blue-50 border-blue-200 text-blue-700 font-semibold'
+                  : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50'
+              }`}
+              title="Ocultar / Mostrar columnas"
+            >
+              <Columns3 size={13} className={hiddenColumnIds.size > 0 ? 'text-blue-600' : 'text-slate-400'} />
+              <span>Columnas</span>
+              <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-slate-100 text-slate-600 font-mono">
+                {COLUMNS.length - hiddenColumnIds.size}/{COLUMNS.length}
+              </span>
+              <ChevronDown size={11} className="text-slate-400" />
+            </button>
+
+            {showColumnPicker && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setShowColumnPicker(false)} />
+                <div className="absolute right-0 mt-1.5 w-64 bg-white border border-slate-200 rounded-xl shadow-xl z-50 p-2.5 animate-in fade-in zoom-in-95 duration-100">
+                  <div className="flex items-center justify-between pb-2 mb-2 border-b border-slate-100">
+                    <span className="text-xs font-bold text-slate-800">Visibilidad de Columnas</span>
+                    {hiddenColumnIds.size > 0 && (
+                      <button
+                        type="button"
+                        onClick={showAllColumns}
+                        className="text-[11px] text-blue-600 hover:underline font-semibold cursor-pointer"
+                      >
+                        Mostrar todas
+                      </button>
+                    )}
+                  </div>
+                  <div className="max-h-60 overflow-y-auto flex flex-col gap-1 pr-1">
+                    {COLUMNS.map(col => {
+                      const isVisible = !hiddenColumnIds.has(col.id);
+                      return (
+                        <label
+                          key={col.id}
+                          className="flex items-center justify-between px-2 py-1.5 rounded-lg hover:bg-slate-50 text-xs text-slate-700 cursor-pointer select-none transition-colors"
+                        >
+                          <div className="flex items-center gap-2">
+                            <input
+                              type="checkbox"
+                              checked={isVisible}
+                              onChange={() => toggleColumnVisibility(col.id)}
+                              className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer"
+                            />
+                            <span className={isVisible ? 'font-medium text-slate-800' : 'text-slate-400 line-through'}>
+                              {col.label}
+                            </span>
+                          </div>
+                          {!isVisible && (
+                            <span className="text-[10px] text-amber-600 font-bold bg-amber-50 px-1 rounded">Oculta</span>
+                          )}
+                        </label>
+                      );
+                    })}
+                  </div>
+                  <div className="pt-2 mt-2 border-t border-slate-100 flex justify-between items-center text-[10px] text-slate-400">
+                    <span>{hiddenColumnIds.size} columna(s) oculta(s)</span>
+                    <button
+                      type="button"
+                      onClick={() => setShowColumnPicker(false)}
+                      className="px-2 py-0.5 rounded bg-slate-100 text-slate-700 font-medium hover:bg-slate-200 cursor-pointer"
+                    >
+                      Cerrar
+                    </button>
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
           <button
             onClick={downloadCSV}
             className="text-sm px-3 py-1.5 bg-white border border-gray-200 shadow-xs rounded-lg hover:bg-gray-50 flex items-center gap-2 text-gray-700 font-medium transition-colors"
@@ -1792,23 +2100,67 @@ export function DataTable({
                   title="Seleccionar todos los visibles"
                 />
               </th>
-              {orderedColumns.map(col => (
+              {visibleColumns.map(col => (
                 <th
                   key={col.id}
                   draggable
                   onDragStart={e => handleDragStart(e, col.id)}
                   onDragOver={handleDragOver}
                   onDrop={e => handleDrop(e, col.id)}
-                  className={`px-3 py-3 whitespace-nowrap cursor-move select-none hover:bg-gray-200 transition-colors group ${
+                  className={`px-3 py-2.5 whitespace-nowrap cursor-move select-none hover:bg-gray-200/80 transition-colors group ${
                     draggedCol === col.id ? 'opacity-50 bg-gray-200' : ''
                   }`}
-                  onClick={() => col.sortKey && handleSort(col.sortKey)}
                   title="Arrastra para mover la columna"
                 >
-                  <div className="flex items-center gap-1 cursor-pointer">
-                    <span>{col.label}</span>
-                    {col.sortKey && renderSortIcon(col.sortKey)}
-                  </div>
+                  {col.subSort ? (
+                    <div className="flex flex-col gap-1 py-0.5">
+                      <span className="font-bold text-slate-700">{col.label}</span>
+                      <div className="flex items-center gap-1 font-mono text-[9px]" onClick={e => e.stopPropagation()}>
+                        <button
+                          type="button"
+                          onClick={() => handleSort(col.subSort!.inicioKey)}
+                          className={`px-1.5 py-0.5 rounded border transition-all flex items-center gap-0.5 cursor-pointer ${
+                            sortConfig?.key === col.subSort!.inicioKey
+                              ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900'
+                          }`}
+                          title={`Ordenar por Inicio (${col.label})`}
+                        >
+                          <span>Ini</span>
+                          {sortConfig?.key === col.subSort!.inicioKey ? (
+                            sortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
+                          ) : (
+                            <ArrowUpDown size={9} className="opacity-40" />
+                          )}
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => handleSort(col.subSort!.finKey)}
+                          className={`px-1.5 py-0.5 rounded border transition-all flex items-center gap-0.5 cursor-pointer ${
+                            sortConfig?.key === col.subSort!.finKey
+                              ? 'bg-blue-600 text-white border-blue-600 font-extrabold shadow-2xs'
+                              : 'bg-white text-slate-600 border-slate-200 hover:border-slate-400 hover:text-slate-900'
+                          }`}
+                          title={`Ordenar por Fin (${col.label})`}
+                        >
+                          <span>Fin</span>
+                          {sortConfig?.key === col.subSort!.finKey ? (
+                            sortConfig.direction === 'asc' ? <ArrowUp size={10} /> : <ArrowDown size={10} />
+                          ) : (
+                            <ArrowUpDown size={9} className="opacity-40" />
+                          )}
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    <div
+                      className="flex items-center gap-1 cursor-pointer py-1"
+                      onClick={() => col.sortKey && handleSort(col.sortKey)}
+                    >
+                      <span className="font-bold text-slate-700">{col.label}</span>
+                      {col.sortKey && renderSortIcon(col.sortKey)}
+                    </div>
+                  )}
                 </th>
               ))}
             </tr>
@@ -1847,7 +2199,7 @@ export function DataTable({
                     />
                   </td>
                   {/* Celdas dinámicas */}
-                  {orderedColumns.map(col => (
+                  {visibleColumns.map(col => (
                     <td key={col.id} className={`px-3 py-2 ${col.className || ''}`}>
                       {col.render(t)}
                     </td>
@@ -1859,7 +2211,7 @@ export function DataTable({
                   <ExpandedRow
                     t={t}
                     mode={mode}
-                    colSpan={orderedColumns.length + 3}
+                    colSpan={visibleColumns.length + 3}
                     onOpenModal={() => setModalIniciativa(t)}
                   />
                 )}
@@ -1868,7 +2220,7 @@ export function DataTable({
 
             {paginated.length === 0 && (
               <tr>
-                <td colSpan={orderedColumns.length + 3} className="px-4 py-12 text-center text-gray-400 text-sm">
+                <td colSpan={visibleColumns.length + 3} className="px-4 py-12 text-center text-gray-400 text-sm">
                   No hay iniciativas que coincidan con los filtros activos.
                 </td>
               </tr>

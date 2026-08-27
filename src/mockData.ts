@@ -85,17 +85,23 @@ export function generateMockData(): DashboardData {
       tipo_recurso: pick(recursos),
       proyecto_o_req: pick(['Proyecto', 'Requerimiento']),
       funcionalidad_nueva: pick(['SI', 'NO']),
-      estatus_estimacion: etapa === 'por_estimar' ? 'Pendiente' : 'Finalizada',
+      estatus_estimacion: etapa === 'por_estimar' ? pick(['Pendiente', 'En proceso']) : 'Finalizada',
+      fecha_inicio_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? addDays(created, 5).toISOString() : null,
+      fecha_fin_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? addDays(created, etapa === 'por_estimar' ? (Math.random() > 0.5 ? -10 : 20) : 25).toISOString() : null,
+      fecha_inicio_reestimacion: etapa === 'por_reestimar' ? addDays(created, 30).toISOString() : null,
+      fecha_fin_reestimacion: etapa === 'por_reestimar' ? addDays(created, Math.random() > 0.5 ? -5 : 45).toISOString() : null,
+      estatus_reestimacion: etapa === 'por_reestimar' ? 'En proceso' : null,
+      motivo_reestimacion: etapa === 'por_reestimar' ? 'Cambio de alcance' : null,
       accion_brm: null,
       prioridad_brm: pick(prioridades_brm),
       fecha_inicio_planificada:
-        etapa === 'planificadas' ? addDays(today, 10).toISOString() : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.4 ? subDays(today, 15).toISOString() : addDays(today, 10).toISOString()) : null,
       fecha_fin_planificada:
-        etapa === 'planificadas' ? addDays(today, 120).toISOString() : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.4 ? subDays(today, 5).toISOString() : addDays(today, 120).toISOString()) : null,
       impacto_sox: pick(['SI', 'NO', null] as Array<'SI' | 'NO' | null>),
       aprobar_estimacion: null,
       presupuesto_habilitado: null,
-      planificacion_aprobada: null,
+      planificacion_aprobada: etapa === 'planificadas' ? 'SI' : null,
     });
   }
 

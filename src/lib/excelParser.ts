@@ -150,12 +150,25 @@ function parseNum(val: unknown): number | null {
 
 /**
  * Convierte un valor a string limpio o null.
- * Nunca retorna el literal "null", "undefined" o strings vacíos.
+ * Nunca retorna el literal "null", "undefined", "0", ".", "-" o strings vacíos.
  */
 function parseStr(val: unknown): string | null {
   if (val === null || val === undefined) return null;
   const s = String(val).trim();
-  if (s === '' || s.toLowerCase() === 'null' || s.toLowerCase() === 'undefined') return null;
+  if (
+    s === '' ||
+    s === '0' ||
+    s === '0.0' ||
+    s === '.' ||
+    s === '-' ||
+    s === '--' ||
+    s === '—' ||
+    s.toLowerCase() === 'null' ||
+    s.toLowerCase() === 'undefined' ||
+    s.toLowerCase() === 'n/a'
+  ) {
+    return null;
+  }
   return s;
 }
 
@@ -372,14 +385,28 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 parseStr(g('Funcionalidad nueva')),
               estatus_estimacion:
                 parseStr(g('Estatus Estimación')),
+              fecha_inicio_estimacion:
+                formatDt(g('Fecha inicio  (estimación)', 'Fecha inicio (estimación)', 'Fecha inicio (estimacion)'))
+                || (['por_estimar', 'por_aprobar_estimacion', 'registro_incompleto'].includes(etapa) ? formatDt(g('Fecha inicio')) : null),
+              fecha_fin_estimacion:
+                formatDt(g('Fecha fin (estimación)', 'Fecha fin (estimacion)'))
+                || (['por_estimar', 'por_aprobar_estimacion', 'registro_incompleto'].includes(etapa) ? formatDt(g('Fecha fin')) : null),
+              fecha_inicio_reestimacion:
+                formatDt(g('Fecha de inicio reestimación', 'Fecha de inicio reestimacion', 'Fecha inicio reestimación', 'Fecha inicio reestimacion')),
+              fecha_fin_reestimacion:
+                formatDt(g('Fecha fin reestimación', 'Fecha fin reestimacion')),
+              estatus_reestimacion:
+                parseStr(g('Estatus Reestimación', 'Estatus Reestimacion')),
+              motivo_reestimacion:
+                parseStr(g('Motivo de Reestimación', 'Motivo de Reestimacion', 'Motivo')),
               accion_brm:
                 parseStr(g('Acción (Atender', 'Accion')),
               prioridad_brm:
                 parseStr(g('Priorización de atención', 'Prioridad', 'Priorización', 'Priorizacion')),
               fecha_inicio_planificada:
-                formatDt(g('Fecha inicio [Planificada]')),
+                formatDt(g('Fecha inicio [Planificada]', 'Fecha inicio\r\n[Planificada]', 'Fecha inicio planificada')),
               fecha_fin_planificada:
-                formatDt(g('Fecha fin [Planificada]')),
+                formatDt(g('Fecha fin [Planificada]', 'Fecha fin\r\n[Planificada]', 'Fecha fin planificada')),
               impacto_sox:
                 parseSiNo(g('Impacto SOX', 'SOX')),
               aprobar_estimacion:
@@ -391,7 +418,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               raw_fields: extractRawFields(row),
             };
 
-            // Deduplicación: conservar la etapa más avanzada para el mismo ID y fusionar campos originales
+            // Deduplicación: conservar la etapa más avanzada para el mismo ID y fusionar campos originales y fechas
             const existing = seenIds.get(id);
             const mergedRaw = existing
               ? { ...existing.iniciativa.raw_fields, ...iniciativa.raw_fields }
@@ -399,8 +426,28 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
             iniciativa.raw_fields = mergedRaw;
 
             if (!existing || etapaIndex > existing.etapaIndex) {
+              if (existing) {
+                if (!iniciativa.fecha_inicio_estimacion) iniciativa.fecha_inicio_estimacion = existing.iniciativa.fecha_inicio_estimacion;
+                if (!iniciativa.fecha_fin_estimacion) iniciativa.fecha_fin_estimacion = existing.iniciativa.fecha_fin_estimacion;
+                if (!iniciativa.fecha_inicio_reestimacion) iniciativa.fecha_inicio_reestimacion = existing.iniciativa.fecha_inicio_reestimacion;
+                if (!iniciativa.fecha_fin_reestimacion) iniciativa.fecha_fin_reestimacion = existing.iniciativa.fecha_fin_reestimacion;
+                if (!iniciativa.fecha_inicio_planificada) iniciativa.fecha_inicio_planificada = existing.iniciativa.fecha_inicio_planificada;
+                if (!iniciativa.fecha_fin_planificada) iniciativa.fecha_fin_planificada = existing.iniciativa.fecha_fin_planificada;
+                if (!iniciativa.fecha_asignacion) iniciativa.fecha_asignacion = existing.iniciativa.fecha_asignacion;
+                if (!iniciativa.estatus_estimacion) iniciativa.estatus_estimacion = existing.iniciativa.estatus_estimacion;
+                if (!iniciativa.estatus_reestimacion) iniciativa.estatus_reestimacion = existing.iniciativa.estatus_reestimacion;
+                if (!iniciativa.motivo_reestimacion) iniciativa.motivo_reestimacion = existing.iniciativa.motivo_reestimacion;
+              }
               seenIds.set(id, { iniciativa, etapaIndex });
             } else {
+              if (!existing.iniciativa.fecha_inicio_estimacion && iniciativa.fecha_inicio_estimacion) existing.iniciativa.fecha_inicio_estimacion = iniciativa.fecha_inicio_estimacion;
+              if (!existing.iniciativa.fecha_fin_estimacion && iniciativa.fecha_fin_estimacion) existing.iniciativa.fecha_fin_estimacion = iniciativa.fecha_fin_estimacion;
+              if (!existing.iniciativa.fecha_inicio_reestimacion && iniciativa.fecha_inicio_reestimacion) existing.iniciativa.fecha_inicio_reestimacion = iniciativa.fecha_inicio_reestimacion;
+              if (!existing.iniciativa.fecha_fin_reestimacion && iniciativa.fecha_fin_reestimacion) existing.iniciativa.fecha_fin_reestimacion = iniciativa.fecha_fin_reestimacion;
+              if (!existing.iniciativa.fecha_inicio_planificada && iniciativa.fecha_inicio_planificada) existing.iniciativa.fecha_inicio_planificada = iniciativa.fecha_inicio_planificada;
+              if (!existing.iniciativa.fecha_fin_planificada && iniciativa.fecha_fin_planificada) existing.iniciativa.fecha_fin_planificada = iniciativa.fecha_fin_planificada;
+              if (!existing.iniciativa.estatus_reestimacion && iniciativa.estatus_reestimacion) existing.iniciativa.estatus_reestimacion = iniciativa.estatus_reestimacion;
+              if (!existing.iniciativa.motivo_reestimacion && iniciativa.motivo_reestimacion) existing.iniciativa.motivo_reestimacion = iniciativa.motivo_reestimacion;
               existing.iniciativa.raw_fields = mergedRaw;
             }
           });

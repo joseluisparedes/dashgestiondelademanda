@@ -31,12 +31,30 @@ function stripAccents(str: string): string {
   return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
 }
 
-/**
- * Normaliza un valor de campo a string, retornando EMPTY_SENTINEL si está vacío.
- */
+function isMeaningfulValue(v: string | null | undefined): boolean {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  if (
+    s === '' ||
+    s === EMPTY_SENTINEL ||
+    s === '0' ||
+    s === '0.0' ||
+    s === '.' ||
+    s === '-' ||
+    s === '--' ||
+    s === '—' ||
+    s.toLowerCase() === 'null' ||
+    s.toLowerCase() === 'undefined' ||
+    s.toLowerCase() === 'n/a'
+  ) {
+    return false;
+  }
+  return true;
+}
+
 function normalize(v: string | null | undefined): string {
-  const s = (v ?? '').trim();
-  return s === '' ? EMPTY_SENTINEL : s;
+  if (!isMeaningfulValue(v)) return EMPTY_SENTINEL;
+  return String(v).trim();
 }
 
 /**
@@ -136,7 +154,56 @@ function matchesAllFilters(
     check('impacto_sox', t.impacto_sox) &&
     check('proyecto_spo', t.proyecto_spo) &&
     check('estabilizacion_sis', t.estabilizacion_sis) &&
-    passesApprovals
+    passesApprovals &&
+    // Fechas de inicio y fin por cada etapa
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_inicio_estimacion, filters.fecha_inicio_estimacion_desde, filters.fecha_inicio_estimacion_hasta) &&
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_fin_estimacion, filters.fecha_fin_estimacion_desde, filters.fecha_fin_estimacion_hasta) &&
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_inicio_reestimacion, filters.fecha_inicio_reestimacion_desde, filters.fecha_inicio_reestimacion_hasta) &&
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_fin_reestimacion, filters.fecha_fin_reestimacion_desde, filters.fecha_fin_reestimacion_hasta) &&
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_inicio_planificada, filters.fecha_inicio_planificada_desde, filters.fecha_inicio_planificada_hasta) &&
+    ((val, desde, hasta) => {
+      if (!desde && !hasta) return true;
+      if (!val) return false;
+      const d = val.slice(0, 10);
+      if (desde && d < desde) return false;
+      if (hasta && d > hasta) return false;
+      return true;
+    })(t.fecha_fin_planificada, filters.fecha_fin_planificada_desde, filters.fecha_fin_planificada_hasta)
   );
 }
 
@@ -150,12 +217,22 @@ function buildOptions(
   getter: (i: Iniciativa) => string | null | undefined
 ): string[] {
   const set = new Set<string>();
-  items.forEach(i => set.add(normalize(getter(i))));
-  return Array.from(set).sort((a, b) => {
-    if (a === EMPTY_SENTINEL) return 1;
-    if (b === EMPTY_SENTINEL) return -1;
-    return a.localeCompare(b, 'es');
+  let hasEmpty = false;
+
+  items.forEach(i => {
+    const raw = getter(i);
+    if (isMeaningfulValue(raw)) {
+      set.add(String(raw).trim());
+    } else {
+      hasEmpty = true;
+    }
   });
+
+  const sorted = Array.from(set).sort((a, b) => a.localeCompare(b, 'es'));
+  if (hasEmpty) {
+    sorted.push(EMPTY_SENTINEL);
+  }
+  return sorted;
 }
 
 const detectExcelMode = (file: File): Promise<'demanda' | 'planificadas' | 'unknown'> => {

@@ -1922,16 +1922,83 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(240, chartDataConsolidado.length * 36 + 40)}>
-                <BarChart data={chartDataConsolidado} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }}>
+                <BarChart data={chartDataConsolidado} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
                   <Legend wrapperStyle={{ fontSize: 11, paddingTop: 6 }} />
-                  <Bar dataKey="Estimación" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]} />
-                  <Bar dataKey="Re-estimación" stackId="a" fill="#8b5cf6" radius={[0, 0, 0, 0]} />
+                  <Bar dataKey="Estimación" stackId="a" fill="#f59e0b" radius={[0, 0, 0, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { index, x, y, width, height } = props;
+                        const row = chartDataConsolidado[index];
+                        if (!row || !row.total || row.total <= 0) return null;
+                        if ((row.Estimación || 0) > 0 && !(row['Re-estimación'] > 0) && !(row.Planificación > 0)) {
+                          return (
+                            <text
+                              x={x + width + 8}
+                              y={y + height / 2}
+                              fill="#0f172a"
+                              textAnchor="start"
+                              dominantBaseline="central"
+                              style={{ fontSize: 11, fontWeight: 700 }}
+                            >
+                              {row.total}
+                            </text>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </Bar>
+                  <Bar dataKey="Re-estimación" stackId="a" fill="#8b5cf6" radius={[0, 0, 0, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { index, x, y, width, height } = props;
+                        const row = chartDataConsolidado[index];
+                        if (!row || !row.total || row.total <= 0) return null;
+                        if ((row['Re-estimación'] || 0) > 0 && !(row.Planificación > 0)) {
+                          return (
+                            <text
+                              x={x + width + 8}
+                              y={y + height / 2}
+                              fill="#0f172a"
+                              textAnchor="start"
+                              dominantBaseline="central"
+                              style={{ fontSize: 11, fontWeight: 700 }}
+                            >
+                              {row.total}
+                            </text>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
+                  </Bar>
                   <Bar dataKey="Planificación" stackId="a" fill="#f43f5e" radius={[0, 3, 3, 0]}>
-                    <LabelList dataKey="total" position="right" style={{ fontSize: 10, fontWeight: 700, fill: '#475569' }} />
+                    <LabelList
+                      content={(props: any) => {
+                        const { index, x, y, width, height } = props;
+                        const row = chartDataConsolidado[index];
+                        if (!row || !row.total || row.total <= 0) return null;
+                        if ((row.Planificación || 0) > 0) {
+                          return (
+                            <text
+                              x={x + width + 8}
+                              y={y + height / 2}
+                              fill="#0f172a"
+                              textAnchor="start"
+                              dominantBaseline="central"
+                              style={{ fontSize: 11, fontWeight: 700 }}
+                            >
+                              {row.total}
+                            </text>
+                          );
+                        }
+                        return null;
+                      }}
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2361,13 +2428,30 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(220, chartDataEstimacion.length * 36 + 30)}>
-                <BarChart data={chartDataEstimacion} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }}>
+                <BarChart data={chartDataEstimacion} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
                   <Bar dataKey="value" name="Por Estimar" fill="#f59e0b" radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#b45309' }} />
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (value === undefined || value === null || value === 0) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#b45309"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2468,13 +2552,30 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(200, chartDataReestimacion.length * 36 + 30)}>
-                <BarChart data={chartDataReestimacion} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }}>
+                <BarChart data={chartDataReestimacion} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
                   <Bar dataKey="value" name="Re-estimaciones Vencidas" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#6d28d9' }} />
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (value === undefined || value === null || value === 0) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#6d28d9"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2579,13 +2680,30 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
               </div>
             ) : (
               <ResponsiveContainer width="100%" height={Math.max(220, chartDataPlanificacion.length * 36 + 30)}>
-                <BarChart data={chartDataPlanificacion} layout="vertical" margin={{ top: 0, right: 60, left: 10, bottom: 0 }}>
+                <BarChart data={chartDataPlanificacion} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
                   <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
                   <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
                   <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
                   <Tooltip content={<ReportTooltip />} />
                   <Bar dataKey="value" name="Por Planificar sin Fechas" fill="#f43f5e" radius={[0, 4, 4, 0]}>
-                    <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#be123c' }} />
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (value === undefined || value === null || value === 0) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#be123c"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
                   </Bar>
                 </BarChart>
               </ResponsiveContainer>
@@ -2734,6 +2852,7 @@ function ReporteVP({
     sorted.slice(0, 15).map(d => {
       const row: Record<string, string | number> = {
         name: optLabel(d.vp).length > 28 ? optLabel(d.vp).slice(0, 26) + '…' : optLabel(d.vp),
+        total: d.total,
       };
       topEtapas.forEach(e => { row[e.label] = d.byEtapa[e.id] || 0; });
       return row;
@@ -2757,14 +2876,37 @@ function ReporteVP({
       <div>
         <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Distribución por VP (top 15)</p>
         <ResponsiveContainer width="100%" height={Math.max(220, sorted.slice(0, 15).length * 36 + 40)}>
-          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 50, left: 8, bottom: 0 }}>
+          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 65, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
             <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
             <YAxis dataKey="name" type="category" width={180} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
             <Tooltip content={<ReportTooltip />} />
-            {topEtapas.map(e => (
+            {topEtapas.map((e, etapaIdx) => (
               <Bar key={e.id} dataKey={e.label} stackId="a" fill={e.color} radius={[0, 2, 2, 0]}>
-                <LabelList dataKey={e.label} position="right" style={{ fontSize: 9, fill: '#94a3b8' }} formatter={(v: number) => v > 0 ? v : ''} />
+                <LabelList
+                  content={(props: any) => {
+                    const { index, x, y, width, height } = props;
+                    const row = stackedData[index];
+                    if (!row || !row.total) return null;
+                    const currentVal = Number(row[topEtapas[etapaIdx]?.label]) || 0;
+                    if (currentVal <= 0) return null;
+                    for (let i = etapaIdx + 1; i < topEtapas.length; i++) {
+                      if ((Number(row[topEtapas[i]?.label]) || 0) > 0) return null;
+                    }
+                    return (
+                      <text
+                        x={x + width + 8}
+                        y={y + height / 2}
+                        fill="#0f172a"
+                        textAnchor="start"
+                        dominantBaseline="central"
+                        style={{ fontSize: 11, fontWeight: 700 }}
+                      >
+                        {row.total}
+                      </text>
+                    );
+                  }}
+                />
               </Bar>
             ))}
           </BarChart>
@@ -2851,14 +2993,31 @@ function ReporteEstados({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       <ResponsiveContainer width="100%" height={Math.max(180, data.length * 42 + 30)}>
-        <BarChart data={data.map(d => ({ name: d.label, value: d.total, color: d.color }))} layout="vertical" margin={{ top: 0, right: 60, left: 8, bottom: 0 }}>
+        <BarChart data={data.map(d => ({ name: d.label, value: d.total, color: d.color }))} layout="vertical" margin={{ top: 0, right: 65, left: 8, bottom: 0 }}>
           <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
           <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
           <YAxis dataKey="name" type="category" width={170} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
           <Tooltip content={<ReportTooltip />} />
           <Bar dataKey="value" name="Iniciativas" radius={[0, 6, 6, 0]}>
             {data.map((e, i) => <Cell key={i} fill={e.color} />)}
-            <LabelList dataKey="value" position="right" style={{ fontSize: 11, fontWeight: 700, fill: '#475569' }} />
+            <LabelList
+              content={(props: any) => {
+                const { x, y, width, height, value } = props;
+                if (value === undefined || value === null || value === 0) return null;
+                return (
+                  <text
+                    x={x + width + 8}
+                    y={y + height / 2}
+                    fill="#0f172a"
+                    textAnchor="start"
+                    dominantBaseline="central"
+                    style={{ fontSize: 11, fontWeight: 700 }}
+                  >
+                    {value}
+                  </text>
+                );
+              }}
+            />
           </Bar>
         </BarChart>
       </ResponsiveContainer>
@@ -2991,6 +3150,7 @@ function ReporteITBP({
     sorted.slice(0, 20).map(d => {
       const row: Record<string, string | number> = {
         name: optLabel(d.bp).length > 28 ? optLabel(d.bp).slice(0, 26) + '…' : optLabel(d.bp),
+        total: d.total,
       };
       topEtapas.forEach(e => { row[e.label] = d.byEtapa[e.id] || 0; });
       return row;
@@ -3014,14 +3174,37 @@ function ReporteITBP({
       <div>
         <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Iniciativas por IT BP (top 20)</p>
         <ResponsiveContainer width="100%" height={Math.max(220, sorted.slice(0, 20).length * 36 + 40)}>
-          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 50, left: 8, bottom: 0 }}>
+          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 65, left: 8, bottom: 0 }}>
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
             <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
             <YAxis dataKey="name" type="category" width={160} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
             <Tooltip content={<ReportTooltip />} />
-            {topEtapas.map(e => (
+            {topEtapas.map((e, etapaIdx) => (
               <Bar key={e.id} dataKey={e.label} stackId="a" fill={e.color} radius={[0, 2, 2, 0]}>
-                <LabelList dataKey={e.label} position="right" style={{ fontSize: 9, fill: '#94a3b8' }} formatter={(v: number) => v > 0 ? v : ''} />
+                <LabelList
+                  content={(props: any) => {
+                    const { index, x, y, width, height } = props;
+                    const row = stackedData[index];
+                    if (!row || !row.total) return null;
+                    const currentVal = Number(row[topEtapas[etapaIdx]?.label]) || 0;
+                    if (currentVal <= 0) return null;
+                    for (let i = etapaIdx + 1; i < topEtapas.length; i++) {
+                      if ((Number(row[topEtapas[i]?.label]) || 0) > 0) return null;
+                    }
+                    return (
+                      <text
+                        x={x + width + 8}
+                        y={y + height / 2}
+                        fill="#0f172a"
+                        textAnchor="start"
+                        dominantBaseline="central"
+                        style={{ fontSize: 11, fontWeight: 700 }}
+                      >
+                        {row.total}
+                      </text>
+                    );
+                  }}
+                />
               </Bar>
             ))}
           </BarChart>

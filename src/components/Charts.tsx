@@ -179,14 +179,30 @@ export function Charts({ iniciativas }: ChartsProps) {
 
       {/* 1. Institución */}
       <ChartCard title="1. Iniciativas por Institución">
-        <ResponsiveContainer width="100%" height={220}>
-          <BarChart data={institucionData} margin={{ top: 5, right: 40, left: -20, bottom: 5 }}>
+        <ResponsiveContainer width="100%" height={230}>
+          <BarChart data={institucionData} margin={{ top: 20, right: 30, left: -20, bottom: 5 }}>
             <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f0f0f0" />
             <XAxis dataKey="name" style={{ fontSize: '11px' }} />
             <YAxis style={{ fontSize: '11px' }} allowDecimals={false} />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="value" name="Iniciativas" fill="#1a73e8" radius={[4, 4, 0, 0]}>
-              <LabelList dataKey="value" position="top" style={{ fontSize: '11px', fontWeight: 600, fill: '#475569' }} />
+              <LabelList
+                content={(props: any) => {
+                  const { x, y, width, value } = props;
+                  if (value === undefined || value === null || value === 0) return null;
+                  return (
+                    <text
+                      x={x + width / 2}
+                      y={y - 6}
+                      fill="#0f172a"
+                      textAnchor="middle"
+                      style={{ fontSize: '11px', fontWeight: 700 }}
+                    >
+                      {value}
+                    </text>
+                  );
+                }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -198,7 +214,7 @@ export function Charts({ iniciativas }: ChartsProps) {
           <BarChart
             data={pilarData}
             layout="vertical"
-            margin={{ top: 5, right: 50, left: 8, bottom: 5 }}
+            margin={{ top: 5, right: 65, left: 8, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
             <XAxis type="number" style={{ fontSize: '11px' }} allowDecimals={false} />
@@ -211,7 +227,24 @@ export function Charts({ iniciativas }: ChartsProps) {
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="value" name="Iniciativas" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
-              <LabelList dataKey="value" position="right" style={{ fontSize: '11px', fontWeight: 600, fill: '#475569' }} />
+              <LabelList
+                content={(props: any) => {
+                  const { x, y, width, height, value } = props;
+                  if (value === undefined || value === null || value === 0) return null;
+                  return (
+                    <text
+                      x={x + width + 8}
+                      y={y + height / 2}
+                      fill="#0f172a"
+                      textAnchor="start"
+                      dominantBaseline="central"
+                      style={{ fontSize: '11px', fontWeight: 700 }}
+                    >
+                      {value}
+                    </text>
+                  );
+                }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -219,8 +252,8 @@ export function Charts({ iniciativas }: ChartsProps) {
 
       {/* 3. Tendencia de Ingreso */}
       <ChartCard title="3. Tendencia de Ingreso Mensual">
-        <ResponsiveContainer width="100%" height={220}>
-          <AreaChart data={tendenciaData} margin={{ top: 5, right: 20, left: -20, bottom: 5 }}>
+        <ResponsiveContainer width="100%" height={230}>
+          <AreaChart data={tendenciaData} margin={{ top: 20, right: 20, left: -20, bottom: 5 }}>
             <defs>
               <linearGradient id="colorNuevas" x1="0" y1="0" x2="0" y2="1">
                 <stop offset="5%" stopColor="#34a853" stopOpacity={0.3} />
@@ -237,8 +270,27 @@ export function Charts({ iniciativas }: ChartsProps) {
               stroke="#34a853"
               strokeWidth={2}
               fill="url(#colorNuevas)"
-              dot={{ r: 3, fill: '#34a853' }}
-            />
+              dot={{ r: 4, fill: '#34a853', stroke: '#ffffff', strokeWidth: 2 }}
+              activeDot={{ r: 6, fill: '#34a853' }}
+            >
+              <LabelList
+                content={(props: any) => {
+                  const { x, y, value } = props;
+                  if (value === undefined || value === null || value === 0) return null;
+                  return (
+                    <text
+                      x={x}
+                      y={y - 10}
+                      fill="#166534"
+                      textAnchor="middle"
+                      style={{ fontSize: '10px', fontWeight: 700 }}
+                    >
+                      {value}
+                    </text>
+                  );
+                }}
+              />
+            </Area>
           </AreaChart>
         </ResponsiveContainer>
       </ChartCard>
@@ -271,7 +323,7 @@ export function Charts({ iniciativas }: ChartsProps) {
           <BarChart
             data={liderData}
             layout="vertical"
-            margin={{ top: 5, right: 50, left: 8, bottom: 5 }}
+            margin={{ top: 5, right: 65, left: 8, bottom: 5 }}
           >
             <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
             <XAxis type="number" style={{ fontSize: '11px' }} allowDecimals={false} />
@@ -284,7 +336,24 @@ export function Charts({ iniciativas }: ChartsProps) {
             />
             <Tooltip content={<CustomTooltip />} />
             <Bar dataKey="value" name="Iniciativas" fill="#9c27b0" radius={[0, 4, 4, 0]}>
-              <LabelList dataKey="value" position="right" style={{ fontSize: '11px', fontWeight: 600, fill: '#475569' }} />
+              <LabelList
+                content={(props: any) => {
+                  const { x, y, width, height, value } = props;
+                  if (value === undefined || value === null || value === 0) return null;
+                  return (
+                    <text
+                      x={x + width + 8}
+                      y={y + height / 2}
+                      fill="#0f172a"
+                      textAnchor="start"
+                      dominantBaseline="central"
+                      style={{ fontSize: '11px', fontWeight: 700 }}
+                    >
+                      {value}
+                    </text>
+                  );
+                }}
+              />
             </Bar>
           </BarChart>
         </ResponsiveContainer>
@@ -301,7 +370,7 @@ export function Charts({ iniciativas }: ChartsProps) {
             <BarChart
               data={costoData}
               layout="vertical"
-              margin={{ top: 5, right: 20, left: 8, bottom: 5 }}
+              margin={{ top: 5, right: 75, left: 8, bottom: 5 }}
             >
               <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f0f0" />
               <XAxis
@@ -340,10 +409,22 @@ export function Charts({ iniciativas }: ChartsProps) {
               />
               <Bar dataKey="soles" name="Soles" fill="#06b6d4" radius={[0, 4, 4, 0]}>
                 <LabelList
-                  dataKey="soles"
-                  position="right"
-                  formatter={(v: number) => `S/${(v / 1000).toFixed(0)}k`}
-                  style={{ fontSize: '10px', fill: '#475569' }}
+                  content={(props: any) => {
+                    const { x, y, width, height, value } = props;
+                    if (!value) return null;
+                    return (
+                      <text
+                        x={x + width + 8}
+                        y={y + height / 2}
+                        fill="#0e7490"
+                        textAnchor="start"
+                        dominantBaseline="central"
+                        style={{ fontSize: '11px', fontWeight: 700 }}
+                      >
+                        {`S/ ${(Number(value) / 1000).toFixed(0)}k`}
+                      </text>
+                    );
+                  }}
                 />
               </Bar>
             </BarChart>

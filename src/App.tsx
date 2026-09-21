@@ -15,7 +15,24 @@ import { Pipeline } from './components/Pipeline';
 import { Reports } from './components/Reports';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { Loader2, Upload, AlertCircle, LayoutDashboard, BarChart2, Bell } from 'lucide-react';
+import { 
+  Loader2, 
+  Upload, 
+  AlertCircle, 
+  LayoutDashboard, 
+  BarChart2, 
+  Bell, 
+  FileSpreadsheet, 
+  Layers, 
+  Zap, 
+  Filter, 
+  Clock, 
+  Sparkles, 
+  CheckCircle2, 
+  HelpCircle, 
+  ChevronDown, 
+  ArrowRight 
+} from 'lucide-react';
 
 type ActiveTab = 'resumen' | 'reportes';
 
@@ -286,135 +303,57 @@ export default function App() {
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [isDragging, setIsDragging] = useState(false);
+  const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('resumen');
   const [expandedId, setExpandedId] = useState<number | null>(null);
   const [notificationsOpen, setNotificationsOpen] = useState(false);
 
-  // ---- Modal de Mismatch de archivo ----
-  const [mismatchData, setMismatchData] = useState<{
-    file: File;
-    currentMode: 'demanda' | 'planificadas';
-    targetMode: 'demanda' | 'planificadas';
-  } | null>(null);
-
-  const executeUpload = async (file: File, targetMode: 'demanda' | 'planificadas') => {
+  const executeUpload = async (file: File) => {
     setIsUploading(true);
     setUploadError(null);
     try {
-      const result = targetMode === 'planificadas'
-        ? await parsePlanificadasExcelFile(file)
-        : await parseExcelFile(file);
+      const result = await parseExcelFile(file);
       setData(result);
       setFilters(INITIAL_FILTERS);
       setExpandedId(null);
       setNotificationsOpen(false);
     } catch (err) {
       setUploadError(
-        err instanceof Error ? err.message : 'Error desconocido al procesar el archivo.'
+        err instanceof Error ? err.message : 'Error desconocido al procesar el archivo Excel.'
       );
     } finally {
       setIsUploading(false);
     }
   };
 
-  const renderMismatchModal = () => {
-    if (!mismatchData) return null;
-    return (
-      <div className="fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[9999] flex items-center justify-center p-4">
-        <div className="bg-white rounded-2xl shadow-xl border border-slate-100 max-w-md w-full overflow-hidden animate-in fade-in zoom-in-95 duration-150 text-left">
-          <div className="p-6">
-            <div className="flex items-start gap-4">
-              <div className="w-10 h-10 rounded-full bg-amber-50 flex items-center justify-center flex-shrink-0">
-                <AlertCircle size={22} className="text-amber-500" />
-              </div>
-              <div>
-                <h3 className="text-base font-bold text-slate-900">
-                  Opción incorrecta detectada
-                </h3>
-                <p className="text-xs text-slate-500 mt-2 leading-relaxed">
-                  Te estás equivocando de opción. Has subido un archivo de{' '}
-                  <strong>
-                    {mismatchData.targetMode === 'demanda'
-                      ? 'Gestión de la Demanda'
-                      : 'Iniciativas Planificadas'}
-                  </strong>{' '}
-                  pero seleccionaste la opción de{' '}
-                  <strong>
-                    {mismatchData.currentMode === 'demanda'
-                      ? 'Gestión de la Demanda'
-                      : 'Iniciativas Planificadas'}
-                  </strong>
-                  .
-                </p>
-                <p className="text-xs font-semibold text-slate-700 mt-3">
-                  ¿Deseas cargar este archivo como{' '}
-                  {mismatchData.targetMode === 'demanda'
-                    ? 'Gestión de la Demanda'
-                    : 'Iniciativas Planificadas'}
-                  ?
-                </p>
-              </div>
-            </div>
-          </div>
-          <div className="bg-slate-50 px-6 py-4 flex justify-end gap-3 border-t border-slate-100">
-            <button
-              onClick={() => setMismatchData(null)}
-              className="px-4 py-2 border border-slate-200 text-slate-600 rounded-lg text-xs font-medium bg-white hover:bg-slate-50 transition-colors"
-            >
-              Cancelar
-            </button>
-            <button
-              onClick={() => {
-                const { file, targetMode } = mismatchData;
-                setMismatchData(null);
-                executeUpload(file, targetMode);
-              }}
-              className={`px-4 py-2 text-white rounded-lg text-xs font-medium shadow-sm transition-colors ${
-                mismatchData.targetMode === 'planificadas'
-                  ? 'bg-emerald-600 hover:bg-emerald-700'
-                  : 'bg-blue-600 hover:bg-blue-700'
-              }`}
-            >
-              Sí, cargar como {mismatchData.targetMode === 'planificadas' ? 'Planificadas' : 'Demanda'}
-            </button>
-          </div>
-        </div>
-      </div>
-    );
+  const handleDragOver = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(true);
   };
 
-  const handleDemandaUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    event.target.value = '';
+  const handleDragLeave = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+  };
 
-    setIsUploading(true);
-    setUploadError(null);
-    const detected = await detectExcelMode(file);
-    setIsUploading(false);
-
-    if (detected === 'planificadas') {
-      setMismatchData({ file, currentMode: 'demanda', targetMode: 'planificadas' });
-    } else {
-      executeUpload(file, 'demanda');
+  const handleDrop = (e: React.DragEvent) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setIsDragging(false);
+    const file = e.dataTransfer.files?.[0];
+    if (file) {
+      executeUpload(file);
     }
   };
 
-  const handlePlanificadasUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+  const handleFileUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file) return;
     event.target.value = '';
-
-    setIsUploading(true);
-    setUploadError(null);
-    const detected = await detectExcelMode(file);
-    setIsUploading(false);
-
-    if (detected === 'demanda') {
-      setMismatchData({ file, currentMode: 'planificadas', targetMode: 'demanda' });
-    } else {
-      executeUpload(file, 'planificadas');
-    }
+    executeUpload(file);
   };
 
   // Iniciativas filtradas por todos los filtros activos
@@ -581,98 +520,200 @@ export default function App() {
   if (!data) {
     return (
       <div className="min-h-screen bg-[#f7f8fc] flex flex-col font-sans">
-        {/* Simple header */}
+        {/* Header Corporativo */}
         <header className="corp-header sticky top-0 z-20 shadow-[0_2px_12px_rgba(13,67,108,.05)] shrink-0">
           <div className="corp-header-bg" />
           <div className="max-w-screen-2xl mx-auto px-4 sm:px-6 lg:px-8 relative z-10">
-            <div className="flex items-center h-16">
+            <div className="flex items-center justify-between h-16">
               <div className="flex items-center gap-3">
-                <div className="w-8 h-8 bg-white/10 rounded border border-white/20 flex items-center justify-center shadow-sm flex-shrink-0">
-                  <span className="text-white font-bold text-sm">TI</span>
+                <div className="w-8 h-8 bg-white/10 rounded-lg border border-white/20 flex items-center justify-center shadow-sm flex-shrink-0">
+                  <span className="text-white font-black text-xs tracking-wider">TI</span>
                 </div>
                 <div className="flex flex-col">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 leading-none mb-0.5">Laureate Perú</span>
                   <h2 className="text-sm font-extrabold uppercase tracking-wider text-white">IT Needs Manager</h2>
                 </div>
               </div>
+              <div className="hidden sm:flex items-center gap-2 bg-white/10 backdrop-blur-xs px-3 py-1.5 rounded-full border border-white/15 text-white/90 text-xs font-semibold">
+                <Sparkles size={13} className="text-amber-300" />
+                <span>Gestión de la Demanda</span>
+              </div>
             </div>
           </div>
           <div className="h-1 w-full bg-gradient-to-r from-[#EB5F46] via-[#007FB1] to-[#00B8B2]" />
         </header>
 
-        {/* Content */}
-        <div className="flex-grow flex items-center justify-center p-6">
-          <div className="bg-white max-w-2xl w-full rounded-2xl shadow-md border border-gray-100 p-8 text-center space-y-6">
-            <div className="w-16 h-16 bg-[#fff0ed] rounded-full flex items-center justify-center mx-auto text-[#EB5F46]">
-              <Upload size={32} />
-            </div>
-            <div>
-              <h2 className="text-xl font-bold text-[#1a1a2e] mb-2">¡Bienvenido al Panel TI!</h2>
-              <p className="text-[#4a5568] text-sm">
-                Selecciona una opción para comenzar cargando el archivo Excel correspondiente:
-              </p>
-            </div>
-
-            {uploadError && (
-              <div className="bg-red-50 text-red-700 p-4 rounded-lg text-sm text-left flex items-start gap-3 border border-red-200">
-                <AlertCircle size={20} className="mt-0.5 flex-shrink-0 text-red-500" />
-                <div className="whitespace-pre-wrap font-medium leading-relaxed flex-1">
-                  {uploadError}
+        {/* Contenido Principal */}
+        <div className="flex-grow flex items-center justify-center p-4 sm:p-8">
+          <div className="max-w-3xl w-full space-y-6">
+            
+            {/* Card Principal de Carga */}
+            <div className="bg-white rounded-3xl shadow-xl shadow-slate-200/50 border border-slate-100 p-6 sm:p-10 text-center space-y-6 transition-all">
+              
+              {/* Encabezado */}
+              <div className="space-y-2 max-w-xl mx-auto">
+                <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-[#fff0ed] text-[#EB5F46] border border-[#EB5F46]/20 text-[11px] font-bold uppercase tracking-wider">
+                  <FileSpreadsheet size={13} />
+                  <span>Portal Operativo de Demanda TI</span>
                 </div>
+                <h1 className="text-2xl sm:text-3xl font-black text-[#1a1a2e] tracking-tight">
+                  Gestión de la Demanda
+                </h1>
+                <p className="text-slate-500 text-xs sm:text-sm leading-relaxed">
+                  Carga el archivo Excel oficial para visualizar en tiempo real el pipeline operativo, estado de aprobaciones, presupuestos habilitados y alertas de vencimiento.
+                </p>
               </div>
-            )}
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-2">
-              {/* OPCION 1: DEMANDA */}
-              <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-[#EB5F46] hover:shadow-sm transition-all bg-slate-50/50">
-                <div className="mb-4">
-                  <h3 className="font-bold text-[#1a1a2e] text-sm mb-1">1. Gestión de la Demanda</h3>
-                  <p className="text-[#9ca3af] text-xs">Pipeline operativo, estimaciones y presupuestos.</p>
+              {/* Mensaje de Error si ocurre */}
+              {uploadError && (
+                <div className="bg-red-50 text-red-700 p-4 rounded-xl text-xs sm:text-sm text-left flex items-start gap-3 border border-red-200 animate-in fade-in duration-200">
+                  <AlertCircle size={18} className="mt-0.5 flex-shrink-0 text-red-500" />
+                  <div className="whitespace-pre-wrap font-medium leading-relaxed flex-1">
+                    {uploadError}
+                  </div>
                 </div>
+              )}
+
+              {/* Área Interactiva Drag and Drop */}
+              <div
+                onDragOver={handleDragOver}
+                onDragLeave={handleDragLeave}
+                onDrop={handleDrop}
+                className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-10 transition-all duration-200 flex flex-col items-center justify-center gap-4 ${
+                  isDragging
+                    ? 'border-[#EB5F46] bg-[#fff0ed]/40 scale-[1.01] shadow-lg ring-4 ring-[#EB5F46]/10'
+                    : 'border-slate-300 hover:border-[#EB5F46]/70 hover:bg-slate-50/50 bg-slate-50/30'
+                }`}
+              >
+                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+                  isDragging
+                    ? 'bg-[#EB5F46] text-white shadow-md scale-110'
+                    : 'bg-[#fff0ed] text-[#EB5F46]'
+                }`}>
+                  {isUploading ? (
+                    <Loader2 size={32} className="animate-spin text-[#EB5F46]" />
+                  ) : (
+                    <Upload size={30} className={isDragging ? 'animate-bounce' : ''} />
+                  )}
+                </div>
+
+                <div className="space-y-1">
+                  <p className="font-bold text-slate-800 text-sm sm:text-base">
+                    {isDragging ? '¡Suelta el archivo Excel aquí!' : 'Arrastra y suelta tu archivo Excel aquí'}
+                  </p>
+                  <p className="text-slate-400 text-xs font-medium">
+                    o haz clic en el botón para seleccionarlo desde tu equipo
+                  </p>
+                </div>
+
                 <label
-                  className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
+                  className={`cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-95 ${
                     isUploading
-                      ? 'bg-orange-300 text-white cursor-not-allowed'
-                      : 'bg-[#EB5F46] hover:bg-[#c94a32] text-white shadow-sm'
+                      ? 'bg-orange-300 cursor-not-allowed'
+                      : 'bg-gradient-to-r from-[#EB5F46] to-[#d8482f] hover:from-[#c94a32] hover:to-[#b83e27] hover:shadow-lg shadow-[#EB5F46]/20'
                   }`}
                 >
-                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                  <span>Subir Demanda</span>
+                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
+                  <span>{isUploading ? 'Procesando archivo…' : 'Seleccionar Archivo Excel'}</span>
                   <input
                     type="file"
                     accept=".xlsx,.xls"
                     className="hidden"
-                    onChange={handleDemandaUpload}
+                    onChange={handleFileUpload}
                     disabled={isUploading}
                   />
                 </label>
+
+                <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
+                  <CheckCircle2 size={12} className="text-emerald-500" />
+                  <span>Formatos soportados: <strong>.xlsx</strong>, <strong>.xls</strong></span>
+                </div>
               </div>
 
-              {/* OPCION 2: PLANIFICADAS */}
-              <div className="border border-gray-200 rounded-xl p-5 flex flex-col justify-between items-center text-center hover:border-emerald-400 hover:shadow-sm transition-all bg-slate-50/50">
-                <div className="mb-4">
-                  <h3 className="font-bold text-[#1a1a2e] text-sm mb-1">2. Iniciativas Planificadas</h3>
-                  <p className="text-[#9ca3af] text-xs">Seguimiento de ejecución, estados y desviaciones.</p>
-                </div>
-                <label
-                  className={`cursor-pointer w-full py-2.5 px-4 rounded-lg font-medium text-xs flex items-center justify-center gap-2 transition-all ${
-                    isUploading
-                      ? 'bg-emerald-300 text-white cursor-not-allowed'
-                      : 'bg-emerald-600 hover:bg-emerald-700 text-white shadow-sm'
-                  }`}
+              {/* Guía Colapsable de Hojas Esperadas */}
+              <div className="pt-2 border-t border-slate-100 text-left">
+                <button
+                  type="button"
+                  onClick={() => setShowFormatGuide(!showFormatGuide)}
+                  className="w-full flex items-center justify-between text-xs font-bold text-slate-600 hover:text-slate-900 transition-colors py-1.5 px-2 rounded-lg hover:bg-slate-50 cursor-pointer"
                 >
-                  {isUploading ? <Loader2 size={14} className="animate-spin" /> : <Upload size={14} />}
-                  <span>Subir Planificadas</span>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={handlePlanificadasUpload}
-                    disabled={isUploading}
+                  <div className="flex items-center gap-2">
+                    <HelpCircle size={14} className="text-[#007FB1]" />
+                    <span>Estructura y hojas requeridas del archivo Excel</span>
+                  </div>
+                  <ChevronDown
+                    size={14}
+                    className={`transition-transform duration-200 text-slate-400 ${showFormatGuide ? 'rotate-180' : ''}`}
                   />
-                </label>
+                </button>
+
+                {showFormatGuide && (
+                  <div className="mt-3 p-4 bg-slate-50 rounded-xl border border-slate-200/80 space-y-3 animate-in fade-in duration-150 text-xs">
+                    <p className="text-slate-600 font-medium leading-relaxed">
+                      El sistema consolida automáticamente la demanda operativa leyendo las siguientes hojas del libro Excel:
+                    </p>
+                    <div className="flex flex-wrap gap-2">
+                      {[
+                        'Registro incompleto',
+                        'Por estimar',
+                        'Por aprobar estimacion',
+                        'Por Reestimar',
+                        'Por habilitar presup.',
+                        'Por planificar',
+                        'Aprobar Planificación'
+                      ].map((sheet) => (
+                        <span
+                          key={sheet}
+                          className="inline-flex items-center gap-1.5 px-2.5 py-1 rounded-md bg-white border border-slate-200 text-slate-700 font-semibold text-[11px] shadow-2xs"
+                        >
+                          <span className="w-1.5 h-1.5 rounded-full bg-[#007FB1]" />
+                          {sheet}
+                        </span>
+                      ))}
+                    </div>
+                    <p className="text-[11px] text-slate-500 italic">
+                      * Las iniciativas se deduplican por ID conservando su etapa operativa más avanzada.
+                    </p>
+                  </div>
+                )}
               </div>
             </div>
+
+            {/* Grid de 4 Funcionalidades Clave */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3">
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-1.5 text-left">
+                <div className="w-8 h-8 rounded-lg bg-blue-50 text-blue-600 flex items-center justify-center font-bold">
+                  <Layers size={16} />
+                </div>
+                <h4 className="font-bold text-xs text-slate-800">Pipeline de Etapas</h4>
+                <p className="text-[11px] text-slate-500 leading-snug">Flujo visual completo desde Registro hasta Planificación aprobada.</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-1.5 text-left">
+                <div className="w-8 h-8 rounded-lg bg-amber-50 text-amber-600 flex items-center justify-center font-bold">
+                  <Zap size={16} />
+                </div>
+                <h4 className="font-bold text-xs text-slate-800">KPIs & Métricas</h4>
+                <p className="text-[11px] text-slate-500 leading-snug">Indicadores en tiempo real de horas estimadas, costos USD y distribución.</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-1.5 text-left">
+                <div className="w-8 h-8 rounded-lg bg-emerald-50 text-emerald-600 flex items-center justify-center font-bold">
+                  <Filter size={16} />
+                </div>
+                <h4 className="font-bold text-xs text-slate-800">Filtros Facetados</h4>
+                <p className="text-[11px] text-slate-500 leading-snug">Búsqueda exhaustiva y filtros dinámicos por BP TI, VP, SOX y más.</p>
+              </div>
+
+              <div className="bg-white p-4 rounded-2xl border border-slate-100 shadow-xs flex flex-col gap-1.5 text-left">
+                <div className="w-8 h-8 rounded-lg bg-rose-50 text-[#EB5F46] flex items-center justify-center font-bold">
+                  <Bell size={16} />
+                </div>
+                <h4 className="font-bold text-xs text-slate-800">Alertas de Hitos</h4>
+                <p className="text-[11px] text-slate-500 leading-snug">Notificaciones automáticas ante fechas clave próximas a vencer (1-3 días).</p>
+              </div>
+            </div>
+
           </div>
         </div>
 
@@ -680,7 +721,6 @@ export default function App() {
         <footer className="bg-[#22223C] text-slate-400 text-center py-4 px-8 text-xs font-semibold tracking-wider border-t border-slate-800 shrink-0">
           © {new Date().getFullYear()} <strong>Laureate Perú</strong>. Todos los derechos reservados.
         </footer>
-        {renderMismatchModal()}
       </div>
     );
   }
@@ -703,7 +743,7 @@ export default function App() {
               <div className="flex flex-col">
                 <span className="text-[10px] font-bold uppercase tracking-wider text-white/60 leading-none mb-0.5">Laureate Perú</span>
                 <h1 className="text-sm font-extrabold uppercase tracking-wider text-white">
-                  {data.mode === 'planificadas' ? 'Iniciativas Planificadas' : 'Gestión de la Demanda'}
+                  Gestión de la Demanda
                 </h1>
               </div>
               <button
@@ -869,34 +909,12 @@ export default function App() {
                   ) : (
                     <Upload size={14} className="text-[#0d436c]" />
                   )}
-                  <span>{isUploading ? 'Procesando…' : 'Subir Demanda'}</span>
+                  <span>{isUploading ? 'Procesando…' : 'Cargar nuevo Excel'}</span>
                   <input
                     type="file"
                     accept=".xlsx,.xls"
                     className="hidden"
-                    onChange={handleDemandaUpload}
-                    disabled={isUploading}
-                  />
-                </label>
-
-                <label
-                  className={`cursor-pointer px-3.5 py-2 rounded-lg text-xs font-semibold flex items-center gap-1.5 shadow-sm transition-all active:scale-95 border ${
-                    isUploading
-                      ? 'bg-white/10 text-white/40 cursor-not-allowed border-white/10'
-                      : 'bg-white hover:bg-white/95 text-emerald-700 border-white/20'
-                  }`}
-                >
-                  {isUploading ? (
-                    <Loader2 size={14} className="animate-spin text-white/40" />
-                  ) : (
-                    <Upload size={14} className="text-emerald-700" />
-                  )}
-                  <span>{isUploading ? 'Procesando…' : 'Subir Planificadas'}</span>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={handlePlanificadasUpload}
+                    onChange={handleFileUpload}
                     disabled={isUploading}
                   />
                 </label>
@@ -964,9 +982,6 @@ export default function App() {
       <footer className="bg-[#22223C] text-slate-400 text-center py-4 px-8 text-xs font-semibold tracking-wider border-t border-slate-800 shrink-0">
         © {new Date().getFullYear()} <strong>Laureate Perú</strong>. Todos los derechos reservados.
       </footer>
-
-      {/* Modal de confirmación ante error de opción */}
-      {renderMismatchModal()}
     </div>
   );
 }

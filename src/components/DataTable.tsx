@@ -34,6 +34,7 @@ import {
   CalendarCheck,
   ClipboardList,
   Columns3,
+  Clock,
 } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
@@ -285,6 +286,108 @@ function EtapaBadge({ etapa, mode = 'demanda' }: { etapa: string; mode?: 'demand
 }
 
 // ---------------------------------------------------------------------------
+// Configuración de resaltado visual para campos clave de Estimación & Planificación
+// ---------------------------------------------------------------------------
+interface HighlightConfig {
+  icon: React.ReactNode;
+  badgeText: string;
+  badgeBg: string;
+  cardBg: string;
+  labelColor: string;
+  valueColor: string;
+}
+
+function getFieldHighlightConfig(label: string): HighlightConfig | null {
+  const norm = label.toLowerCase().trim();
+
+  // 1. Costo Dólares (USD)
+  if (norm.includes('costo') && (norm.includes('dólares') || norm.includes('dolares') || norm.includes('usd'))) {
+    return {
+      icon: <DollarSign size={13} className="text-emerald-600 shrink-0" />,
+      badgeText: 'USD',
+      badgeBg: 'bg-emerald-100 text-emerald-800 border-emerald-300',
+      cardBg: 'bg-gradient-to-br from-emerald-50/90 to-emerald-100/30 border-emerald-300 ring-1 ring-emerald-200 shadow-xs',
+      labelColor: 'text-emerald-800 font-bold',
+      valueColor: 'text-emerald-950 font-extrabold font-mono text-sm',
+    };
+  }
+
+  // 2. Costo Soles (PEN)
+  if (norm.includes('costo') && (norm.includes('soles') || norm.includes('pen'))) {
+    return {
+      icon: <Banknote size={13} className="text-blue-600 shrink-0" />,
+      badgeText: 'PEN',
+      badgeBg: 'bg-blue-100 text-blue-800 border-blue-300',
+      cardBg: 'bg-gradient-to-br from-blue-50/90 to-blue-100/30 border-blue-300 ring-1 ring-blue-200 shadow-xs',
+      labelColor: 'text-blue-800 font-bold',
+      valueColor: 'text-blue-950 font-extrabold font-mono text-sm',
+    };
+  }
+
+  // 3. Fecha Inicio Estimación
+  if (norm.includes('fecha inicio') && norm.includes('estimaci')) {
+    return {
+      icon: <Calendar size={13} className="text-amber-600 shrink-0" />,
+      badgeText: 'Inicio Est.',
+      badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
+      cardBg: 'bg-gradient-to-br from-amber-50/90 to-amber-100/30 border-amber-300 ring-1 ring-amber-200 shadow-xs',
+      labelColor: 'text-amber-800 font-bold',
+      valueColor: 'text-amber-950 font-bold font-mono text-xs',
+    };
+  }
+
+  // 4. Fecha Fin Estimación
+  if (norm.includes('fecha fin') && norm.includes('estimaci')) {
+    return {
+      icon: <CalendarCheck size={13} className="text-amber-600 shrink-0" />,
+      badgeText: 'Fin Est.',
+      badgeBg: 'bg-amber-100 text-amber-800 border-amber-300',
+      cardBg: 'bg-gradient-to-br from-amber-50/90 to-amber-100/30 border-amber-300 ring-1 ring-amber-200 shadow-xs',
+      labelColor: 'text-amber-800 font-bold',
+      valueColor: 'text-amber-950 font-bold font-mono text-xs',
+    };
+  }
+
+  // 5. Tiempo estimado (meses)
+  if (norm.includes('tiempo estimado') || (norm.includes('duración') && norm.includes('meses'))) {
+    return {
+      icon: <Clock size={13} className="text-violet-600 shrink-0" />,
+      badgeText: 'Duración',
+      badgeBg: 'bg-violet-100 text-violet-800 border-violet-300',
+      cardBg: 'bg-gradient-to-br from-violet-50/90 to-violet-100/30 border-violet-300 ring-1 ring-violet-200 shadow-xs',
+      labelColor: 'text-violet-800 font-bold',
+      valueColor: 'text-violet-950 font-extrabold font-mono text-sm',
+    };
+  }
+
+  // 6. Fecha Inicio Planificada
+  if (norm.includes('fecha inicio') && norm.includes('planificad')) {
+    return {
+      icon: <Calendar size={13} className="text-teal-600 shrink-0" />,
+      badgeText: 'Inicio Plan.',
+      badgeBg: 'bg-teal-100 text-teal-800 border-teal-300',
+      cardBg: 'bg-gradient-to-br from-teal-50/90 to-teal-100/30 border-teal-300 ring-1 ring-teal-200 shadow-xs',
+      labelColor: 'text-teal-800 font-bold',
+      valueColor: 'text-teal-950 font-bold font-mono text-xs',
+    };
+  }
+
+  // 7. Fecha Fin Planificada
+  if (norm.includes('fecha fin') && norm.includes('planificad')) {
+    return {
+      icon: <CalendarCheck size={13} className="text-teal-600 shrink-0" />,
+      badgeText: 'Fin Plan.',
+      badgeBg: 'bg-teal-100 text-teal-800 border-teal-300',
+      cardBg: 'bg-gradient-to-br from-teal-50/90 to-teal-100/30 border-teal-300 ring-1 ring-teal-200 shadow-xs',
+      labelColor: 'text-teal-800 font-bold',
+      valueColor: 'text-teal-950 font-bold font-mono text-xs',
+    };
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
 // Componente de Vista Detallada Completa de una Iniciativa
 // Muestra ABSOLUTAMENTE TODOS los campos del registro y renderiza URLs
 // ---------------------------------------------------------------------------
@@ -354,7 +457,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
       if (t.lider_dominio) map.set('Líder de Dominio', t.lider_dominio);
       if (t.asignado_por) map.set('Asignado por', t.asignado_por);
       if (t.fecha_asignacion) map.set('Fecha Asignación', fmtDate(t.fecha_asignacion));
-      if (t.duracion_meses !== null) map.set('Tiempo Estimado (meses)', t.duracion_meses);
+      if (t.duracion_meses !== null && t.duracion_meses !== undefined) map.set('Tiempo Estimado (meses)', t.duracion_meses);
+      if (t.tiempo_estimado !== null && t.tiempo_estimado !== undefined) map.set('Tiempo Estimado', t.tiempo_estimado);
       if (t.costo_usd !== null) map.set('Costo en Dólares (USD)', fmtUSD(t.costo_usd));
       if (t.costo_soles !== null) map.set('Costo en Soles (PEN)', fmtMoney(t.costo_soles));
       if (t.tipo_recurso) map.set('Tipo de Recurso', t.tipo_recurso);
@@ -562,12 +666,18 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Asignado por', value: t.asignado_por },
           { label: 'Fecha de Asignación al LD', value: fmtDate(t.fecha_asignacion) },
           { label: 'Complejidad Estimada', value: t.complejidad },
-          { label: 'Duración Estimada (meses)', value: t.duracion_meses },
           { label: 'Tipo de Recurso', value: t.tipo_recurso },
           { label: 'Costo Dólares (USD)', value: fmtUSD(t.costo_usd) },
           { label: 'Costo Soles (PEN)', value: fmtMoney(t.costo_soles) },
           { label: 'Fecha Inicio Estimación', value: fmtDate(t.fecha_inicio_estimacion) },
           { label: 'Fecha Fin Estimación', value: fmtDate(t.fecha_fin_estimacion) },
+          { label: 'Tiempo estimado (meses)', value: t.tiempo_estimado ?? t.duracion_meses ?? getRawVal('Tiempo estimado (meses)', 'Tiempo estimado\r\n(meses)', 'Tiempo estimado\n(meses)', 'Tiempo estimado', 'Tiempo Estimado (meses)', 'Tiempo Estimado') },
+          { label: 'Asunciones', value: getRawVal('Asunciones', 'Supuestos', 'Asunciones / Supuestos') },
+          { label: 'Comentarios', value: getRawVal('Comentarios', 'Comentario') },
+          { label: 'Puntaje Sugerido', value: getRawVal('Puntaje Sugerido', 'Puntaje sugerido', 'Puntaje') },
+          { label: 'Beneficios Cualitativos', value: getRawVal('Beneficios cualitativos', 'Beneficio cualitativo') },
+          { label: 'Workstream SPO', value: getRawVal('Workstream del proyecto SPO', 'Workstream') },
+          { label: 'Evidencia de Aprobación', value: getRawVal('Evidencia de la aprobación del VP o Director', 'Evidencia de la aprobación', 'Aprobación') },
           { label: 'Estatus Estimación', value: t.estatus_estimacion },
           { label: 'Acción BRM', value: t.accion_brm },
           { label: 'Prioridad BRM', value: t.prioridad_brm },
@@ -799,6 +909,123 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         </div>
       )}
 
+      {/* ── BARRA DE DESTACADOS: MÉTRICAS CLAVE DE ESTIMACIÓN & PLANIFICACIÓN ── */}
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-3">
+        {/* Bloque 1: Resumen de Estimación (Costos, Duración y Fechas) */}
+        <div className="bg-gradient-to-br from-amber-500/10 via-amber-50/50 to-orange-50/30 rounded-xl p-3 border border-amber-200/90 shadow-xs">
+          <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-amber-200/60">
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 rounded-md bg-amber-500 text-white shadow-2xs">
+                <DollarSign size={13} />
+              </div>
+              <span className="text-[11px] font-bold text-amber-900 uppercase tracking-wide">
+                2 · Estimación Clave
+              </span>
+            </div>
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-800 border border-amber-300/80">
+              ★ CAMPOS PRIORITARIOS
+            </span>
+          </div>
+
+          <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
+            {/* Costo USD */}
+            <div className="bg-white/95 p-2 rounded-lg border border-emerald-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Costo USD</span>
+                <span className="text-[8px] font-bold px-1 rounded bg-emerald-100 text-emerald-800 border border-emerald-200">USD</span>
+              </div>
+              <div className="text-xs font-extrabold font-mono text-emerald-950 mt-1">
+                {fmtUSD(t.costo_usd) ?? <span className="text-slate-300 font-normal italic font-sans">—</span>}
+              </div>
+            </div>
+
+            {/* Costo Soles */}
+            <div className="bg-white/95 p-2 rounded-lg border border-blue-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Costo Soles</span>
+                <span className="text-[8px] font-bold px-1 rounded bg-blue-100 text-blue-800 border border-blue-200">PEN</span>
+              </div>
+              <div className="text-xs font-extrabold font-mono text-blue-950 mt-1">
+                {fmtMoney(t.costo_soles) ?? <span className="text-slate-300 font-normal italic font-sans">—</span>}
+              </div>
+            </div>
+
+            {/* Tiempo Estimado (meses) */}
+            <div className="bg-white/95 p-2 rounded-lg border border-violet-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Tiempo Estimado</span>
+                <Clock size={11} className="text-violet-600" />
+              </div>
+              <div className="text-xs font-extrabold font-mono text-violet-950 mt-1">
+                {t.tiempo_estimado !== null && t.tiempo_estimado !== undefined
+                  ? `${t.tiempo_estimado} meses`
+                  : t.duracion_meses !== null && t.duracion_meses !== undefined
+                  ? `${t.duracion_meses} meses`
+                  : <span className="text-slate-300 font-normal italic font-sans">—</span>}
+              </div>
+            </div>
+
+            {/* Fechas Estimación */}
+            <div className="bg-white/95 p-2 rounded-lg border border-amber-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Fechas Estimación</span>
+                <Calendar size={11} className="text-amber-600" />
+              </div>
+              <div className="text-[10px] font-bold font-mono text-amber-950 mt-1 leading-tight">
+                {t.fecha_inicio_estimacion || t.fecha_fin_estimacion ? (
+                  <span>
+                    {fmtDate(t.fecha_inicio_estimacion) ?? '—'} <span className="text-amber-500 font-bold">→</span> {fmtDate(t.fecha_fin_estimacion) ?? '—'}
+                  </span>
+                ) : (
+                  <span className="text-slate-300 font-normal italic font-sans">—</span>
+                )}
+              </div>
+            </div>
+          </div>
+        </div>
+
+        {/* Bloque 2: Resumen de Planificación (Fechas Inicio y Fin) */}
+        <div className="bg-gradient-to-br from-teal-500/10 via-teal-50/50 to-emerald-50/30 rounded-xl p-3 border border-teal-200/90 shadow-xs">
+          <div className="flex items-center justify-between gap-2 mb-2 pb-1.5 border-b border-teal-200/60">
+            <div className="flex items-center gap-1.5">
+              <div className="p-1 rounded-md bg-teal-600 text-white shadow-2xs">
+                <CalendarCheck size={13} />
+              </div>
+              <span className="text-[11px] font-bold text-teal-900 uppercase tracking-wide">
+                5 · Planificación Clave
+              </span>
+            </div>
+            <span className="text-[9px] font-bold px-2 py-0.5 rounded-full bg-teal-100 text-teal-800 border border-teal-300/80">
+              ★ CRONOGRAMA
+            </span>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-2">
+            {/* Fecha Inicio Planificada */}
+            <div className="bg-white/95 p-2 rounded-lg border border-teal-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Fecha Inicio Planificada</span>
+                <Calendar size={11} className="text-teal-600" />
+              </div>
+              <div className="text-xs font-extrabold font-mono text-teal-950 mt-1">
+                {fmtDate(t.fecha_inicio_planificada) ?? <span className="text-slate-300 font-normal italic font-sans">—</span>}
+              </div>
+            </div>
+
+            {/* Fecha Fin Planificada */}
+            <div className="bg-white/95 p-2 rounded-lg border border-teal-200 shadow-2xs flex flex-col justify-between">
+              <div className="flex items-center justify-between text-[9px] font-bold text-slate-500 uppercase">
+                <span>Fecha Fin Planificada</span>
+                <CalendarCheck size={11} className="text-teal-600" />
+              </div>
+              <div className="text-xs font-extrabold font-mono text-teal-950 mt-1">
+                {fmtDate(t.fecha_fin_planificada) ?? <span className="text-slate-300 font-normal italic font-sans">—</span>}
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+
       {/* Selector de Pestañas y Buscador interno */}
       <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 bg-white p-2.5 rounded-lg border border-slate-200">
         <div className="flex items-center gap-1.5">
@@ -998,19 +1225,46 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
 
                 {estimacionOpen && (
                   <div className="border-t border-slate-100 p-3 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 xl:grid-cols-4 gap-2.5 bg-slate-50/40">
-                    {validFields.map(f => (
-                      <div
-                        key={f.label}
-                        className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs flex flex-col justify-start"
-                      >
-                        <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
-                          {f.label}
-                        </span>
-                        <div className="text-xs text-slate-800 font-medium leading-relaxed break-words">
-                          <FormattedFieldValue value={f.value} />
+                    {validFields.map(f => {
+                      const highlight = getFieldHighlightConfig(f.label);
+                      if (highlight) {
+                        return (
+                          <div
+                            key={f.label}
+                            className={`${highlight.cardBg} p-2.5 rounded-lg border flex flex-col justify-between`}
+                          >
+                            <div className="flex items-center justify-between gap-1 mb-1">
+                              <div className="flex items-center gap-1.5 min-w-0">
+                                {highlight.icon}
+                                <span className={`text-[10px] ${highlight.labelColor} uppercase tracking-wider truncate`}>
+                                  {f.label}
+                                </span>
+                              </div>
+                              <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${highlight.badgeBg}`}>
+                                {highlight.badgeText}
+                              </span>
+                            </div>
+                            <div className={`${highlight.valueColor} leading-relaxed break-words mt-0.5`}>
+                              <FormattedFieldValue value={f.value} />
+                            </div>
+                          </div>
+                        );
+                      }
+
+                      return (
+                        <div
+                          key={f.label}
+                          className="bg-white p-2.5 rounded-lg border border-slate-100 shadow-2xs flex flex-col justify-start"
+                        >
+                          <span className="text-[9px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+                            {f.label}
+                          </span>
+                          <div className="text-xs text-slate-800 font-medium leading-relaxed break-words">
+                            <FormattedFieldValue value={f.value} />
+                          </div>
                         </div>
-                      </div>
-                    ))}
+                      );
+                    })}
                   </div>
                 )}
               </div>
@@ -1104,16 +1358,43 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
                     {/* Body expandible */}
                     {isOpen && (
                       <div className="border-t border-slate-100 px-3 pb-3 pt-2 space-y-2 text-xs divide-y divide-slate-50">
-                        {displayFields.map(f => (
-                          <div key={f.label} className="pt-2 first:pt-0 flex flex-col">
-                            <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
-                              {f.label}
-                            </span>
-                            <div className="text-slate-800 font-medium leading-relaxed">
-                              <FormattedFieldValue value={f.value} />
+                        {displayFields.map(f => {
+                          const highlight = getFieldHighlightConfig(f.label);
+                          if (highlight) {
+                            return (
+                              <div
+                                key={f.label}
+                                className={`${highlight.cardBg} p-2 rounded-lg border flex flex-col justify-between my-1.5`}
+                              >
+                                <div className="flex items-center justify-between gap-1 mb-1">
+                                  <div className="flex items-center gap-1.5 min-w-0">
+                                    {highlight.icon}
+                                    <span className={`text-[10px] ${highlight.labelColor} uppercase tracking-wider truncate`}>
+                                      {f.label}
+                                    </span>
+                                  </div>
+                                  <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${highlight.badgeBg}`}>
+                                    {highlight.badgeText}
+                                  </span>
+                                </div>
+                                <div className={`${highlight.valueColor} leading-relaxed break-words`}>
+                                  <FormattedFieldValue value={f.value} />
+                                </div>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div key={f.label} className="pt-2 first:pt-0 flex flex-col">
+                              <span className="text-[10px] font-semibold text-slate-400 uppercase tracking-wider mb-0.5">
+                                {f.label}
+                              </span>
+                              <div className="text-slate-800 font-medium leading-relaxed">
+                                <FormattedFieldValue value={f.value} />
+                              </div>
                             </div>
-                          </div>
-                        ))}
+                          );
+                        })}
                       </div>
                     )}
                   </div>
@@ -1148,12 +1429,20 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
               <tbody className="divide-y divide-slate-100">
                 {filteredRawEntries.map(({ key, value }) => {
                   const isCopied = copiedKey === key;
+                  const highlight = getFieldHighlightConfig(key);
                   return (
-                    <tr key={key} className="hover:bg-slate-50/80 transition-colors group">
+                    <tr key={key} className={`hover:bg-slate-50/80 transition-colors group ${highlight ? 'bg-amber-50/20' : ''}`}>
                       <td className="px-4 py-2.5 font-semibold text-slate-700 align-top break-words">
-                        {key}
+                        <div className="flex items-center gap-1.5 flex-wrap">
+                          <span>{key}</span>
+                          {highlight && (
+                            <span className={`text-[8px] font-bold px-1.5 py-0.5 rounded border uppercase shrink-0 ${highlight.badgeBg}`}>
+                              ★ {highlight.badgeText}
+                            </span>
+                          )}
+                        </div>
                       </td>
-                      <td className="px-4 py-2.5 text-slate-800 align-top leading-relaxed break-words">
+                      <td className={`px-4 py-2.5 text-slate-800 align-top leading-relaxed break-words ${highlight ? highlight.valueColor : ''}`}>
                         <FormattedFieldValue value={value} />
                       </td>
                       <td className="px-3 py-2.5 text-center align-top">

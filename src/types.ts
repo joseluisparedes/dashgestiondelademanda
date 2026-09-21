@@ -43,6 +43,7 @@ export interface Iniciativa {
   asignado_por: string | null;
   fecha_asignacion: string | null;
   duracion_meses: number | null;
+  tiempo_estimado?: number | string | null;
   /** Costo en dólares. null = sin costo asignado (distinto de 0). */
   costo_usd: number | null;
   /** Costo en soles. null = sin costo asignado (distinto de 0). */

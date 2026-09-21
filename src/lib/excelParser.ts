@@ -367,7 +367,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               fecha_asignacion:
                 formatDt(g('Fecha de asignación esperada', 'Fecha de asignación del LD')),
               duracion_meses:
-                parseNum(g('Tiempo estimado', 'meses')),
+                parseNum(g('Tiempo estimado (meses)', 'Tiempo estimado\r\n(meses)', 'Tiempo estimado\n(meses)', 'Tiempo estimado', 'Tiempo Estimado (meses)', 'Tiempo Estimado', 'meses')),
+              tiempo_estimado:
+                parseNum(g('Tiempo estimado (meses)', 'Tiempo estimado\r\n(meses)', 'Tiempo estimado\n(meses)', 'Tiempo estimado', 'Tiempo Estimado (meses)', 'Tiempo Estimado', 'meses')),
               costo_usd,
               costo_soles,
               tipo_recurso:
@@ -435,6 +437,8 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 if (!iniciativa.estatus_estimacion) iniciativa.estatus_estimacion = existing.iniciativa.estatus_estimacion;
                 if (!iniciativa.estatus_reestimacion) iniciativa.estatus_reestimacion = existing.iniciativa.estatus_reestimacion;
                 if (!iniciativa.motivo_reestimacion) iniciativa.motivo_reestimacion = existing.iniciativa.motivo_reestimacion;
+                if (iniciativa.duracion_meses == null && existing.iniciativa.duracion_meses != null) iniciativa.duracion_meses = existing.iniciativa.duracion_meses;
+                if (iniciativa.tiempo_estimado == null && existing.iniciativa.tiempo_estimado != null) iniciativa.tiempo_estimado = existing.iniciativa.tiempo_estimado;
               }
               seenIds.set(id, { iniciativa, etapaIndex });
             } else {
@@ -446,6 +450,8 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               if (!existing.iniciativa.fecha_fin_planificada && iniciativa.fecha_fin_planificada) existing.iniciativa.fecha_fin_planificada = iniciativa.fecha_fin_planificada;
               if (!existing.iniciativa.estatus_reestimacion && iniciativa.estatus_reestimacion) existing.iniciativa.estatus_reestimacion = iniciativa.estatus_reestimacion;
               if (!existing.iniciativa.motivo_reestimacion && iniciativa.motivo_reestimacion) existing.iniciativa.motivo_reestimacion = iniciativa.motivo_reestimacion;
+              if (existing.iniciativa.duracion_meses == null && iniciativa.duracion_meses != null) existing.iniciativa.duracion_meses = iniciativa.duracion_meses;
+              if (existing.iniciativa.tiempo_estimado == null && iniciativa.tiempo_estimado != null) existing.iniciativa.tiempo_estimado = iniciativa.tiempo_estimado;
               existing.iniciativa.raw_fields = mergedRaw;
             }
           });

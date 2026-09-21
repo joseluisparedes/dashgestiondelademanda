@@ -3264,6 +3264,1179 @@ function ReporteITBP({
 }
 
 // ---------------------------------------------------------------------------
+// REPORTE: Control de Pendientes por IT BP
+// ---------------------------------------------------------------------------
+
+function isAffirmative(v: string | null | undefined): boolean {
+  if (!v) return false;
+  const s = String(v).toUpperCase().trim();
+  return ['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s);
+}
+
+type PendingBPTab = 'consolidado' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion';
+
+interface ReportePendientesBPProps {
+  iniciativas: Iniciativa[];
+  onNavigate: NavigateFn;
+  macro: MacroFilters;
+  onOpenDetailModal: (ini: Iniciativa) => void;
+}
+
+export function ReportePendientesBP({
+  iniciativas,
+  onNavigate,
+  macro,
+  onOpenDetailModal,
+}: ReportePendientesBPProps) {
+  const [activeTab, setActiveTab] = useState<PendingBPTab>('consolidado');
+  const [sortField, setSortField] = useState<'total' | 'bp' | 'est' | 'presup' | 'plan'>('total');
+  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
+  const [selectedModalData, setSelectedModalData] = useState<{
+    bp: string;
+    title: string;
+    items: Iniciativa[];
+  } | null>(null);
+  const [modalSearch, setModalSearch] = useState('');
+  const [modalStageFilter, setModalStageFilter] = useState<'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion'>('all');
+
+  // Clasificar iniciativas según aprobaciones pendientes por BP
+  const {
+    itemsEstimacion,
+    itemsPresupuesto,
+    itemsPlanificacion,
+    allPendingItems,
+  } = useMemo(() => {
+    const est: Iniciativa[] = [];
+    const presup: Iniciativa[] = [];
+    const plan: Iniciativa[] = [];
+
+    iniciativas.forEach(i => {
+      // 1. Por Aprobar Estimación
+      if (i.etapa_actual === 'por_aprobar_estimacion' && !isAffirmative(i.aprobar_estimacion)) {
+        est.push(i);
+      }
+      // 2. Por Habilitar Presupuesto
+      if (i.etapa_actual === 'por_habilitar_presupuesto' && !isAffirmative(i.presupuesto_habilitado)) {
+        presup.push(i);
+      }
+      // 3. Aprobar Planificación
+      if (i.etapa_actual === 'aprobar_planificacion' && !isAffirmative(i.planificacion_aprobada)) {
+        plan.push(i);
+      }
+    });
+
+    const all = Array.from(new Set([...est, ...presup, ...plan]));
+
+    return {
+      itemsEstimacion: est,
+      itemsPresupuesto: presup,
+      itemsPlanificacion: plan,
+      allPendingItems: all,
+    };
+  }, [iniciativas]);
+
+  // Agrupación por IT BP
+  const summaryByBP = useMemo(() => {
+    const map: Record<
+      string,
+      {
+        bp: string;
+        estCount: number;
+        presupCount: number;
+        planCount: number;
+        totalCount: number;
+        itemsEst: Iniciativa[];
+        itemsPresup: Iniciativa[];
+        itemsPlan: Iniciativa[];
+        itemsAll: Iniciativa[];
+      }
+    > = {};
+
+    const getEntry = (bp: string | null | undefined) => {
+      const normalized = normalize(bp);
+      if (!map[normalized]) {
+        map[normalized] = {
+          bp: normalized,
+          estCount: 0,
+          presupCount: 0,
+          planCount: 0,
+          totalCount: 0,
+          itemsEst: [],
+          itemsPresup: [],
+          itemsPlan: [],
+          itemsAll: [],
+        };
+      }
+      return map[normalized];
+    };
+
+    itemsEstimacion.forEach(i => {
+      const entry = getEntry(i.it_bp);
+      entry.estCount++;
+      entry.itemsEst.push(i);
+    });
+
+    itemsPresupuesto.forEach(i => {
+      const entry = getEntry(i.it_bp);
+      entry.presupCount++;
+      entry.itemsPresup.push(i);
+    });
+
+    itemsPlanificacion.forEach(i => {
+      const entry = getEntry(i.it_bp);
+      entry.planCount++;
+      entry.itemsPlan.push(i);
+    });
+
+    Object.values(map).forEach(entry => {
+      const combined = Array.from(new Set([...entry.itemsEst, ...entry.itemsPresup, ...entry.itemsPlan]));
+      entry.itemsAll = combined;
+      entry.totalCount = combined.length;
+    });
+
+    return Object.values(map);
+  }, [itemsEstimacion, itemsPresupuesto, itemsPlanificacion]);
+
+  // Ordenamiento
+  const sortedSummary = useMemo(() => {
+    return [...summaryByBP].sort((a, b) => {
+      let cmp = 0;
+      if (sortField === 'total') cmp = a.totalCount - b.totalCount;
+      else if (sortField === 'bp') cmp = optLabel(a.bp).localeCompare(optLabel(b.bp), 'es');
+      else if (sortField === 'est') cmp = a.estCount - b.estCount;
+      else if (sortField === 'presup') cmp = a.presupCount - b.presupCount;
+      else if (sortField === 'plan') cmp = a.planCount - b.planCount;
+      return sortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [summaryByBP, sortField, sortDir]);
+
+  const toggleSort = (field: typeof sortField) => {
+    if (sortField === field) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
+    else { setSortField(field); setSortDir('desc'); }
+  };
+
+  const SortIcon = ({ field }: { field: typeof sortField }) =>
+    sortField !== field
+      ? <ChevronRight size={12} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+      : sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
+
+  // Chart data consolidado
+  const chartDataConsolidado = useMemo(() => {
+    return sortedSummary
+      .filter(s => s.totalCount > 0)
+      .slice(0, 15)
+      .map(s => ({
+        name: optLabel(s.bp).length > 24 ? optLabel(s.bp).slice(0, 22) + '…' : optLabel(s.bp),
+        'Por Aprobar Est.': s.estCount,
+        'Hab. Presupuesto': s.presupCount,
+        'Aprobar Planif.': s.planCount,
+        total: s.totalCount,
+      }));
+  }, [sortedSummary]);
+
+  // Chart data específico para etapa
+  const chartDataEstimacion = useMemo(() => {
+    return sortedSummary
+      .filter(s => s.estCount > 0)
+      .map(s => ({
+        name: optLabel(s.bp).length > 24 ? optLabel(s.bp).slice(0, 22) + '…' : optLabel(s.bp),
+        value: s.estCount,
+      }));
+  }, [sortedSummary]);
+
+  const chartDataPresupuesto = useMemo(() => {
+    return sortedSummary
+      .filter(s => s.presupCount > 0)
+      .map(s => ({
+        name: optLabel(s.bp).length > 24 ? optLabel(s.bp).slice(0, 22) + '…' : optLabel(s.bp),
+        value: s.presupCount,
+      }));
+  }, [sortedSummary]);
+
+  const chartDataPlanificacion = useMemo(() => {
+    return sortedSummary
+      .filter(s => s.planCount > 0)
+      .map(s => ({
+        name: optLabel(s.bp).length > 24 ? optLabel(s.bp).slice(0, 22) + '…' : optLabel(s.bp),
+        value: s.planCount,
+      }));
+  }, [sortedSummary]);
+
+  const openBPModal = (bp: string, items: Iniciativa[], title?: string, stageFilter: 'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' = 'all') => {
+    setModalSearch('');
+    setModalStageFilter(stageFilter);
+    setSelectedModalData({
+      bp,
+      title: title || `Iniciativas Pendientes de BP TI: ${optLabel(bp)}`,
+      items,
+    });
+  };
+
+  const filteredModalItems = useMemo(() => {
+    if (!selectedModalData) return [];
+    let list = selectedModalData.items;
+
+    if (modalStageFilter !== 'all') {
+      list = list.filter(i => i.etapa_actual === modalStageFilter);
+    }
+
+    if (modalSearch.trim()) {
+      const q = modalSearch.toLowerCase().trim();
+      list = list.filter(i => {
+        const idStr = String(i.id).padStart(4, '0');
+        const tit = (i.titulo || '').toLowerCase();
+        const bp = (i.it_bp || '').toLowerCase();
+        const vp = (i.vp_solicitante || '').toLowerCase();
+        const sol = (i.usuario_negocio || '').toLowerCase();
+        return idStr.includes(q) || tit.includes(q) || bp.includes(q) || vp.includes(q) || sol.includes(q);
+      });
+    }
+
+    return list;
+  }, [selectedModalData, modalSearch, modalStageFilter]);
+
+  const TABS_CONFIG = [
+    { id: 'consolidado' as PendingBPTab, label: 'Consolidado General', count: allPendingItems.length, color: '#8b5cf6', bg: '#f5f3ff' },
+    { id: 'por_aprobar_estimacion' as PendingBPTab, label: 'Por Aprobar Estimación', count: itemsEstimacion.length, color: '#8b5cf6', bg: '#f5f3ff' },
+    { id: 'por_habilitar_presupuesto' as PendingBPTab, label: 'Por Habilitar Presupuesto', count: itemsPresupuesto.length, color: '#06b6d4', bg: '#ecfeff' },
+    { id: 'aprobar_planificacion' as PendingBPTab, label: 'Aprobar Planificación', count: itemsPlanificacion.length, color: '#10b981', bg: '#ecfdf5' },
+  ];
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Sub-navegación por pestañas */}
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, borderBottom: '1px solid #e2e8f0', paddingBottom: 12 }}>
+        {TABS_CONFIG.map(tab => {
+          const isActive = activeTab === tab.id;
+          return (
+            <button
+              key={tab.id}
+              onClick={() => setActiveTab(tab.id)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 8,
+                padding: '8px 16px',
+                borderRadius: 10,
+                border: isActive ? `1.5px solid ${tab.color}` : '1.5px solid #e2e8f0',
+                background: isActive ? tab.bg : '#ffffff',
+                color: isActive ? tab.color : '#64748b',
+                fontWeight: isActive ? 800 : 600,
+                fontSize: 12,
+                cursor: 'pointer',
+                boxShadow: isActive ? `0 2px 8px ${tab.color}20` : 'none',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              <span>{tab.label}</span>
+              <span
+                style={{
+                  fontSize: 10,
+                  fontWeight: 800,
+                  padding: '2px 7px',
+                  borderRadius: 20,
+                  background: isActive ? tab.color : '#f1f5f9',
+                  color: isActive ? '#ffffff' : '#64748b',
+                }}
+              >
+                {tab.count}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* Tarjetas de Resumen KPI */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12 }}>
+        <div
+          onClick={() => setActiveTab('consolidado')}
+          style={{
+            background: '#ffffff',
+            border: activeTab === 'consolidado' ? '1.5px solid #8b5cf6' : '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Total Pendientes BPs
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 900, color: '#8b5cf6' }}>{allPendingItems.length}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>iniciativas</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#8b5cf6', fontWeight: 600 }}>En fases de aprobación</span>
+        </div>
+
+        <div
+          onClick={() => setActiveTab('por_aprobar_estimacion')}
+          style={{
+            background: '#ffffff',
+            border: activeTab === 'por_aprobar_estimacion' ? '1.5px solid #8b5cf6' : '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Por Aprobar Estimación
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 900, color: '#7c3aed' }}>{itemsEstimacion.length}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>iniciativas</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#7c3aed', fontWeight: 600 }}>Esperando aprobación técnica</span>
+        </div>
+
+        <div
+          onClick={() => setActiveTab('por_habilitar_presupuesto')}
+          style={{
+            background: '#ffffff',
+            border: activeTab === 'por_habilitar_presupuesto' ? '1.5px solid #06b6d4' : '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Por Habilitar Presupuesto
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 900, color: '#0891b2' }}>{itemsPresupuesto.length}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>iniciativas</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#0891b2', fontWeight: 600 }}>Esperando asignación fondos</span>
+        </div>
+
+        <div
+          onClick={() => setActiveTab('aprobar_planificacion')}
+          style={{
+            background: '#ffffff',
+            border: activeTab === 'aprobar_planificacion' ? '1.5px solid #10b981' : '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Aprobar Planificación
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 900, color: '#059669' }}>{itemsPlanificacion.length}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>iniciativas</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#059669', fontWeight: 600 }}>Esperando visto bueno plan</span>
+        </div>
+      </div>
+
+      {/* VISTA 1: CONSOLIDADO GENERAL */}
+      {activeTab === 'consolidado' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          {/* Gráfico de Barras Apiladas */}
+          <div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Distribución de Iniciativas Pendientes por IT BP (Top 15)
+            </p>
+            {chartDataConsolidado.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
+                🎉 No hay iniciativas pendientes de BPs en los datos filtrados.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(220, chartDataConsolidado.length * 38 + 40)}>
+                <BarChart data={chartDataConsolidado} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
+                  <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
+                  <Tooltip content={<ReportTooltip />} />
+                  <Bar dataKey="Por Aprobar Est." stackId="a" fill="#8b5cf6" />
+                  <Bar dataKey="Hab. Presupuesto" stackId="a" fill="#06b6d4" />
+                  <Bar dataKey="Aprobar Planif." stackId="a" fill="#10b981" radius={[0, 4, 4, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { index, x, y, width, height } = props;
+                        const row = chartDataConsolidado[index];
+                        if (!row || !row.total) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#5b21b6"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {row.total}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+            {/* Legend */}
+            <div style={{ display: 'flex', justifyContent: 'center', gap: 16, marginTop: 8 }}>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#8b5cf6' }} />
+                Por Aprobar Estimación
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#06b6d4' }} />
+                Por Habilitar Presupuesto
+              </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#10b981' }} />
+                Aprobar Planificación
+              </span>
+            </div>
+          </div>
+
+          {/* Tabla Consolidada */}
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th onClick={() => toggleSort('bp')} style={{ padding: '10px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>IT BP <SortIcon field="bp" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('est')} style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>Por Aprobar Est. <SortIcon field="est" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('presup')} style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>Hab. Presupuesto <SortIcon field="presup" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('plan')} style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>Aprobar Planif. <SortIcon field="plan" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('total')} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total Pendientes <SortIcon field="total" /></span>
+                  </th>
+                  <th style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
+                  <th style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSummary.filter(s => s.totalCount > 0).length === 0 ? (
+                  <tr>
+                    <td colSpan={7} style={{ padding: '30px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                      Sin pendientes por parte de los IT BPs.
+                    </td>
+                  </tr>
+                ) : (
+                  sortedSummary.filter(s => s.totalCount > 0).map((row, idx) => (
+                    <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <ClickableCell
+                          label={optLabel(row.bp)}
+                          onClick={() => openBPModal(row.bp, row.itemsAll)}
+                          title={`Ver iniciativas pendientes de: ${optLabel(row.bp)}`}
+                        />
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {row.estCount > 0 ? (
+                          <span
+                            onClick={() => openBPModal(row.bp, row.itemsEst, `Iniciativas Por Aprobar Estimación: ${optLabel(row.bp)}`, 'por_aprobar_estimacion')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                              background: '#f5f3ff',
+                              color: '#7c3aed',
+                              border: '1px solid #ddd6fe',
+                              fontWeight: 700,
+                              fontSize: 11,
+                              cursor: 'pointer',
+                            }}
+                            title="Ver iniciativas por aprobar estimación"
+                          >
+                            {row.estCount}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {row.presupCount > 0 ? (
+                          <span
+                            onClick={() => openBPModal(row.bp, row.itemsPresup, `Iniciativas Por Habilitar Presupuesto: ${optLabel(row.bp)}`, 'por_habilitar_presupuesto')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                              background: '#ecfeff',
+                              color: '#0891b2',
+                              border: '1px solid #a5f3fc',
+                              fontWeight: 700,
+                              fontSize: 11,
+                              cursor: 'pointer',
+                            }}
+                            title="Ver iniciativas por habilitar presupuesto"
+                          >
+                            {row.presupCount}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {row.planCount > 0 ? (
+                          <span
+                            onClick={() => openBPModal(row.bp, row.itemsPlan, `Iniciativas Por Aprobar Planificación: ${optLabel(row.bp)}`, 'aprobar_planificacion')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                              background: '#ecfdf5',
+                              color: '#059669',
+                              border: '1px solid #a7f3d0',
+                              fontWeight: 700,
+                              fontSize: 11,
+                              cursor: 'pointer',
+                            }}
+                            title="Ver iniciativas por aprobar planificación"
+                          >
+                            {row.planCount}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1' }}>—</span>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <span style={{ fontWeight: 800, color: '#5b21b6', fontSize: 13 }}>
+                          {row.totalCount}
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', padding: '2px 8px', borderRadius: 20 }}>
+                          {Math.round((row.totalCount / (allPendingItems.length || 1)) * 100)}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => openBPModal(row.bp, row.itemsAll)}
+                          style={{
+                            fontSize: 11,
+                            fontWeight: 600,
+                            color: '#6d28d9',
+                            background: '#f5f3ff',
+                            border: '1px solid #ddd6fe',
+                            borderRadius: 6,
+                            padding: '4px 12px',
+                            cursor: 'pointer',
+                            transition: 'all 0.15s',
+                          }}
+                        >
+                          Ver Iniciativas
+                        </button>
+                      </td>
+                    </tr>
+                  ))
+                )}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#7c3aed' }}>{itemsEstimacion.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#0891b2' }}>{itemsPresupuesto.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{itemsPlanificacion.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, fontSize: 14, color: '#5b21b6' }}>{allPendingItems.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#6d28d9' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* VISTA 2: POR APROBAR ESTIMACIÓN */}
+      {activeTab === 'por_aprobar_estimacion' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 10, padding: '10px 16px', fontSize: 11.5, color: '#5b21b6', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Clock size={16} style={{ flexShrink: 0, color: '#7c3aed' }} />
+            <span>
+              <strong>Fase Auditada:</strong> Iniciativas en etapa <code>Por aprobar estimacion</code> donde el campo <code>Aprobar Estimación</code> está pendiente (distinto de "SÍ").
+            </span>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Iniciativas Por Aprobar Estimación por IT BP
+            </p>
+            {chartDataEstimacion.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
+                🎉 No hay estimaciones pendientes de aprobación.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(200, chartDataEstimacion.length * 36 + 30)}>
+                <BarChart data={chartDataEstimacion} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
+                  <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
+                  <Tooltip content={<ReportTooltip />} />
+                  <Bar dataKey="value" name="Por Aprobar Estimación" fill="#8b5cf6" radius={[0, 4, 4, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (!value) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#6d28d9"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>IT BP</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Estimación</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSummary.filter(s => s.estCount > 0).map((row, idx) => (
+                  <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsEst, `Por Aprobar Estimación: ${optLabel(row.bp)}`, 'por_aprobar_estimacion')} />
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#6d28d9', fontSize: 13 }}>{row.estCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', padding: '2px 8px', borderRadius: 20 }}>
+                        {Math.round((row.estCount / (itemsEstimacion.length || 1)) * 100)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => openBPModal(row.bp, row.itemsEst, `Por Aprobar Estimación: ${optLabel(row.bp)}`, 'por_aprobar_estimacion')}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#6d28d9', background: '#f5f3ff', border: '1px solid #ddd6fe', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                      >
+                        Ver Iniciativas
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#6d28d9' }}>{itemsEstimacion.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#6d28d9' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* VISTA 3: POR HABILITAR PRESUPUESTO */}
+      {activeTab === 'por_habilitar_presupuesto' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 10, padding: '10px 16px', fontSize: 11.5, color: '#0e7490', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Clock size={16} style={{ flexShrink: 0, color: '#0891b2' }} />
+            <span>
+              <strong>Fase Auditada:</strong> Iniciativas en etapa <code>Por habilitar presup.</code> donde el campo <code>Presupuesto Habilitado</code> está pendiente (distinto de "SÍ").
+            </span>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Iniciativas Por Habilitar Presupuesto por IT BP
+            </p>
+            {chartDataPresupuesto.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
+                🎉 No hay iniciativas pendientes de habilitación de presupuesto.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(200, chartDataPresupuesto.length * 36 + 30)}>
+                <BarChart data={chartDataPresupuesto} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
+                  <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
+                  <Tooltip content={<ReportTooltip />} />
+                  <Bar dataKey="value" name="Por Habilitar Presupuesto" fill="#06b6d4" radius={[0, 4, 4, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (!value) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#0e7490"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>IT BP</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Presupuesto</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSummary.filter(s => s.presupCount > 0).map((row, idx) => (
+                  <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsPresup, `Por Habilitar Presupuesto: ${optLabel(row.bp)}`, 'por_habilitar_presupuesto')} />
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#0891b2', fontSize: 13 }}>{row.presupCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#0891b2', background: '#ecfeff', padding: '2px 8px', borderRadius: 20 }}>
+                        {Math.round((row.presupCount / (itemsPresupuesto.length || 1)) * 100)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => openBPModal(row.bp, row.itemsPresup, `Por Habilitar Presupuesto: ${optLabel(row.bp)}`, 'por_habilitar_presupuesto')}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#0891b2', background: '#ecfeff', border: '1px solid #a5f3fc', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                      >
+                        Ver Iniciativas
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#0891b2' }}>{itemsPresupuesto.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#0891b2' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* VISTA 4: APROBAR PLANIFICACIÓN */}
+      {activeTab === 'aprobar_planificacion' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+          <div style={{ background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 10, padding: '10px 16px', fontSize: 11.5, color: '#065f46', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <Clock size={16} style={{ flexShrink: 0, color: '#059669' }} />
+            <span>
+              <strong>Fase Auditada:</strong> Iniciativas en etapa <code>Aprobar Planificación</code> donde el campo <code>Planificación Aprobada</code> está pendiente (distinto de "SÍ").
+            </span>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Iniciativas Por Aprobar Planificación por IT BP
+            </p>
+            {chartDataPlanificacion.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
+                🎉 No hay iniciativas pendientes de aprobación de planificación.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(200, chartDataPlanificacion.length * 36 + 30)}>
+                <BarChart data={chartDataPlanificacion} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
+                  <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
+                  <Tooltip content={<ReportTooltip />} />
+                  <Bar dataKey="value" name="Aprobar Planificación" fill="#10b981" radius={[0, 4, 4, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (!value) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#047857"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>IT BP</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Planificación</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSummary.filter(s => s.planCount > 0).map((row, idx) => (
+                  <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsPlan, `Aprobar Planificación: ${optLabel(row.bp)}`, 'aprobar_planificacion')} />
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#059669', fontSize: 13 }}>{row.planCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 20 }}>
+                        {Math.round((row.planCount / (itemsPlanificacion.length || 1)) * 100)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => openBPModal(row.bp, row.itemsPlan, `Aprobar Planificación: ${optLabel(row.bp)}`, 'aprobar_planificacion')}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#059669', background: '#ecfdf5', border: '1px solid #a7f3d0', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                      >
+                        Ver Iniciativas
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#059669' }}>{itemsPlanificacion.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#059669' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {/* ================================================================
+          MODAL DE DETALLE DE INICIATIVAS PENDIENTES DEL BP TI
+      ================================================================ */}
+      {selectedModalData && (
+        <div
+          style={{
+            position: 'fixed',
+            inset: 0,
+            backgroundColor: 'rgba(15, 23, 42, 0.45)',
+            backdropFilter: 'blur(8px)',
+            zIndex: 9999,
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            padding: 16,
+          }}
+          onClick={() => setSelectedModalData(null)}
+        >
+          <div
+            style={{
+              backgroundColor: '#ffffff',
+              borderRadius: 16,
+              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              width: '96vw',
+              maxWidth: 1500,
+              maxHeight: '90vh',
+              display: 'flex',
+              flexDirection: 'column',
+              overflow: 'hidden',
+              border: '1px solid #e2e8f0',
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            {/* Header del modal */}
+            <div
+              style={{
+                padding: '16px 22px',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+              }}
+            >
+              <div>
+                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>
+                  {selectedModalData.title}
+                </h3>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '3px 0 0 0' }}>
+                  Mostrando {filteredModalItems.length} de {selectedModalData.items.length} iniciativas pendientes
+                </p>
+              </div>
+              <button
+                onClick={() => setSelectedModalData(null)}
+                style={{
+                  background: '#f1f5f9',
+                  border: 'none',
+                  borderRadius: '50%',
+                  width: 32,
+                  height: 32,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  cursor: 'pointer',
+                  color: '#64748b',
+                }}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Barra de filtros del modal */}
+            <div
+              style={{
+                padding: '10px 22px',
+                borderBottom: '1px solid #f1f5f9',
+                display: 'flex',
+                flexWrap: 'wrap',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                gap: 12,
+                backgroundColor: '#fafafa',
+              }}
+            >
+              {/* Buscador */}
+              <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 420 }}>
+                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                <input
+                  type="text"
+                  placeholder="Buscar por ID, título, solicitante, VP..."
+                  value={modalSearch}
+                  onChange={e => setModalSearch(e.target.value)}
+                  style={{
+                    width: '100%',
+                    padding: '6px 10px 6px 30px',
+                    fontSize: 12,
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    outline: 'none',
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+              </div>
+
+              {/* Filtro de etapa */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Fase:</span>
+                <select
+                  value={modalStageFilter}
+                  onChange={e => setModalStageFilter(e.target.value as any)}
+                  style={{
+                    fontSize: 11.5,
+                    padding: '5px 10px',
+                    borderRadius: 8,
+                    border: '1px solid #cbd5e1',
+                    background: '#ffffff',
+                    color: '#334155',
+                    cursor: 'pointer',
+                  }}
+                >
+                  <option value="all">Todas las fases pendientes</option>
+                  <option value="por_aprobar_estimacion">Por Aprobar Estimación</option>
+                  <option value="por_habilitar_presupuesto">Por Habilitar Presupuesto</option>
+                  <option value="aprobar_planificacion">Aprobar Planificación</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Tabla de iniciativas */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px' }}>
+              {filteredModalItems.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
+                  No se encontraron iniciativas con los filtros aplicados.
+                </div>
+              ) : (
+                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+                  <thead>
+                    <tr style={{ background: '#f8fafc', color: '#475569', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
+                      <th style={{ padding: '8px 8px', width: 36, textAlign: 'center' }}>
+                        <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
+                      </th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap' }}>ID</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700, minWidth: 260 }}>Título de la Iniciativa</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>IT BP</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>VP Solicitante</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Solicitante</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Líder Dominio</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Etapa Pipeline</th>
+                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Acción Pendiente BP</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredModalItems.map((t, idx) => {
+                      const idStr = String(t.id).padStart(4, '0');
+                      const cfg = ETAPAS_MAP.get(t.etapa_actual);
+
+                      let pendingBadge = null;
+                      if (t.etapa_actual === 'por_aprobar_estimacion') {
+                        pendingBadge = (
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontWeight: 700 }}>
+                            Aprobar Estimación: {t.aprobar_estimacion || 'Pendiente'}
+                          </span>
+                        );
+                      } else if (t.etapa_actual === 'por_habilitar_presupuesto') {
+                        pendingBadge = (
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc', fontWeight: 700 }}>
+                            Habilitar Presupuesto: {t.presupuesto_habilitado || 'Pendiente'}
+                          </span>
+                        );
+                      } else if (t.etapa_actual === 'aprobar_planificacion') {
+                        pendingBadge = (
+                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontWeight: 700 }}>
+                            Aprobar Planificación: {t.planificacion_aprobada || 'Pendiente'}
+                          </span>
+                        );
+                      }
+
+                      return (
+                        <tr
+                          key={t.id}
+                          style={{
+                            borderBottom: '1px solid #f1f5f9',
+                            backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                          }}
+                        >
+                          <td style={{ padding: '8px 8px', textAlign: 'center' }}>
+                            <button
+                              type="button"
+                              onClick={() => onOpenDetailModal(t)}
+                              style={{
+                                background: '#eff6ff',
+                                border: '1px solid #bfdbfe',
+                                borderRadius: 6,
+                                width: 26,
+                                height: 26,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                cursor: 'pointer',
+                                color: '#2563eb',
+                              }}
+                              title="Abrir detalle completo de la iniciativa"
+                            >
+                              <Eye size={13} />
+                            </button>
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap' }}>
+                            {idStr}
+                          </td>
+                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', minWidth: 260, lineHeight: 1.4 }}>
+                            {t.titulo}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#475569' }}>
+                            {t.it_bp || '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#475569' }}>
+                            {t.vp_solicitante || '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#475569' }}>
+                            {t.usuario_negocio || '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px', color: '#475569' }}>
+                            {t.lider_dominio || '—'}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {cfg ? (
+                              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, backgroundColor: cfg.bgColor, color: cfg.textColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                {cfg.label}
+                              </span>
+                            ) : (
+                              <span>{t.etapa_actual}</span>
+                            )}
+                          </td>
+                          <td style={{ padding: '8px 10px' }}>
+                            {pendingBadge}
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              )}
+            </div>
+
+            {/* Footer modal */}
+            <div
+              style={{
+                padding: '12px 22px',
+                borderTop: '1px solid #f1f5f9',
+                display: 'flex',
+                justifyContent: 'flex-end',
+                backgroundColor: '#f8fafc',
+              }}
+            >
+              <button
+                onClick={() => setSelectedModalData(null)}
+                style={{
+                  backgroundColor: '#8b5cf6',
+                  color: '#ffffff',
+                  border: 'none',
+                  borderRadius: 8,
+                  padding: '7px 16px',
+                  fontSize: 12,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                }}
+              >
+                Cerrar
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Componente principal: Reports
 // ---------------------------------------------------------------------------
 export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsProps) {
@@ -3618,7 +4791,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [detailModalIniciativa, setDetailModalIniciativa] = useState<Iniciativa | null>(null);
 
   // ---- Estado del reporte activo (null = Catálogo inicial de opciones) ----
-  type ReportId = 'fuera_fecha' | 'vp' | 'estados' | 'it_bp';
+  type ReportId = 'fuera_fecha' | 'pendientes_bp' | 'vp' | 'estados' | 'it_bp';
   const [selectedReport, setSelectedReport] = useState<ReportId | null>(null);
 
   // ---- Motivos únicos de auditoría de fechas ----
@@ -3699,6 +4872,20 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const etapasCount = useMemo(() => new Set(filtered.map(i => i.etapa_actual)).size, [filtered]);
   const itbpsCount = useMemo(() => new Set(filtered.map(i => normalize(i.it_bp)).filter(Boolean)).size, [filtered]);
 
+  const pendientesBPMetrics = useMemo(() => {
+    let count = 0;
+    for (const i of filtered) {
+      if (
+        (i.etapa_actual === 'por_aprobar_estimacion' && !isAffirmative(i.aprobar_estimacion)) ||
+        (i.etapa_actual === 'por_habilitar_presupuesto' && !isAffirmative(i.presupuesto_habilitado)) ||
+        (i.etapa_actual === 'aprobar_planificacion' && !isAffirmative(i.planificacion_aprobada))
+      ) {
+        count++;
+      }
+    }
+    return count;
+  }, [filtered]);
+
   // ---- Catálogo de opciones de reportes ----
   const reportCatalog = useMemo(() => [
     ...(mode === 'demanda' ? [{
@@ -3719,6 +4906,25 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       metricHighlight: fueraFechaMetrics > 0,
       accentColor: '#ef4444',
       description: 'Detecta y audita plazos vencidos en iniciativas por líder de dominio en etapas de Estimación, Re-estimación y Planificación comparadas directamente contra HOY.',
+    },
+    {
+      id: 'pendientes_bp' as ReportId,
+      title: 'Control de Pendientes por IT BP',
+      subtitle: 'Aprobaciones de estimación, habilitación de presupuesto y aprobación de planificación',
+      category: 'Aprobaciones y Gestión BP',
+      icon: <UserCheck size={24} style={{ color: '#8b5cf6' }} />,
+      iconBg: 'linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%)',
+      borderColor: '#ddd6fe',
+      hoverBorder: '#8b5cf6',
+      badgeBg: '#f5f3ff',
+      badgeText: '#8b5cf6',
+      badgeBorder: '#ddd6fe',
+      badgeLabel: 'Pendientes BP TI',
+      metricValue: `${pendientesBPMetrics} pendientes`,
+      metricLabel: 'esperando acción de IT BPs',
+      metricHighlight: pendientesBPMetrics > 0,
+      accentColor: '#8b5cf6',
+      description: 'Monitorea las iniciativas que requieren aprobación de estimación, habilitación de presupuesto o aprobación final de planificación por parte de los Business Partners TI.',
     }] : []),
     {
       id: 'vp' as ReportId,
@@ -3777,7 +4983,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       accentColor: '#059669',
       description: 'Analiza la carga de trabajo por IT Business Partner, seguimiento de proyectos SPO y detalle de iniciativas gestionadas.',
     },
-  ], [mode, fueraFechaMetrics, vpsCount, etapasCount, itbpsCount]);
+  ], [mode, fueraFechaMetrics, pendientesBPMetrics, vpsCount, etapasCount, itbpsCount]);
 
   // ---- Filtrar iniciativas del popup estándar ----
   const popupIniciativas = useMemo(() => {
@@ -4229,6 +5435,36 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
           <ReporteLideresFueraFecha
             iniciativas={filtered}
             onOpenCustomPopup={setPopupCustomData}
+          />
+        </ReportCard>
+      )}
+
+      {/* REPORTE: CONTROL DE PENDIENTES POR IT BP */}
+      {selectedReport === 'pendientes_bp' && mode === 'demanda' && (
+        <ReportCard
+          title="Control de Pendientes por IT BP (Aprobaciones y Habilitación de Presupuesto)"
+          icon={<UserCheck size={18} style={{ color: '#8b5cf6' }} />}
+          badge={
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 700,
+                padding: '2px 8px',
+                borderRadius: 20,
+                background: '#f5f3ff',
+                color: '#8b5cf6',
+                border: '1px solid #ddd6fe',
+              }}
+            >
+              Aprobaciones Pendientes
+            </span>
+          }
+        >
+          <ReportePendientesBP
+            iniciativas={filtered}
+            onNavigate={setPopupFilters}
+            macro={macro}
+            onOpenDetailModal={setDetailModalIniciativa}
           />
         </ReportCard>
       )}

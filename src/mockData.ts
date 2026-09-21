@@ -87,6 +87,7 @@ export function generateMockData(): DashboardData {
             : null
           : Math.random() > 0.4 ? subDays(today, 10).toISOString() : null,
       duracion_meses: Math.floor(Math.random() * 6) + 1,
+      tiempo_estimado: Math.floor(Math.random() * 6) + 1,
       costo_usd,
       costo_soles,
       tipo_recurso: pick(recursos),

@@ -209,14 +209,18 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         
         const expectedTabs = Object.keys(HOJAS_OPERATIVAS);
         const ALLOWED_EXTRA_TABS = [
-          'Data maestra', 'BD', 'Priorización BRM', 'Backup 1902 1025', 
+          'Data maestra', 'BD', 'BD New', 'Priorización BRM', 'Backup 1902 1025', 
           'Por confirmar', 'Forms', 'Criterios Prioriz', 'Hoja1', 
           'Tipo de cambio', 'Sheet1'
         ];
         const actualTabs = workbook.SheetNames;
         
         const missingTabs = expectedTabs.filter(t => !actualTabs.includes(t));
-        const extraTabs = actualTabs.filter(t => !expectedTabs.includes(t) && !ALLOWED_EXTRA_TABS.includes(t));
+        const extraTabs = actualTabs.filter(t => 
+          !expectedTabs.includes(t) && 
+          !ALLOWED_EXTRA_TABS.includes(t) &&
+          !t.trim().toUpperCase().startsWith('BD')
+        );
         
         if (missingTabs.length > 0) {
           errors.push(`• Faltan pestañas esperadas: ${missingTabs.join(', ')}`);

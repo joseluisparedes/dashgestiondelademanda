@@ -209,8 +209,8 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         
         const expectedTabs = Object.keys(HOJAS_OPERATIVAS);
         const ALLOWED_EXTRA_TABS = [
-          'Data maestra', 'BD', 'BD New', 'Priorización BRM', 'Backup 1902 1025', 
-          'Por confirmar', 'Forms', 'Criterios Prioriz', 'Hoja1', 
+          'Data maestra', 'BD', 'BD New', 'BD 2', 'Priorización BRM', 'Backup 1902 1025', 
+          'Por confirmar', 'Forms', 'Criterios Prioriz', 'Criterios de priorización', 'Hoja1', 
           'Tipo de cambio', 'Sheet1'
         ];
         const actualTabs = workbook.SheetNames;
@@ -219,7 +219,8 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const extraTabs = actualTabs.filter(t => 
           !expectedTabs.includes(t) && 
           !ALLOWED_EXTRA_TABS.includes(t) &&
-          !t.trim().toUpperCase().startsWith('BD')
+          !t.trim().toUpperCase().startsWith('BD') &&
+          !t.trim().toLowerCase().startsWith('criterios')
         );
         
         if (missingTabs.length > 0) {

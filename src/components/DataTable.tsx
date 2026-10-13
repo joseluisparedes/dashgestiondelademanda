@@ -35,11 +35,13 @@ import {
   ClipboardList,
   Columns3,
   Clock,
+  CheckSquare,
 } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
 interface DataTableProps {
   iniciativas: Iniciativa[];
+  allIniciativas?: Iniciativa[];
   expandedId?: number | null;
   onExpandedIdChange?: (id: number | null) => void;
   mode?: 'demanda' | 'planificadas';
@@ -1634,6 +1636,7 @@ function StageDateCell({
 // ---------------------------------------------------------------------------
 export function DataTable({
   iniciativas,
+  allIniciativas,
   expandedId: propExpandedId,
   onExpandedIdChange,
   mode = 'demanda',
@@ -1886,6 +1889,7 @@ export function DataTable({
 
   const [page, setPage] = useState(1);
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [showOnlySelected, setShowOnlySelected] = useState(false);
   const [localExpandedId, setLocalExpandedId] = useState<number | null>(null);
 
   const expandedId = propExpandedId !== undefined ? propExpandedId : localExpandedId;
@@ -1932,11 +1936,39 @@ export function DataTable({
 
   useEffect(() => {
     setPage(1);
-    setSelectedIds(new Set());
     if (expandedId !== null && !iniciativas.some(t => t.id === expandedId)) {
       setExpandedId(null);
     }
   }, [iniciativas]);
+
+  useEffect(() => {
+    setSelectedIds(new Set());
+    setShowOnlySelected(false);
+  }, [mode]);
+
+  useEffect(() => {
+    if (allIniciativas && allIniciativas.length > 0) {
+      const validIds = new Set(allIniciativas.map(t => t.id));
+      setSelectedIds(prev => {
+        let changed = false;
+        const next = new Set<number>();
+        prev.forEach(id => {
+          if (validIds.has(id)) {
+            next.add(id);
+          } else {
+            changed = true;
+          }
+        });
+        return changed ? next : prev;
+      });
+    }
+  }, [allIniciativas]);
+
+  useEffect(() => {
+    if (selectedIds.size === 0 && showOnlySelected) {
+      setShowOnlySelected(false);
+    }
+  }, [selectedIds.size, showOnlySelected]);
 
   const handleSort = (key: keyof Iniciativa) => {
     let direction: 'asc' | 'desc' = 'asc';
@@ -1986,10 +2018,16 @@ export function DataTable({
     setSelectedIds(next);
   };
 
+  const handleDeselectAll = () => {
+    setSelectedIds(new Set());
+    setShowOnlySelected(false);
+  };
+
   const handleSendEmail = async () => {
     if (selectedIds.size === 0) return;
 
-    const selectedRows = iniciativas.filter(t => selectedIds.has(t.id));
+    const source = allIniciativas && allIniciativas.length > 0 ? allIniciativas : iniciativas;
+    const selectedRows = source.filter(t => selectedIds.has(t.id));
 
     let plainText = `Hola\n\n`;
     if (isPlanificadas) {
@@ -2096,8 +2134,16 @@ export function DataTable({
     URL.revokeObjectURL(url);
   };
 
+  const baseIniciativas = useMemo(() => {
+    if (showOnlySelected) {
+      const source = allIniciativas && allIniciativas.length > 0 ? allIniciativas : iniciativas;
+      return source.filter(t => selectedIds.has(t.id));
+    }
+    return iniciativas;
+  }, [showOnlySelected, allIniciativas, iniciativas, selectedIds]);
+
   const sortedIniciativas = useMemo(() => {
-    let sortableItems = [...iniciativas];
+    let sortableItems = [...baseIniciativas];
     if (sortConfig !== null) {
       sortableItems.sort((a, b) => {
         const aValue = a[sortConfig.key];
@@ -2127,7 +2173,7 @@ export function DataTable({
       });
     }
     return sortableItems;
-  }, [iniciativas, sortConfig]);
+  }, [baseIniciativas, sortConfig]);
 
   const totalPages = Math.ceil(sortedIniciativas.length / ITEMS_PER_PAGE);
 
@@ -2191,9 +2237,20 @@ export function DataTable({
       {/* Cabecera de la tabla */}
       <div className="p-4 border-b border-gray-100 flex flex-wrap justify-between items-center gap-3 bg-gray-50/50">
         <div>
-          <h3 className="font-semibold text-gray-800">Detalle de Iniciativas</h3>
+          <div className="flex items-center gap-2">
+            <h3 className="font-semibold text-gray-800">Detalle de Iniciativas</h3>
+            {showOnlySelected && (
+              <span className="inline-flex items-center gap-1 px-2 py-0.5 text-[11px] font-semibold bg-blue-100 text-blue-700 rounded-full border border-blue-200">
+                <CheckSquare size={11} />
+                Vista solo seleccionados
+              </span>
+            )}
+          </div>
           <p className="text-xs text-gray-400 mt-0.5">
-            {iniciativas.length} resultado{iniciativas.length !== 1 ? 's' : ''}
+            {baseIniciativas.length} resultado{baseIniciativas.length !== 1 ? 's' : ''}
+            {!showOnlySelected && selectedIds.size > 0 && (
+              <span className="text-blue-600 font-semibold ml-1">· {selectedIds.size} seleccionada{selectedIds.size !== 1 ? 's' : ''}</span>
+            )}
             {totalPages > 1 && ` · Página ${page} de ${totalPages}`}
           </p>
         </div>
@@ -2278,13 +2335,47 @@ export function DataTable({
           </div>
 
           {selectedIds.size > 0 && (
-            <button
-              onClick={handleSendEmail}
-              className="text-sm px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs rounded-lg flex items-center gap-2 font-semibold transition-all active:scale-95 animate-in fade-in slide-in-from-right-4 duration-200"
-            >
-              <Mail size={15} />
-              Enviar mail ({selectedIds.size})
-            </button>
+            <div className="flex items-center gap-2 animate-in fade-in slide-in-from-right-4 duration-200">
+              {/* Botón Ver solo seleccionados / Ver con filtros */}
+              <button
+                type="button"
+                onClick={() => {
+                  setShowOnlySelected(prev => !prev);
+                  setPage(1);
+                }}
+                className={`text-xs px-2.5 py-1.5 rounded-lg border flex items-center gap-1.5 font-medium transition-all cursor-pointer shadow-2xs ${
+                  showOnlySelected
+                    ? 'bg-blue-50 border-blue-300 text-blue-700 font-semibold ring-1 ring-blue-300'
+                    : 'bg-white border-slate-200 text-slate-700 hover:bg-slate-50 hover:text-blue-600 hover:border-blue-200'
+                }`}
+                title={showOnlySelected ? 'Volver a ver resultados filtrados' : 'Filtrar la tabla para mostrar únicamente las iniciativas seleccionadas'}
+              >
+                <CheckSquare size={13} className={showOnlySelected ? 'text-blue-600' : 'text-slate-500'} />
+                <span>{showOnlySelected ? 'Ver con filtros' : `Ver seleccionados (${selectedIds.size})`}</span>
+              </button>
+
+              {/* Botón Deseleccionar todos */}
+              <button
+                type="button"
+                onClick={handleDeselectAll}
+                className="text-xs px-2.5 py-1.5 rounded-lg border border-slate-200 bg-white hover:bg-rose-50 hover:border-rose-200 text-slate-600 hover:text-rose-600 font-medium transition-colors flex items-center gap-1.5 cursor-pointer shadow-2xs"
+                title="Quitar la selección de todas las iniciativas"
+              >
+                <X size={13} className="text-slate-400 group-hover:text-rose-500" />
+                <span>Deseleccionar todos</span>
+              </button>
+
+              {/* Botón Enviar mail */}
+              <button
+                type="button"
+                onClick={handleSendEmail}
+                className="text-xs px-3 py-1.5 bg-blue-600 hover:bg-blue-700 text-white shadow-xs rounded-lg flex items-center gap-1.5 font-semibold transition-all active:scale-95 cursor-pointer"
+                title="Copiar tabla al portapapeles y generar archivo .eml con las iniciativas seleccionadas"
+              >
+                <Mail size={14} />
+                <span>Enviar mail ({selectedIds.size})</span>
+              </button>
+            </div>
           )}
 
           {/* Selector de Columnas Visibles */}
@@ -2374,6 +2465,28 @@ export function DataTable({
         </div>
       </div>
 
+      {/* Banner informativo cuando se visualizan solo seleccionados */}
+      {showOnlySelected && (
+        <div className="mx-4 mt-3 mb-1 px-3.5 py-2 bg-blue-50/80 border border-blue-200 rounded-lg flex items-center justify-between text-xs text-blue-900 animate-in fade-in duration-150">
+          <div className="flex items-center gap-2">
+            <CheckSquare size={14} className="text-blue-600 shrink-0" />
+            <span>
+              Estás viendo únicamente las <strong>{selectedIds.size}</strong> iniciativas seleccionadas (acumuladas entre tus filtros).
+            </span>
+          </div>
+          <button
+            type="button"
+            onClick={() => {
+              setShowOnlySelected(false);
+              setPage(1);
+            }}
+            className="text-xs font-semibold text-blue-700 hover:text-blue-900 hover:underline shrink-0 cursor-pointer ml-3"
+          >
+            Volver a la vista con filtros
+          </button>
+        </div>
+      )}
+
       {/* Tabla */}
       <div className="overflow-x-auto">
         <table className="w-full text-[13px] text-left text-gray-600">
@@ -2386,10 +2499,17 @@ export function DataTable({
               <th className="px-3 py-3 w-8 text-center">
                 <input
                   type="checkbox"
+                  ref={el => {
+                    if (el) {
+                      const allOnPage = paginated.length > 0 && paginated.every(t => selectedIds.has(t.id));
+                      const someOnPage = paginated.some(t => selectedIds.has(t.id));
+                      el.indeterminate = someOnPage && !allOnPage;
+                    }
+                  }}
                   checked={paginated.length > 0 && paginated.every(t => selectedIds.has(t.id))}
                   onChange={handleToggleSelectAll}
                   className="w-3.5 h-3.5 accent-blue-600 rounded cursor-pointer"
-                  title="Seleccionar todos los visibles"
+                  title={paginated.every(t => selectedIds.has(t.id)) ? "Deseleccionar los de esta página" : "Seleccionar todos los de esta página"}
                 />
               </th>
               {visibleColumns.map(col => (
@@ -2513,7 +2633,9 @@ export function DataTable({
             {paginated.length === 0 && (
               <tr>
                 <td colSpan={visibleColumns.length + 3} className="px-4 py-12 text-center text-gray-400 text-sm">
-                  No hay iniciativas que coincidan con los filtros activos.
+                  {showOnlySelected
+                    ? 'No hay iniciativas seleccionadas actualmente.'
+                    : 'No hay iniciativas que coincidan con los filtros activos.'}
                 </td>
               </tr>
             )}
@@ -2526,7 +2648,7 @@ export function DataTable({
         <div className="p-4 flex justify-between items-center text-sm text-gray-500 border-t border-gray-100">
           <span className="text-xs">
             Mostrando {(page - 1) * ITEMS_PER_PAGE + 1}–
-            {Math.min(page * ITEMS_PER_PAGE, iniciativas.length)} de {iniciativas.length}
+            {Math.min(page * ITEMS_PER_PAGE, baseIniciativas.length)} de {baseIniciativas.length}
           </span>
           <div className="flex gap-1">
             <button

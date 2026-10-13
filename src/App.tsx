@@ -959,6 +959,7 @@ export default function App() {
             {/* Tabla de detalle */}
             <DataTable 
               iniciativas={filteredIniciativas} 
+              allIniciativas={data.iniciativas}
               expandedId={expandedId}
               onExpandedIdChange={setExpandedId}
               mode={data.mode}

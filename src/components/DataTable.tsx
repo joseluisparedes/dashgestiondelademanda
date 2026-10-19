@@ -36,6 +36,7 @@ import {
   Columns3,
   Clock,
   CheckSquare,
+  Trash2,
 } from 'lucide-react';
 import { escapeCsvField } from '../lib/utils';
 
@@ -745,6 +746,18 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Planificación Aprobada', value: t.planificacion_aprobada ?? getRawVal('Planificación aprobada', 'Planificacion aprobada', 'Aprobar planificación') ?? '—' },
         ],
       },
+
+      // ── ELIMINADAS (Cols BK–BM) ───────────────────────────────────────────
+      ...(t.etapa_actual === 'eliminadas' ? [{
+        etapaKey: 'eliminadas',
+        title: 'Detalle de Eliminación',
+        icon: <Trash2 size={15} className="text-red-500" />,
+        fields: [
+          { label: 'Fecha de Eliminación', value: fmtDate(t.fecha_eliminacion) || fmtDate(getRawVal('Fecha de eliminación', 'Fecha eliminacion')) },
+          { label: 'Solicitado por', value: t.solicitado_por || getRawVal('Solicitado por:', 'Solicitado por', 'Eliminado por') },
+          { label: 'Motivo de Eliminación', value: t.motivo_eliminacion || getRawVal('Motivo', 'Motivo de eliminación') },
+        ],
+      }] : []),
     ];
   }, [t, mode, isPlanificadas]);
 

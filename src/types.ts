@@ -79,6 +79,11 @@ export interface Iniciativa {
   id_jira?: string | null;
   motivo_replanificacion?: string | null;
 
+  // Campos para iniciativas eliminadas (v79)
+  fecha_eliminacion?: string | null;
+  solicitado_por?: string | null;
+  motivo_eliminacion?: string | null;
+
   /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
   raw_fields?: Record<string, unknown>;
 }

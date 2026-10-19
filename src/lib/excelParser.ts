@@ -265,6 +265,10 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Costo total dolares', 'Costo total Soles',
           'Aprobar Estimación', 'Aprobar Estimacion',
           'Usuarios beneficiados1',
+          // --- Columnas v79 (Eliminados) ---
+          'Fecha de eliminación', 'Fecha eliminacion',
+          'Solicitado por:', 'Solicitado por', 'Eliminado por',
+          'Motivo',
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -407,7 +411,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               estatus_reestimacion:
                 parseStr(g('Estatus Reestimación', 'Estatus Reestimacion')),
               motivo_reestimacion:
-                parseStr(g('Motivo de Reestimación', 'Motivo de Reestimacion', 'Motivo', 'Reestimación', 'Reestimacion')),
+                parseStr(g('Motivo de Reestimación', 'Motivo de Reestimacion', 'Reestimación', 'Reestimacion')),
               accion_brm:
                 parseStr(g('Acción (Atender, desestimar o backlog)', 'Acción (Atender', 'Accion (Atender', 'Accion')),
               prioridad_brm:
@@ -424,6 +428,12 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 parseStr(g('Presupuesto habilitado (SI/NO)', 'Presupuesto habilitado\r\n(SI/NO)', 'Presupuesto habilitado\n(SI/NO)', 'Presupuesto Habilitado', 'Presupuesto habilitado')),
               planificacion_aprobada:
                 parseStr(g('Planificación aprobada (SI/NO)', 'Planificacion aprobada (SI/NO)', 'Planificación aprobada', 'Planificacion aprobada')),
+              fecha_eliminacion:
+                formatDt(g('Fecha de eliminación', 'Fecha eliminacion', 'Fecha de eliminacion')),
+              solicitado_por:
+                parseStr(g('Solicitado por:', 'Solicitado por', 'Eliminado por')),
+              motivo_eliminacion:
+                parseStr(g('Motivo', 'Motivo de eliminación', 'Motivo eliminacion')),
               raw_fields: extractRawFields(row),
             };
 
@@ -446,6 +456,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 if (!iniciativa.estatus_estimacion) iniciativa.estatus_estimacion = existing.iniciativa.estatus_estimacion;
                 if (!iniciativa.estatus_reestimacion) iniciativa.estatus_reestimacion = existing.iniciativa.estatus_reestimacion;
                 if (!iniciativa.motivo_reestimacion) iniciativa.motivo_reestimacion = existing.iniciativa.motivo_reestimacion;
+                if (!iniciativa.fecha_eliminacion) iniciativa.fecha_eliminacion = existing.iniciativa.fecha_eliminacion;
+                if (!iniciativa.solicitado_por) iniciativa.solicitado_por = existing.iniciativa.solicitado_por;
+                if (!iniciativa.motivo_eliminacion) iniciativa.motivo_eliminacion = existing.iniciativa.motivo_eliminacion;
                 if (iniciativa.duracion_meses == null && existing.iniciativa.duracion_meses != null) iniciativa.duracion_meses = existing.iniciativa.duracion_meses;
                 if (iniciativa.tiempo_estimado == null && existing.iniciativa.tiempo_estimado != null) iniciativa.tiempo_estimado = existing.iniciativa.tiempo_estimado;
               }
@@ -459,6 +472,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               if (!existing.iniciativa.fecha_fin_planificada && iniciativa.fecha_fin_planificada) existing.iniciativa.fecha_fin_planificada = iniciativa.fecha_fin_planificada;
               if (!existing.iniciativa.estatus_reestimacion && iniciativa.estatus_reestimacion) existing.iniciativa.estatus_reestimacion = iniciativa.estatus_reestimacion;
               if (!existing.iniciativa.motivo_reestimacion && iniciativa.motivo_reestimacion) existing.iniciativa.motivo_reestimacion = iniciativa.motivo_reestimacion;
+              if (!existing.iniciativa.fecha_eliminacion && iniciativa.fecha_eliminacion) existing.iniciativa.fecha_eliminacion = iniciativa.fecha_eliminacion;
+              if (!existing.iniciativa.solicitado_por && iniciativa.solicitado_por) existing.iniciativa.solicitado_por = iniciativa.solicitado_por;
+              if (!existing.iniciativa.motivo_eliminacion && iniciativa.motivo_eliminacion) existing.iniciativa.motivo_eliminacion = iniciativa.motivo_eliminacion;
               if (existing.iniciativa.duracion_meses == null && iniciativa.duracion_meses != null) existing.iniciativa.duracion_meses = iniciativa.duracion_meses;
               if (existing.iniciativa.tiempo_estimado == null && iniciativa.tiempo_estimado != null) existing.iniciativa.tiempo_estimado = iniciativa.tiempo_estimado;
               existing.iniciativa.raw_fields = mergedRaw;

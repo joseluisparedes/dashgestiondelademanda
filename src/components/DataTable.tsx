@@ -753,7 +753,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         title: 'Detalle de Eliminación',
         icon: <Trash2 size={15} className="text-red-500" />,
         fields: [
-          { label: 'Fecha de Eliminación', value: fmtDate(t.fecha_eliminacion) || fmtDate(getRawVal('Fecha de eliminación', 'Fecha eliminacion')) },
+          { label: 'Fecha de Eliminación', value: fmtDate(t.fecha_eliminacion) || fmtDate(getRawVal('Fecha de eliminación', 'Fecha eliminacion') as string | null | undefined) },
           { label: 'Solicitado por', value: t.solicitado_por || getRawVal('Solicitado por:', 'Solicitado por', 'Eliminado por') },
           { label: 'Motivo de Eliminación', value: t.motivo_eliminacion || getRawVal('Motivo', 'Motivo de eliminación') },
         ],

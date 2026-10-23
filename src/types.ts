@@ -86,6 +86,9 @@ export interface Iniciativa {
 
   /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
   raw_fields?: Record<string, unknown>;
+
+  /** Corpus de texto precomputado y normalizado para búsqueda instantánea en todos los campos */
+  _searchCorpus?: string;
 }
 
 export interface DashboardData {

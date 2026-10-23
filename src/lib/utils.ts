@@ -1,5 +1,6 @@
 import { type ClassValue, clsx } from 'clsx';
 import { twMerge } from 'tailwind-merge';
+import { Iniciativa } from '../types';
 
 export function cn(...inputs: ClassValue[]) {
   return twMerge(clsx(inputs));
@@ -44,4 +45,44 @@ export function escapeCsvField(value: unknown): string {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
+}
+
+/**
+ * Elimina tildes y diacríticos de un string para comparaciones insensibles a acentos.
+ * Ej: "gestión" → "gestion", "Título" → "Titulo"
+ */
+export function stripAccents(str: string): string {
+  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+}
+
+/**
+ * Pre-genera el corpus completo de búsqueda de una iniciativa, normalizado
+ * a minúsculas y sin tildes, incluyendo campos nativos y raw_fields de Excel.
+ * Se computa una sola vez al cargar el archivo para que las búsquedas sean instantáneas.
+ */
+export function buildSearchCorpus(t: Iniciativa | ({ id: number; raw_fields?: Record<string, unknown> } & Record<string, unknown>)): string {
+  const parts: string[] = [];
+
+  // 1. Propiedades nativas
+  for (const [k, v] of Object.entries(t as Record<string, unknown>)) {
+    if (k === 'raw_fields' || k === '_searchCorpus') continue;
+    if (v !== null && v !== undefined && v !== '') {
+      parts.push(String(v));
+    }
+  }
+
+  // 2. ID con relleno de ceros
+  parts.push(String(t.id).padStart(4, '0'));
+
+  // 3. Todos los campos crudos del Excel
+  if (t.raw_fields) {
+    for (const [rawKey, rawVal] of Object.entries(t.raw_fields)) {
+      if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
+        parts.push(String(rawVal));
+        parts.push(rawKey);
+      }
+    }
+  }
+
+  return stripAccents(parts.join(' ').toLowerCase());
 }

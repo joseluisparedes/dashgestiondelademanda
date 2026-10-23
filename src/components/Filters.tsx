@@ -752,6 +752,38 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
     });
   };
   
+  // Estado local para respuesta inmediata de tecleo (0ms lag visual)
+  const [localSearch, setLocalSearch] = useState(filters.busqueda || '');
+  const isIdsFilter = filters.busqueda?.startsWith('ids:') ?? false;
+
+  // Sincronizar el estado local cuando filters.busqueda cambia externamente (ej: "Limpiar todo", alertas)
+  useEffect(() => {
+    setLocalSearch(filters.busqueda || '');
+  }, [filters.busqueda]);
+
+  // Debounce para propagar a setFilters sin bloquear el teclado ni causar microcortes
+  useEffect(() => {
+    if (isIdsFilter || localSearch === (filters.busqueda || '')) return;
+
+    const timer = setTimeout(() => {
+      setFilters(prev => ({ ...prev, busqueda: localSearch }));
+    }, 180);
+
+    return () => clearTimeout(timer);
+  }, [localSearch, filters.busqueda, isIdsFilter, setFilters]);
+
+  const handleClearSearch = () => {
+    setLocalSearch('');
+    setFilters(prev => ({ ...prev, busqueda: '' }));
+  };
+
+  const handleSearchKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      setFilters(prev => ({ ...prev, busqueda: localSearch }));
+    }
+  };
+
   // Conteo de filtros activos por categoría
   const countOrg = 
     (filters.instituciones?.length || 0) +
@@ -856,18 +888,19 @@ export function Filters({ filters, setFilters, options, onPendientesBPs, mode = 
         <input
           type="text"
           placeholder="Buscar texto en todos los campos (ID, título, solicitante, BP, descripción, enlaces, etc.)..."
-          value={filters.busqueda?.startsWith('ids:') ? '📍 Alertas vigentes del BP TI' : (filters.busqueda || '')}
-          onChange={e => setFilters(prev => ({ ...prev, busqueda: e.target.value }))}
+          value={isIdsFilter ? '📍 Alertas vigentes del BP TI' : localSearch}
+          onChange={e => setLocalSearch(e.target.value)}
+          onKeyDown={handleSearchKeyDown}
           className={`w-full pl-10 pr-10 py-2.5 border rounded-xl text-xs sm:text-sm focus:outline-none focus:ring-4 focus:ring-blue-500/10 focus:border-blue-500 transition-all placeholder-slate-400 text-slate-800 ${
-            filters.busqueda?.startsWith('ids:')
+            isIdsFilter
               ? 'bg-rose-50/80 border-rose-300 text-rose-800 font-semibold cursor-default'
               : 'bg-slate-50/60 border-slate-200 hover:border-slate-300 focus:bg-white'
           }`}
-          readOnly={filters.busqueda?.startsWith('ids:')}
+          readOnly={isIdsFilter}
         />
-        {filters.busqueda && (
+        {(Boolean(localSearch) || isIdsFilter) && (
           <button
-            onClick={() => setFilters(prev => ({ ...prev, busqueda: '' }))}
+            onClick={handleClearSearch}
             className="absolute inset-y-0 right-0 pr-3 flex items-center text-slate-400 hover:text-slate-600 transition-colors cursor-pointer"
             title="Borrar búsqueda"
           >

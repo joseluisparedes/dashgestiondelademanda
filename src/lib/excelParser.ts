@@ -10,6 +10,7 @@
 import * as XLSX from 'xlsx';
 import { Iniciativa, DashboardData, EtapaPipeline } from '../types';
 import { HOJAS_OPERATIVAS } from '../constants';
+import { buildSearchCorpus } from './utils';
 
 // ---------------------------------------------------------------------------
 // Helpers de parseo
@@ -489,7 +490,13 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
           );
 
+        // Precomputar corpus de búsqueda para todas las iniciativas (búsqueda ultrarrápida O(1))
+        allIniciativas.forEach(ini => {
+          ini._searchCorpus = buildSearchCorpus(ini);
+        });
+
         // Calcular resumen por etapa
+
         const resumenPorEtapa: Record<string, number> = {};
         etapaOrder.forEach(e => (resumenPorEtapa[e] = 0));
         allIniciativas.forEach(i => {
@@ -635,6 +642,11 @@ export function parsePlanificadasExcelFile(file: File): Promise<DashboardData> {
         const allIniciativas = Array.from(seenIds.values()).sort(
           (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
         );
+
+
+        allIniciativas.forEach(ini => {
+          ini._searchCorpus = buildSearchCorpus(ini);
+        });
 
         const resumenPorEtapa: Record<string, number> = {
           por_iniciar: 0,

@@ -13,6 +13,7 @@ import { DataTable } from './components/DataTable';
 import { Filters } from './components/Filters';
 import { Pipeline } from './components/Pipeline';
 import { Reports } from './components/Reports';
+import { stripAccents, buildSearchCorpus } from './lib/utils';
 import { format, parseISO, differenceInCalendarDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import { 
@@ -40,12 +41,41 @@ type ActiveTab = 'resumen' | 'reportes';
 // Helpers de filtrado
 // ---------------------------------------------------------------------------
 
-/**
- * Elimina tildes y diacríticos de un string para comparaciones insensibles a acentos.
- * Ej: "gestión" → "gestion", "Título" → "Titulo"
- */
-function stripAccents(str: string): string {
-  return str.normalize('NFD').replace(/[\u0300-\u036f]/g, '');
+// ---------------------------------------------------------------------------
+// Helpers de búsqueda y filtrado
+// ---------------------------------------------------------------------------
+
+interface SearchCriteria {
+  isIds: boolean;
+  idsList: string[];
+  term: string;
+  tokens: string[];
+}
+
+function parseSearchCriteria(busqueda: string | null | undefined): SearchCriteria | null {
+  if (!busqueda) return null;
+  const raw = busqueda.trim();
+  if (!raw) return null;
+
+  const term = stripAccents(raw.toLowerCase());
+  if (term.startsWith('ids:')) {
+    const idsList = term.replace('ids:', '').split(',').map(s => s.trim()).filter(Boolean);
+    return { isIds: true, idsList, term: '', tokens: [] };
+  }
+
+  const tokens = term.split(/\s+/).filter(Boolean);
+  return { isIds: false, idsList: [], term, tokens };
+}
+
+function matchesSearchCriteria(t: Iniciativa, criteria: SearchCriteria | null): boolean {
+  if (!criteria) return true;
+  if (criteria.isIds) {
+    const idStr = String(t.id);
+    const paddedIdStr = idStr.padStart(4, '0');
+    return criteria.idsList.includes(idStr) || criteria.idsList.includes(paddedIdStr);
+  }
+  const corpus = t._searchCorpus ?? (t._searchCorpus = buildSearchCorpus(t));
+  return corpus.includes(criteria.term) || criteria.tokens.every(token => corpus.includes(token));
 }
 
 function isMeaningfulValue(v: string | null | undefined): boolean {
@@ -85,11 +115,10 @@ function matchFilter(selectedValues: string[], fieldValue: string | null | undef
 }
 
 /**
- * Aplica todos los filtros activos a una iniciativa, opcionalmente excluyendo un campo.
- * Usado para el filtrado facetado: las opciones de un campo se calculan
- * desde los datos ya filtrados por los demás campos.
+ * Evalúa los filtros facetados, de aprobación y de fechas de una iniciativa.
+ * Usado tanto para filtrado final como para el cálculo de opciones facetadas.
  */
-function matchesAllFilters(
+function matchesOtherFilters(
   t: Iniciativa,
   filters: FilterState,
   excludeField?: keyof FilterState
@@ -116,49 +145,8 @@ function matchesAllFilters(
       (hasPlan && matchFilter(filters.planificacion_aprobada, t.planificacion_aprobada));
   }
 
-  // Búsqueda exhaustiva por texto insensible a tildes y mayúsculas en ABSOLUTAMENTE TODOS los campos
-  let passesSearch = true;
-  if (filters.busqueda && excludeField !== 'busqueda') {
-    const term = stripAccents(filters.busqueda.toLowerCase().trim());
-    if (term) {
-      if (term.startsWith('ids:')) {
-        const idsList = term.replace('ids:', '').split(',').map(s => s.trim()).filter(Boolean);
-        const idStr = String(t.id);
-        const paddedIdStr = idStr.padStart(4, '0');
-        passesSearch = idsList.includes(idStr) || idsList.includes(paddedIdStr);
-      } else {
-        const tokens = term.split(/\s+/).filter(Boolean);
-        const values: string[] = [];
-
-        // 1. Recorrer todas las propiedades nativas de la iniciativa
-        for (const [k, v] of Object.entries(t)) {
-          if (k === 'raw_fields') continue;
-          if (v !== null && v !== undefined && v !== '') {
-            values.push(String(v));
-          }
-        }
-
-        // 2. ID con ceros a la izquierda (ej: 0042)
-        values.push(String(t.id).padStart(4, '0'));
-
-        // 3. Recorrer ABSOLUTAMENTE TODOS los campos originales de Excel en raw_fields
-        if (t.raw_fields) {
-          for (const [rawKey, rawVal] of Object.entries(t.raw_fields)) {
-            if (rawVal !== null && rawVal !== undefined && rawVal !== '') {
-              values.push(String(rawVal));
-              values.push(rawKey);
-            }
-          }
-        }
-
-        const corpus = stripAccents(values.join(' ').toLowerCase());
-        passesSearch = corpus.includes(term) || tokens.every(token => corpus.includes(token));
-      }
-    }
-  }
-
   return (
-    passesSearch &&
+    passesApprovals &&
     check('etapas', t.etapa_actual) &&
     check('instituciones', t.institucion) &&
     check('pilares', t.pilar_estrategico) &&
@@ -171,7 +159,6 @@ function matchesAllFilters(
     check('impacto_sox', t.impacto_sox) &&
     check('proyecto_spo', t.proyecto_spo) &&
     check('estabilizacion_sis', t.estabilizacion_sis) &&
-    passesApprovals &&
     // Fechas de inicio y fin por cada etapa
     ((val, desde, hasta, meses) => {
       const hasMeses = Boolean(meses && meses.length > 0);
@@ -240,6 +227,21 @@ function matchesAllFilters(
       return true;
     })(t.fecha_fin_planificada, filters.fecha_fin_planificada_desde, filters.fecha_fin_planificada_hasta, filters.fecha_fin_planificada_meses)
   );
+}
+
+function matchesAllFilters(
+  t: Iniciativa,
+  filters: FilterState,
+  excludeField?: keyof FilterState,
+  searchCriteria?: SearchCriteria | null
+): boolean {
+  if (excludeField !== 'busqueda') {
+    const criteria = searchCriteria !== undefined ? searchCriteria : parseSearchCriteria(filters.busqueda);
+    if (!matchesSearchCriteria(t, criteria)) {
+      return false;
+    }
+  }
+  return matchesOtherFilters(t, filters, excludeField);
 }
 
 /**
@@ -356,17 +358,29 @@ export default function App() {
     executeUpload(file);
   };
 
-  // Iniciativas filtradas por todos los filtros activos
-  const filteredIniciativas = useMemo(() => {
+  // 1. Criterios de búsqueda analizados y normalizados una sola vez
+  const searchCriteria = useMemo(
+    () => parseSearchCriteria(filters.busqueda),
+    [filters.busqueda]
+  );
+
+  // 2. Filtrado inicial por búsqueda instantánea sobre corpus O(1)
+  const searchFilteredIniciativas = useMemo(() => {
     if (!data) return [];
-    return data.iniciativas.filter(t => matchesAllFilters(t, filters));
-  }, [data, filters]);
+    if (!searchCriteria) return data.iniciativas;
+    return data.iniciativas.filter(t => matchesSearchCriteria(t, searchCriteria));
+  }, [data, searchCriteria]);
+
+  // 3. Iniciativas finales filtradas por todos los filtros activos
+  const filteredIniciativas = useMemo(() => {
+    return searchFilteredIniciativas.filter(t => matchesOtherFilters(t, filters));
+  }, [searchFilteredIniciativas, filters]);
 
   /**
    * Opciones de filtro FACETADAS:
    * Cada campo muestra solo los valores que existen en los datos ya filtrados
-   * por todos los DEMÁS campos. Así, al filtrar por etapa, los BPs disponibles
-   * son solo los que tienen iniciativas en esa etapa.
+   * por la búsqueda activa y por todos los DEMÁS campos. Así, al filtrar por etapa,
+   * los BPs disponibles son solo los que tienen iniciativas en esa etapa.
    */
   const filterOptions = useMemo(() => {
     if (!data) {
@@ -374,7 +388,7 @@ export default function App() {
     }
 
     const from = (excludeField: keyof FilterState) =>
-      data.iniciativas.filter(t => matchesAllFilters(t, filters, excludeField));
+      searchFilteredIniciativas.filter(t => matchesOtherFilters(t, filters, excludeField));
 
     return {
       instituciones: buildOptions(from('instituciones'), t => t.institucion),
@@ -390,7 +404,7 @@ export default function App() {
       planificacion_aprobada: buildOptions(from('planificacion_aprobada'), t => t.planificacion_aprobada),
       etapas:        buildOptions(from('etapas'),        t => t.etapa_actual),
     };
-  }, [data, filters]);
+  }, [data, searchFilteredIniciativas, filters]);
 
   // Alertas de fechas / hitos próximos (1, 2 o 3 días de diferencia)
   const upcomingAlerts = useMemo(() => {

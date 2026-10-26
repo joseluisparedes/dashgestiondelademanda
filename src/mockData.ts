@@ -18,6 +18,7 @@ const etapas: EtapaPipeline[] = [
   'por_planificar',
   'aprobar_planificacion',
   'planificadas',
+  'implementadas',
   'eliminadas',
 ];
 
@@ -103,13 +104,16 @@ export function generateMockData(): DashboardData {
       accion_brm: null,
       prioridad_brm: pick(prioridades_brm),
       fecha_inicio_planificada:
-        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 10).toISOString()) : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas', 'implementadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 10).toISOString()) : null,
       fecha_fin_planificada:
-        ['por_planificar', 'aprobar_planificacion', 'planificadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 120).toISOString()) : null,
+        ['por_planificar', 'aprobar_planificacion', 'planificadas', 'implementadas'].includes(etapa) ? (etapa === 'por_planificar' && Math.random() > 0.35 ? null : addDays(today, 120).toISOString()) : null,
       impacto_sox: pick(['SI', 'NO', null] as Array<'SI' | 'NO' | null>),
       aprobar_estimacion: null,
       presupuesto_habilitado: null,
-      planificacion_aprobada: etapa === 'planificadas' ? 'SI' : null,
+      planificacion_aprobada: ['planificadas', 'implementadas'].includes(etapa) ? 'SI' : null,
+      fecha_pase_produccion: etapa === 'implementadas' ? subDays(today, Math.floor(Math.random() * 20) + 5).toISOString() : null,
+      persona_conformidad: etapa === 'implementadas' ? pick(it_bps) : null,
+      fecha_conformidad: etapa === 'implementadas' ? subDays(today, Math.floor(Math.random() * 5)).toISOString() : null,
     });
   }
 

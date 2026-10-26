@@ -10,6 +10,7 @@ export const HOJAS_OPERATIVAS: Record<string, EtapaPipeline> = {
   'Por planificar':           'por_planificar',
   'Aprobar Planificación':    'aprobar_planificacion',
   'Planificadas':             'planificadas',
+  'Implementadas':            'implementadas',
   'Eliminados':               'eliminadas',
 };
 
@@ -41,6 +42,7 @@ export const ETAPAS_CONFIG: EtapaConfig[] = [
   { id: 'por_planificar',            label: 'Por Planificar',      color: '#10b981', bgColor: '#ecfdf5', textColor: '#047857' },
   { id: 'aprobar_planificacion',     label: 'Aprobar Plan.',       color: '#059669', bgColor: '#d1fae5', textColor: '#065f46' },
   { id: 'planificadas',              label: 'Planificadas',        color: '#16a34a', bgColor: '#bbf7d0', textColor: '#14532d' },
+  { id: 'implementadas',             label: 'Implementadas',       color: '#0d9488', bgColor: '#ccfbf1', textColor: '#115e59' },
   { id: 'eliminadas',                label: 'Eliminadas',          color: '#ef4444', bgColor: '#fef2f2', textColor: '#b91c1c', isTerminal: true },
 ];
 

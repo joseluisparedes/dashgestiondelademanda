@@ -283,7 +283,7 @@ const detectExcelMode = (file: File): Promise<'demanda' | 'planificadas' | 'unkn
         const sheetNames = workbook.SheetNames;
         if (sheetNames.includes('Req No Catalogados Demanda')) {
           resolve('planificadas');
-        } else if (sheetNames.includes('Registro incompleto') || sheetNames.includes('Por estimar') || sheetNames.includes('Por planificar')) {
+        } else if (sheetNames.includes('Registro incompleto') || sheetNames.includes('Por estimar') || sheetNames.includes('Por planificar') || sheetNames.includes('Planificadas') || sheetNames.includes('Implementadas')) {
           resolve('demanda');
         } else {
           resolve('unknown');
@@ -448,6 +448,8 @@ export default function App() {
       } else {
         checkField(t.fecha_inicio_planificada, 'Inicio Planificado');
         checkField(t.fecha_fin_planificada, 'Fin Planificado');
+        checkField(t.fecha_pase_produccion, 'Pase a Producción');
+        checkField(t.fecha_conformidad, 'Fecha de Conformidad');
       }
     });
 
@@ -674,7 +676,10 @@ export default function App() {
                         'Por Reestimar',
                         'Por habilitar presup.',
                         'Por planificar',
-                        'Aprobar Planificación'
+                        'Aprobar Planificación',
+                        'Planificadas',
+                        'Implementadas',
+                        'Eliminados'
                       ].map((sheet) => (
                         <span
                           key={sheet}

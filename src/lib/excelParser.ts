@@ -212,7 +212,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         const ALLOWED_EXTRA_TABS = [
           'Data maestra', 'BD', 'BD New', 'BD 2', 'Priorización BRM', 'Backup 1902 1025', 
           'Por confirmar', 'Forms', 'Criterios Prioriz', 'Criterios de priorización', 'Hoja1', 
-          'Tipo de cambio', 'Sheet1', 'Resumen'
+          'Tipo de cambio', 'Sheet1', 'Resumen', 'Consolidado'
         ];
         const actualTabs = workbook.SheetNames;
         
@@ -270,6 +270,10 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           'Fecha de eliminación', 'Fecha eliminacion',
           'Solicitado por:', 'Solicitado por', 'Eliminado por',
           'Motivo',
+          // --- Columnas v85 (Planificadas e Implementadas: Cols BJ, BK, BL) ---
+          'Fecha de pase a producción', 'Fecha pase a produccion', 'Pase a producción', 'Pase a produccion',
+          'Persona que da conformidad', 'Persona conformidad', 'Conformidad',
+          'Fecha de conformidad', 'Fecha conformidad',
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -435,6 +439,12 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 parseStr(g('Solicitado por:', 'Solicitado por', 'Eliminado por')),
               motivo_eliminacion:
                 parseStr(g('Motivo', 'Motivo de eliminación', 'Motivo eliminacion')),
+              fecha_pase_produccion:
+                formatDt(g('Fecha de pase a producción', 'Fecha pase a produccion', 'Pase a producción', 'Pase a produccion')),
+              persona_conformidad:
+                parseStr(g('Persona que da conformidad', 'Persona conformidad', 'Conformidad')),
+              fecha_conformidad:
+                formatDt(g('Fecha de conformidad', 'Fecha conformidad')),
               raw_fields: extractRawFields(row),
             };
 
@@ -460,6 +470,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                 if (!iniciativa.fecha_eliminacion) iniciativa.fecha_eliminacion = existing.iniciativa.fecha_eliminacion;
                 if (!iniciativa.solicitado_por) iniciativa.solicitado_por = existing.iniciativa.solicitado_por;
                 if (!iniciativa.motivo_eliminacion) iniciativa.motivo_eliminacion = existing.iniciativa.motivo_eliminacion;
+                if (!iniciativa.fecha_pase_produccion) iniciativa.fecha_pase_produccion = existing.iniciativa.fecha_pase_produccion;
+                if (!iniciativa.persona_conformidad) iniciativa.persona_conformidad = existing.iniciativa.persona_conformidad;
+                if (!iniciativa.fecha_conformidad) iniciativa.fecha_conformidad = existing.iniciativa.fecha_conformidad;
                 if (iniciativa.duracion_meses == null && existing.iniciativa.duracion_meses != null) iniciativa.duracion_meses = existing.iniciativa.duracion_meses;
                 if (iniciativa.tiempo_estimado == null && existing.iniciativa.tiempo_estimado != null) iniciativa.tiempo_estimado = existing.iniciativa.tiempo_estimado;
               }
@@ -476,6 +489,9 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               if (!existing.iniciativa.fecha_eliminacion && iniciativa.fecha_eliminacion) existing.iniciativa.fecha_eliminacion = iniciativa.fecha_eliminacion;
               if (!existing.iniciativa.solicitado_por && iniciativa.solicitado_por) existing.iniciativa.solicitado_por = iniciativa.solicitado_por;
               if (!existing.iniciativa.motivo_eliminacion && iniciativa.motivo_eliminacion) existing.iniciativa.motivo_eliminacion = iniciativa.motivo_eliminacion;
+              if (!existing.iniciativa.fecha_pase_produccion && iniciativa.fecha_pase_produccion) existing.iniciativa.fecha_pase_produccion = iniciativa.fecha_pase_produccion;
+              if (!existing.iniciativa.persona_conformidad && iniciativa.persona_conformidad) existing.iniciativa.persona_conformidad = iniciativa.persona_conformidad;
+              if (!existing.iniciativa.fecha_conformidad && iniciativa.fecha_conformidad) existing.iniciativa.fecha_conformidad = iniciativa.fecha_conformidad;
               if (existing.iniciativa.duracion_meses == null && iniciativa.duracion_meses != null) existing.iniciativa.duracion_meses = iniciativa.duracion_meses;
               if (existing.iniciativa.tiempo_estimado == null && iniciativa.tiempo_estimado != null) existing.iniciativa.tiempo_estimado = iniciativa.tiempo_estimado;
               existing.iniciativa.raw_fields = mergedRaw;

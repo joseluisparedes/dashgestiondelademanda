@@ -38,7 +38,7 @@ export function KPICards({ iniciativas: all, mode = 'demanda' }: KPICardsProps) 
       ['registro_incompleto', 'por_estimar'].includes(i.etapa_actual)
     ).length;
 
-    const etapasConPresupuestoComprometido = ['por_planificar', 'aprobar_planificacion', 'planificadas'];
+    const etapasConPresupuestoComprometido = ['por_planificar', 'aprobar_planificacion', 'planificadas', 'implementadas'];
     const etapasEnEvaluacion = ['por_aprobar_estimacion', 'por_habilitar_presupuesto'];
 
     const presComprometido = activas

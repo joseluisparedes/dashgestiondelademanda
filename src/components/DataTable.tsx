@@ -547,6 +547,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
     { key: 'por_planificar',            label: 'Por Planificar',   short: 'Planificar'  },
     { key: 'aprobar_planificacion',     label: 'Ap. Planificación',short: 'Ap. Plan.'   },
     { key: 'planificadas',              label: 'Planificadas',     short: 'Planificada' },
+    { key: 'implementadas',             label: 'Implementadas',    short: 'Implementada'},
   ] as const;
 
   const isRegistroIncompleto = t.etapa_actual === 'registro_incompleto';
@@ -737,13 +738,26 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
         ],
       },
 
-      // ── 6. APROBAR PLANIFICACIÓN (Cols BH–BI) ───────────────────────────────
+      // ── 6. PLANIFICADAS (Cols BH–BJ) ───────────────────────────────────────
       {
-        etapaKey: 'aprobar_planificacion',
-        title: '6 · Aprobación de Planificación',
+        etapaKey: 'planificadas',
+        title: '6 · Planificación y Pase a Producción',
         icon: <CalendarCheck size={15} className="text-green-600" />,
         fields: [
           { label: 'Planificación Aprobada', value: t.planificacion_aprobada ?? getRawVal('Planificación aprobada', 'Planificacion aprobada', 'Aprobar planificación') ?? '—' },
+          { label: 'Fecha Pase a Producción', value: fmtDate(t.fecha_pase_produccion) || fmtDate(getRawVal('Fecha de pase a producción', 'Fecha pase a produccion', 'Pase a producción') as string | null | undefined) },
+          { label: 'Comentarios Planificación', value: getRawVal('Comentarios') },
+        ],
+      },
+
+      // ── 7. IMPLEMENTADAS (Cols BK–BL) ─────────────────────────────────────
+      {
+        etapaKey: 'implementadas',
+        title: '7 · Implementación y Conformidad',
+        icon: <CheckCircle2 size={15} className="text-teal-600" />,
+        fields: [
+          { label: 'Persona que da Conformidad', value: t.persona_conformidad ?? getRawVal('Persona que da conformidad', 'Persona conformidad', 'Conformidad') },
+          { label: 'Fecha de Conformidad', value: fmtDate(t.fecha_conformidad) || fmtDate(getRawVal('Fecha de conformidad', 'Fecha conformidad') as string | null | undefined) },
         ],
       },
 
@@ -1877,6 +1891,37 @@ export function DataTable({
         ),
       },
       {
+        id: 'fecha_pase_produccion',
+        label: 'Pase a Prod.',
+        sortKey: 'fecha_pase_produccion' as any,
+        render: t => (
+          t.fecha_pase_produccion
+            ? <span className="font-mono text-xs text-emerald-700 font-semibold">{fmtDate(t.fecha_pase_produccion)}</span>
+            : <span className="text-slate-300 italic font-sans">—</span>
+        ),
+        className: 'whitespace-nowrap text-xs',
+      },
+      {
+        id: 'fecha_conformidad',
+        label: 'Conformidad',
+        sortKey: 'fecha_conformidad' as any,
+        render: t => (
+          t.fecha_conformidad || t.persona_conformidad ? (
+            <div className="flex flex-col">
+              <span className="font-mono text-xs text-teal-700 font-semibold">{fmtDate(t.fecha_conformidad) ?? '—'}</span>
+              {t.persona_conformidad && (
+                <span className="text-[10px] text-slate-500 truncate max-w-[120px]" title={t.persona_conformidad}>
+                  {t.persona_conformidad}
+                </span>
+              )}
+            </div>
+          ) : (
+            <span className="text-slate-300 italic font-sans">—</span>
+          )
+        ),
+        className: 'whitespace-nowrap text-xs',
+      },
+      {
         id: 'duracion_meses',
         label: 'Duración',
         sortKey: 'duracion_meses',
@@ -2046,7 +2091,7 @@ export function DataTable({
     if (isPlanificadas) {
       plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\tF. Inicio Real\tF. Fin Real\tID Jira\n`;
     } else {
-      plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\n`;
+      plainText += `ID\tTítulo\tVP Área Solicitante\tIT BP\tEstado\tF. Inicio Planificada\tF. Fin Planificada\tF. Pase a Prod.\tF. Conformidad\n`;
     }
     plainText += `----------------------------------------------------------------------------------------------------\n`;
     selectedRows.forEach(t => {
@@ -2065,7 +2110,9 @@ export function DataTable({
       } else {
         plainText += `${idStr}\t${t.titulo}\t${t.vp_solicitante || '—'}\t${t.it_bp || '—'}\t${estado}\t${fmtDate(
           t.fecha_inicio_planificada
-        )}\t${fmtDate(t.fecha_fin_planificada)}\n`;
+        )}\t${fmtDate(t.fecha_fin_planificada)}\t${fmtDate(t.fecha_pase_produccion ?? null)}\t${fmtDate(
+          t.fecha_conformidad ?? null
+        )}\n`;
       }
     });
 
@@ -2082,6 +2129,9 @@ export function DataTable({
       htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Inicio Real</th>`;
       htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Fin Real</th>`;
       htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">ID Jira</th>`;
+    } else {
+      htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Pase a Prod.</th>`;
+      htmlString += `<th style="padding: 8px; border: 1px solid #cbd5e1;">F. Conformidad</th>`;
     }
     htmlString += `</tr></thead><tbody>`;
 
@@ -2104,6 +2154,9 @@ export function DataTable({
         htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_inicio_real ?? null)}</td>`;
         htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_fin_real ?? null)}</td>`;
         htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${t.id_jira || '—'}</td>`;
+      } else {
+        htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_pase_produccion ?? null)}</td>`;
+        htmlString += `<td style="padding: 8px; border: 1px solid #cbd5e1;">${fmtDate(t.fecha_conformidad ?? null)}</td>`;
       }
       htmlString += `</tr>`;
     });
@@ -2299,6 +2352,10 @@ export function DataTable({
                   <optgroup label="Fechas de Re-estimación">
                     <option value="fecha_fin_reestimacion">Re-estimación · Fecha Fin (Límite)</option>
                     <option value="fecha_inicio_reestimacion">Re-estimación · Fecha Inicio</option>
+                  </optgroup>
+                  <optgroup label="Pase a Producción / Conformidad">
+                    <option value="fecha_pase_produccion">Pase a Producción</option>
+                    <option value="fecha_conformidad">Fecha de Conformidad</option>
                   </optgroup>
                 </>
               )}

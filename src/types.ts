@@ -11,6 +11,7 @@ export type EtapaPipeline =
   | 'por_planificar'
   | 'aprobar_planificacion'
   | 'planificadas'
+  | 'implementadas'
   | 'eliminadas'
   // Etapas del nuevo Excel (iniciativas planificadas)
   | 'por_iniciar'
@@ -83,6 +84,11 @@ export interface Iniciativa {
   fecha_eliminacion?: string | null;
   solicitado_por?: string | null;
   motivo_eliminacion?: string | null;
+
+  // Campos para iniciativas planificadas e implementadas (v85: Cols BJ, BK, BL)
+  fecha_pase_produccion?: string | null;
+  persona_conformidad?: string | null;
+  fecha_conformidad?: string | null;
 
   /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
   raw_fields?: Record<string, unknown>;

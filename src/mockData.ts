@@ -92,7 +92,7 @@ export function generateMockData(): DashboardData {
       costo_usd,
       costo_soles,
       tipo_recurso: pick(recursos),
-      proyecto_o_req: pick(['Proyecto', 'Requerimiento']),
+      proyecto_o_req: pick(['Proyecto', 'Requerimiento', null]),
       funcionalidad_nueva: pick(['SI', 'NO']),
       estatus_estimacion: etapa === 'por_estimar' ? pick(['Pendiente', 'En proceso']) : 'Finalizada',
       fecha_inicio_estimacion: ['por_estimar', 'por_aprobar_estimacion', 'por_habilitar_presupuesto', 'por_planificar', 'planificadas'].includes(etapa) ? (etapa === 'por_estimar' && Math.random() > 0.6 ? null : addDays(created, 5).toISOString()) : null,

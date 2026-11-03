@@ -16,8 +16,38 @@ import { buildSearchCorpus } from './utils';
 // Helpers de parseo
 // ---------------------------------------------------------------------------
 
+export interface ParserProgress {
+  percent: number;
+  stage: string;
+  detail?: string;
+}
+
+/** Normaliza las claves de una fila en un Map para búsquedas O(1) ultrarrápidas. */
+export function normalizeRow(row: Record<string, unknown>): Map<string, unknown> {
+  const map = new Map<string, unknown>();
+  for (const [k, v] of Object.entries(row)) {
+    if (v !== undefined && v !== null && v !== '') {
+      map.set(k.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim(), v);
+    }
+  }
+  return map;
+}
+
+/** Busca claves normalizadas en el Map en O(1) */
+export function getValFromMap(rowMap: Map<string, unknown>, ...keys: string[]): unknown {
+  for (const key of keys) {
+    const norm = key.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
+    const v = rowMap.get(norm);
+    if (v !== undefined && v !== null && v !== '') return v;
+  }
+  return null;
+}
+
 /** Busca una clave en la fila usando comparación exacta (case-insensitive), normalizando espacios/saltos de línea. */
-function getVal(row: Record<string, unknown>, ...keys: string[]): unknown {
+export function getVal(row: Record<string, unknown> | Map<string, unknown>, ...keys: string[]): unknown {
+  if (row instanceof Map) {
+    return getValFromMap(row, ...keys);
+  }
   for (const key of keys) {
     const normSearch = key.toLowerCase().replace(/[\r\n\s]+/g, ' ').trim();
     const found = Object.keys(row).find(k => {
@@ -192,16 +222,24 @@ function parseSiNo(val: unknown): 'SI' | 'NO' | null {
  * @param file - Archivo .xlsx o .xls seleccionado por el usuario.
  * @returns Promise que resuelve con los datos del dashboard.
  */
-export function parseExcelFile(file: File): Promise<DashboardData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export async function parseExcelFile(
+  file: File,
+  onProgress?: (progress: ParserProgress) => void
+): Promise<DashboardData> {
+  const notify = (percent: number, stage: string, detail?: string) => {
+    onProgress?.({ percent, stage, detail });
+  };
 
-    reader.onerror = () => reject(new Error('Error al leer el archivo Excel.'));
+  notify(10, 'Leyendo archivo...', `Cargando ${file.name} en memoria...`);
+  const buffer = await file.arrayBuffer();
 
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result as ArrayBuffer;
-        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+  notify(25, 'Analizando libro Excel...', 'Extrayendo hojas y celdas...');
+  await new Promise(r => setTimeout(r, 40));
+
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+
+  notify(40, 'Validando estructura...', 'Comprobando hojas operativas y columnas...');
+  await new Promise(r => setTimeout(r, 40));
 
         // ---------------------------------------------------------------------------
         // VALIDACIÓN DE ESTRUCTURA (Alertas para el usuario)
@@ -286,10 +324,11 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         expectedTabs.forEach(sheetName => {
           const sheet = workbook.Sheets[sheetName];
           if (!sheet) return;
-          const rows = XLSX.utils.sheet_to_json(sheet, { defval: '' }) as Record<string, unknown>[];
-          if (rows.length === 0) return;
+          const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+          if (!headerRows || headerRows.length === 0) return;
           
-          const headers = Object.keys(rows[0]).filter(h => !h.startsWith('__EMPTY'));
+          const headers = (headerRows[0] || []).map(h => String(h || '').trim()).filter(h => h && !h.startsWith('__EMPTY'));
+          if (headers.length === 0) return;
           
           const newCols = headers.filter(h => !KNOWN_KEYWORDS.some(kw => h.toLowerCase().includes(kw.toLowerCase())));
           if (newCols.length > 0) {
@@ -304,8 +343,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         });
 
         if (errors.length > 0) {
-          reject(new Error("⚠️ ATENCIÓN: Se detectaron cambios en la estructura del archivo que requieren actualización en la lectura de datos.\n\n" + errors.join('\n')));
-          return;
+          throw new Error("⚠️ ATENCIÓN: Se detectaron cambios en la estructura del archivo que requieren actualización en la lectura de datos.\n\n" + errors.join('\n'));
         }
         // ---------------------------------------------------------------------------
 
@@ -315,24 +353,34 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         // En caso de duplicado, se conserva la iniciativa con etapa más avanzada.
         const seenIds = new Map<number, { iniciativa: Iniciativa; etapaIndex: number }>();
 
-        Object.entries(HOJAS_OPERATIVAS).forEach(([sheetName, etapa]) => {
+        const etapaEntries = Object.entries(HOJAS_OPERATIVAS);
+        const totalTabs = etapaEntries.length;
+        let tabIdx = 0;
+
+        for (const [sheetName, etapa] of etapaEntries) {
+          tabIdx++;
+          const sheetPct = Math.round(40 + (tabIdx / totalTabs) * 45);
+          notify(sheetPct, `Extrayendo etapa "${etapa}"...`, `Procesando pestaña "${sheetName}"`);
+          // Ceder ejecución para que el usuario vea el avance fluido
+          await new Promise(r => setTimeout(r, 60));
+
           const sheet = workbook.Sheets[sheetName];
-          if (!sheet) return; // Hoja no encontrada en este workbook
+          if (!sheet) continue; // Hoja no encontrada en este workbook
 
           const allRows = XLSX.utils.sheet_to_json(sheet) as Record<string, unknown>[];
 
-          // Descartar filas vacías: el Excel puede tener celdas formateadas sin datos
-          // que sheet_to_json devuelve como filas. Solo procesamos filas que tengan
-          // al menos un Id/Ticket O un Título real.
+          // Descartar filas vacías de forma rápida con Map
           const rows = allRows.filter(row => {
-            const hasId    = getVal(row, 'Id', 'N° Ticket') !== null;
-            const hasTitle = getVal(row, 'Título de la INICIATIVA', 'Titulo') !== null;
+            const rowMap = normalizeRow(row);
+            const hasId    = getValFromMap(rowMap, 'Id', 'N° Ticket') !== null;
+            const hasTitle = getValFromMap(rowMap, 'Título de la INICIATIVA', 'Titulo') !== null;
             return hasId || hasTitle;
           });
           const etapaIndex = etapaOrder.indexOf(etapa);
 
           rows.forEach((row, rowIdx) => {
-            const g = (...keys: string[]) => getVal(row, ...keys);
+            const rowMap = normalizeRow(row);
+            const g = (...keys: string[]) => getValFromMap(rowMap, ...keys);
 
             // ID: intentar leer del campo, o generar uno sintético único
             const rawId = parseNum(g('Id', 'N° Ticket'));
@@ -397,8 +445,11 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
                   'Indicar si es Proyecto o Requerimiento No BAU',
                   'Proyecto o Requerimiento No BAU',
                   'Proyecto o Requerimiento',
-                  'No BAU',
+                  'Indicar si es Proyecto o Requerimiento no catalogado',
+                  'Proyecto o Requerimiento no catalogado',
                   'Proyecto o Req. No catalogado',
+                  'Proyecto o Req',
+                  'No BAU',
                   'No catalogado'
                 )),
               funcionalidad_nueva:
@@ -497,7 +548,10 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
               existing.iniciativa.raw_fields = mergedRaw;
             }
           });
-        });
+        }
+
+        notify(92, 'Consolidando iniciativas...', 'Deduplicando registros y calculando índices...');
+        await new Promise(r => setTimeout(r, 80));
 
         const allIniciativas = Array.from(seenIds.values())
           .map(v => v.iniciativa)
@@ -512,7 +566,6 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
         });
 
         // Calcular resumen por etapa
-
         const resumenPorEtapa: Record<string, number> = {};
         etapaOrder.forEach(e => (resumenPorEtapa[e] = 0));
         allIniciativas.forEach(i => {
@@ -521,7 +574,11 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           }
         });
 
-        resolve({
+        // Mostrar 100% y dar un momento para apreciarlo claramente
+        notify(100, '¡Listo!', `${allIniciativas.length} iniciativas preparadas`);
+        await new Promise(r => setTimeout(r, 400));
+
+        return {
           ultima_actualizacion: new Date().toISOString(),
           tipo_de_cambio: 3.75,
           resumen: {
@@ -530,14 +587,7 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
           },
           iniciativas: allIniciativas,
           mode: 'demanda',
-        });
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error('Error al procesar el archivo.'));
-      }
-    };
-
-    reader.readAsArrayBuffer(file);
-  });
+        };
 }
 
 /**
@@ -546,152 +596,163 @@ export function parseExcelFile(file: File): Promise<DashboardData> {
  * @param file - Archivo .xlsx o .xls
  * @returns Promise con los datos formateados.
  */
-export function parsePlanificadasExcelFile(file: File): Promise<DashboardData> {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
+export async function parsePlanificadasExcelFile(
+  file: File,
+  onProgress?: (progress: ParserProgress) => void
+): Promise<DashboardData> {
+  const notify = (percent: number, stage: string, detail?: string) => {
+    onProgress?.({ percent, stage, detail });
+  };
 
-    reader.onerror = () => reject(new Error('Error al leer el archivo Excel de planificadas.'));
+  try {
+    notify(10, 'Leyendo archivo...', `Cargando ${file.name} en memoria...`);
+  const buffer = await file.arrayBuffer();
 
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result as ArrayBuffer;
-        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+  notify(30, 'Analizando libro Excel...', 'Buscando pestaña de planificadas...');
+  await new Promise(r => setTimeout(r, 30));
 
-        const sheetName = 'Req No Catalogados Demanda';
-        const sheet = workbook.Sheets[sheetName];
-        if (!sheet) {
-          reject(new Error(`⚠️ El archivo Excel no contiene la pestaña requerida "${sheetName}".`));
-          return;
+  const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', cellDates: true });
+
+  const sheetName = 'Req No Catalogados Demanda';
+  const sheet = workbook.Sheets[sheetName];
+  if (!sheet) {
+    throw new Error(`⚠️ El archivo Excel no contiene la pestaña requerida "${sheetName}".`);
+  }
+
+  notify(50, 'Extrayendo iniciativas...', 'Procesando registros planificados...');
+  await new Promise(r => setTimeout(r, 60));
+
+  // Leer saltándose la primera fila descriptiva
+  const rows = XLSX.utils.sheet_to_json(sheet, { range: 1 }) as Record<string, unknown>[];
+      
+      const validRows = rows.filter(row => {
+        const rowMap = normalizeRow(row);
+        const hasId = getValFromMap(rowMap, 'ID Demanda', 'ID\r\nDemanda', 'ID') !== null;
+        const hasTitle = getValFromMap(rowMap, 'Título de la Iniciativa', 'Titulo') !== null;
+        return hasId || hasTitle;
+      });
+
+      const seenIds = new Map<number, Iniciativa>();
+
+      validRows.forEach((row, rowIdx) => {
+        const rowMap = normalizeRow(row);
+        const g = (...keys: string[]) => getValFromMap(rowMap, ...keys);
+
+        const rawId = parseNum(g('ID Demanda', 'ID\r\nDemanda', 'ID'));
+        const id = rawId ?? Number(`99${rowIdx + 1}${Math.floor(Math.random() * 100)}`);
+
+        const rawEstado = parseStr(g('Estado')) || 'Por iniciar';
+        let etapa_actual: EtapaPipeline = 'por_iniciar';
+        
+        const normEstado = rawEstado.toLowerCase().trim();
+        if (normEstado.includes('ejecuc') || normEstado.includes('progreso')) {
+          etapa_actual = 'en_ejecucion';
+        } else if (normEstado.includes('terminado') || normEstado.includes('finalizado')) {
+          etapa_actual = 'terminado';
+        } else if (normEstado.includes('detenido') || normEstado.includes('suspendido') || normEstado.includes('pausa')) {
+          etapa_actual = 'detenido';
         }
 
-        // Leer saltándose la primera fila descriptiva
-        const rows = XLSX.utils.sheet_to_json(sheet, { range: 1 }) as Record<string, unknown>[];
-        
-        const validRows = rows.filter(row => {
-          const hasId = getVal(row, 'ID Demanda', 'ID\r\nDemanda', 'ID') !== null;
-          const hasTitle = getVal(row, 'Título de la Iniciativa', 'Titulo') !== null;
-          return hasId || hasTitle;
-        });
+        const costo_soles = parseNum(g('Costo Soles'));
 
-        const seenIds = new Map<number, Iniciativa>();
-
-        validRows.forEach((row, rowIdx) => {
-          const g = (...keys: string[]) => getVal(row, ...keys);
-
-          const rawId = parseNum(g('ID Demanda', 'ID\r\nDemanda', 'ID'));
-          const id = rawId ?? Number(`99${rowIdx + 1}${Math.floor(Math.random() * 100)}`);
-
-          const rawEstado = parseStr(g('Estado')) || 'Por iniciar';
-          let etapa_actual: EtapaPipeline = 'por_iniciar';
+        const ini: Iniciativa = {
+          id,
+          etapa_actual,
+          fecha_registro: formatDt(g('Fecha inicio planificada')) ?? new Date().toISOString(),
+          titulo: parseStr(g('Título de la Iniciativa', 'Titulo')) ?? 'Sin Título',
+          objetivo: parseStr(g('Objetivo')) ?? '',
+          institucion: parseStr(g('Institución', 'Universidad', 'Institucion')) ?? '',
+          vp_solicitante: parseStr(g('Nombre VP', 'VP')) ?? '',
+          usuario_negocio: parseStr(g('Solicitante', 'Usuario')) ?? '',
+          it_bp: parseStr(g('IT BP', 'BP')) ?? '',
+          fecha_entrega_requerida: formatDt(g('Fecha fin planificada')),
+          proyecto_spo: g('ID SPO') ? 'SI' : 'NO',
+          tipo_iniciativa: 'Requerimiento',
+          pilar_estrategico: '',
+          estabilizacion_sis: 'NO',
+          usuarios_beneficiados: '',
+          beneficio_cuantitativo: '',
+          complejidad: '',
+          lider_dominio: parseStr(g('Líder de dominio', 'Lider')) ?? '',
+          asignado_por: null,
+          fecha_asignacion: null,
+          duracion_meses: null,
+          costo_usd: null,
+          costo_soles,
+          tipo_recurso: null,
+          proyecto_o_req: 'Requerimiento',
+          funcionalidad_nueva: null,
+          estatus_estimacion: null,
+          accion_brm: null,
+          prioridad_brm: null,
+          fecha_inicio_planificada: formatDt(g('Fecha inicio planificada')),
+          fecha_fin_planificada: formatDt(g('Fecha fin planificada')),
+          impacto_sox: 'NO',
+          aprobar_estimacion: null,
+          presupuesto_habilitado: null,
+          planificacion_aprobada: null,
           
-          const normEstado = rawEstado.toLowerCase().trim();
-          if (normEstado.includes('ejecuc') || normEstado.includes('progreso')) {
-            etapa_actual = 'en_ejecucion';
-          } else if (normEstado.includes('terminado') || normEstado.includes('finalizado')) {
-            etapa_actual = 'terminado';
-          } else if (normEstado.includes('detenido') || normEstado.includes('suspendido') || normEstado.includes('pausa')) {
-            etapa_actual = 'detenido';
-          }
-
-          const costo_soles = parseNum(g('Costo Soles'));
-
-          const ini: Iniciativa = {
-            id,
-            etapa_actual,
-            fecha_registro: formatDt(g('Fecha inicio planificada')) ?? new Date().toISOString(),
-            titulo: parseStr(g('Título de la Iniciativa', 'Titulo')) ?? 'Sin Título',
-            objetivo: parseStr(g('Objetivo')) ?? '',
-            institucion: parseStr(g('Institución', 'Universidad', 'Institucion')) ?? '',
-            vp_solicitante: parseStr(g('Nombre VP', 'VP')) ?? '',
-            usuario_negocio: parseStr(g('Solicitante', 'Usuario')) ?? '',
-            it_bp: parseStr(g('IT BP', 'BP')) ?? '',
-            fecha_entrega_requerida: formatDt(g('Fecha fin planificada')),
-            proyecto_spo: g('ID SPO') ? 'SI' : 'NO',
-            tipo_iniciativa: 'Requerimiento',
-            pilar_estrategico: '',
-            estabilizacion_sis: 'NO',
-            usuarios_beneficiados: '',
-            beneficio_cuantitativo: '',
-            complejidad: '',
-            lider_dominio: parseStr(g('Líder de dominio', 'Lider')) ?? '',
-            asignado_por: null,
-            fecha_asignacion: null,
-            duracion_meses: null,
-            costo_usd: null,
-            costo_soles,
-            tipo_recurso: null,
-            proyecto_o_req: 'Requerimiento',
-            funcionalidad_nueva: null,
-            estatus_estimacion: null,
-            accion_brm: null,
-            prioridad_brm: null,
-            fecha_inicio_planificada: formatDt(g('Fecha inicio planificada')),
-            fecha_fin_planificada: formatDt(g('Fecha fin planificada')),
-            impacto_sox: 'NO',
-            aprobar_estimacion: null,
-            presupuesto_habilitado: null,
-            planificacion_aprobada: null,
-            
-            // Campos específicos
-            frente: parseStr(g('Frente')),
-            nombre_vp: parseStr(g('Nombre VP')),
-            sub_estado: parseStr(g('Sub Estado', 'Subestado')),
-            desviacion_pct: parseNum(g('% desviación', 'desviación')),
-            fecha_inicio_real: formatDt(g('Fecha inicio real')),
-            fecha_fin_real: formatDt(g('Fecha fin real')),
-            aviso_negocio_cambio_fecha: parseStr(g('Se aviso a Negocio cambio de fecha?')),
-            ticket_sn_rit: parseStr(g('Ticket SN (RIT)')),
-            id_jira: parseStr(g('ID Jira')),
-            motivo_replanificacion: parseStr(g('Motivo de Replanificación')),
-            raw_fields: extractRawFields(row),
-          };
-
-          const existing = seenIds.get(id);
-          const mergedRaw = existing
-            ? { ...existing.raw_fields, ...ini.raw_fields }
-            : ini.raw_fields;
-          ini.raw_fields = mergedRaw;
-
-          seenIds.set(id, ini);
-        });
-
-        const allIniciativas = Array.from(seenIds.values()).sort(
-          (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
-        );
-
-
-        allIniciativas.forEach(ini => {
-          ini._searchCorpus = buildSearchCorpus(ini);
-        });
-
-        const resumenPorEtapa: Record<string, number> = {
-          por_iniciar: 0,
-          en_ejecucion: 0,
-          terminado: 0,
-          detenido: 0,
+          // Campos específicos
+          frente: parseStr(g('Frente')),
+          nombre_vp: parseStr(g('Nombre VP')),
+          sub_estado: parseStr(g('Sub Estado', 'Subestado')),
+          desviacion_pct: parseNum(g('% desviación', 'desviación')),
+          fecha_inicio_real: formatDt(g('Fecha inicio real')),
+          fecha_fin_real: formatDt(g('Fecha fin real')),
+          aviso_negocio_cambio_fecha: parseStr(g('Se aviso a Negocio cambio de fecha?')),
+          ticket_sn_rit: parseStr(g('Ticket SN (RIT)')),
+          id_jira: parseStr(g('ID Jira')),
+          motivo_replanificacion: parseStr(g('Motivo de Replanificación')),
+          raw_fields: extractRawFields(row),
         };
 
-        allIniciativas.forEach(i => {
-          if (resumenPorEtapa[i.etapa_actual] !== undefined) {
-            resumenPorEtapa[i.etapa_actual]++;
-          }
-        });
+        const existing = seenIds.get(id);
+        const mergedRaw = existing
+          ? { ...existing.raw_fields, ...ini.raw_fields }
+          : ini.raw_fields;
+        ini.raw_fields = mergedRaw;
 
-        resolve({
-          ultima_actualizacion: new Date().toISOString(),
-          tipo_de_cambio: 3.75,
-          resumen: {
-            total_iniciativas: allIniciativas.length,
-            por_etapa: resumenPorEtapa,
-          },
-          iniciativas: allIniciativas,
-          mode: 'planificadas',
-        });
-      } catch (err) {
-        reject(err instanceof Error ? err : new Error('Error al procesar el archivo Excel.'));
-      }
-    };
+        seenIds.set(id, ini);
+      });
 
-    reader.readAsArrayBuffer(file);
-  });
+      notify(88, 'Consolidando iniciativas...', 'Generando corpus de búsqueda...');
+
+      const allIniciativas = Array.from(seenIds.values()).sort(
+        (a, b) => new Date(b.fecha_registro).getTime() - new Date(a.fecha_registro).getTime()
+      );
+
+      allIniciativas.forEach(ini => {
+        ini._searchCorpus = buildSearchCorpus(ini);
+      });
+
+      const resumenPorEtapa: Record<string, number> = {
+        por_iniciar: 0,
+        en_ejecucion: 0,
+        terminado: 0,
+        detenido: 0,
+      };
+
+      allIniciativas.forEach(i => {
+        if (resumenPorEtapa[i.etapa_actual] !== undefined) {
+          resumenPorEtapa[i.etapa_actual]++;
+        }
+      });
+
+      notify(100, '¡Carga completa!', `${allIniciativas.length} iniciativas listas para visualizar`);
+
+      await new Promise(r => setTimeout(r, 400));
+
+      return {
+        ultima_actualizacion: new Date().toISOString(),
+        tipo_de_cambio: 3.75,
+        resumen: {
+          total_iniciativas: allIniciativas.length,
+          por_etapa: resumenPorEtapa,
+        },
+        iniciativas: allIniciativas,
+        mode: 'planificadas',
+      };
+    } catch (err) {
+      throw err instanceof Error ? err : new Error('Error al procesar el archivo Excel.');
+    }
 }

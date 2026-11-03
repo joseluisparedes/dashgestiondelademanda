@@ -272,29 +272,83 @@ function buildOptions(
   return sorted;
 }
 
-const detectExcelMode = (file: File): Promise<'demanda' | 'planificadas' | 'unknown'> => {
-  return new Promise((resolve) => {
-    const reader = new FileReader();
-    reader.onerror = () => resolve('unknown');
-    reader.onload = (e) => {
-      try {
-        const buffer = e.target?.result as ArrayBuffer;
-        const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array' });
-        const sheetNames = workbook.SheetNames;
-        if (sheetNames.includes('Req No Catalogados Demanda')) {
-          resolve('planificadas');
-        } else if (sheetNames.includes('Registro incompleto') || sheetNames.includes('Por estimar') || sheetNames.includes('Por planificar') || sheetNames.includes('Planificadas') || sheetNames.includes('Implementadas')) {
-          resolve('demanda');
-        } else {
-          resolve('unknown');
-        }
-      } catch {
-        resolve('unknown');
-      }
-    };
-    reader.readAsArrayBuffer(file);
-  });
+interface UploadProgressInfo {
+  percent: number;
+  stage: string;
+  detail: string;
+  fileName: string;
+  fileSize: string;
+}
+
+function formatFileSize(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`;
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(2)} MB`;
+}
+
+const detectExcelMode = async (file: File): Promise<'demanda' | 'planificadas' | 'unknown'> => {
+  try {
+    const buffer = await file.arrayBuffer();
+    const workbook = XLSX.read(new Uint8Array(buffer), { type: 'array', bookSheets: true });
+    const sheetNames = workbook.SheetNames || [];
+    if (sheetNames.includes('Req No Catalogados Demanda')) {
+      return 'planificadas';
+    }
+    if (
+      sheetNames.includes('Registro incompleto') ||
+      sheetNames.includes('Por estimar') ||
+      sheetNames.includes('Por planificar') ||
+      sheetNames.includes('Planificadas') ||
+      sheetNames.includes('Implementadas')
+    ) {
+      return 'demanda';
+    }
+    return 'unknown';
+  } catch {
+    return 'unknown';
+  }
 };
+
+function UploadProgressBar({ progress }: { progress: UploadProgressInfo }) {
+  return (
+    <div className="relative border-2 border-dashed border-[#EB5F46]/50 bg-white rounded-2xl p-8 sm:p-12 flex flex-col items-center justify-center gap-4 text-center transition-all animate-in fade-in duration-200">
+      {/* Spinner limpio y minimalista */}
+      <div className="w-14 h-14 rounded-2xl bg-[#fff0ed] flex items-center justify-center text-[#EB5F46]">
+        <Loader2 size={30} className="animate-spin" />
+      </div>
+
+      {/* Título y archivo */}
+      <div className="space-y-1">
+        <h3 className="font-bold text-slate-800 text-sm sm:text-base">
+          Procesando archivo Excel...
+        </h3>
+        <p className="text-slate-400 text-xs font-medium max-w-sm truncate">
+          {progress.fileName} <span className="opacity-60">• {progress.fileSize}</span>
+        </p>
+      </div>
+
+      {/* Barra de progreso minimalista */}
+      <div className="w-full max-w-md space-y-1.5 pt-1">
+        <div className="w-full h-2.5 bg-slate-100 rounded-full overflow-hidden p-0.5 border border-slate-200">
+          <div
+            className="h-full rounded-full bg-gradient-to-r from-[#EB5F46] to-[#f97316] transition-all duration-300 ease-out"
+            style={{ width: `${Math.max(progress.percent, 5)}%` }}
+          />
+        </div>
+
+        {/* Texto de etapa y porcentaje */}
+        <div className="flex items-center justify-between text-xs font-semibold px-0.5">
+          <span className="text-slate-600 truncate max-w-[280px]">
+            {progress.stage}
+          </span>
+          <span className="text-[#EB5F46] font-mono font-bold ml-2">
+            {progress.percent}%
+          </span>
+        </div>
+      </div>
+    </div>
+  );
+}
 
 // ---------------------------------------------------------------------------
 // Componente principal
@@ -305,6 +359,7 @@ export default function App() {
   const [filters, setFilters] = useState<FilterState>(INITIAL_FILTERS);
   const [uploadError, setUploadError] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = useState<UploadProgressInfo | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [showFormatGuide, setShowFormatGuide] = useState(false);
   const [activeTab, setActiveTab] = useState<ActiveTab>('resumen');
@@ -314,8 +369,41 @@ export default function App() {
   const executeUpload = async (file: File) => {
     setIsUploading(true);
     setUploadError(null);
+    setUploadProgress({
+      percent: 5,
+      stage: 'Iniciando carga...',
+      detail: 'Verificando archivo seleccionado...',
+      fileName: file.name,
+      fileSize: formatFileSize(file.size),
+    });
+
+    // Ceder el hilo para permitir el primer renderizado fluido
+    await new Promise(r => setTimeout(r, 60));
+
     try {
-      const result = await parseExcelFile(file);
+      const mode = await detectExcelMode(file);
+      let result: DashboardData;
+
+      if (mode === 'planificadas') {
+        result = await parsePlanificadasExcelFile(file, (p) => {
+          setUploadProgress(prev => (prev ? {
+            ...prev,
+            percent: p.percent,
+            stage: p.stage,
+            detail: p.detail || prev.detail,
+          } : null));
+        });
+      } else {
+        result = await parseExcelFile(file, (p) => {
+          setUploadProgress(prev => (prev ? {
+            ...prev,
+            percent: p.percent,
+            stage: p.stage,
+            detail: p.detail || prev.detail,
+          } : null));
+        });
+      }
+
       setData(result);
       setFilters(INITIAL_FILTERS);
       setExpandedId(null);
@@ -326,6 +414,7 @@ export default function App() {
       );
     } finally {
       setIsUploading(false);
+      setUploadProgress(null);
     }
   };
 
@@ -590,61 +679,57 @@ export default function App() {
                 </div>
               )}
 
-              {/* Área Interactiva Drag and Drop */}
-              <div
-                onDragOver={handleDragOver}
-                onDragLeave={handleDragLeave}
-                onDrop={handleDrop}
-                className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-10 transition-all duration-200 flex flex-col items-center justify-center gap-4 ${
-                  isDragging
-                    ? 'border-[#EB5F46] bg-[#fff0ed]/40 scale-[1.01] shadow-lg ring-4 ring-[#EB5F46]/10'
-                    : 'border-slate-300 hover:border-[#EB5F46]/70 hover:bg-slate-50/50 bg-slate-50/30'
-                }`}
-              >
-                <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
-                  isDragging
-                    ? 'bg-[#EB5F46] text-white shadow-md scale-110'
-                    : 'bg-[#fff0ed] text-[#EB5F46]'
-                }`}>
-                  {isUploading ? (
-                    <Loader2 size={32} className="animate-spin text-[#EB5F46]" />
-                  ) : (
-                    <Upload size={30} className={isDragging ? 'animate-bounce' : ''} />
-                  )}
-                </div>
-
-                <div className="space-y-1">
-                  <p className="font-bold text-slate-800 text-sm sm:text-base">
-                    {isDragging ? '¡Suelta el archivo Excel aquí!' : 'Arrastra y suelta tu archivo Excel aquí'}
-                  </p>
-                  <p className="text-slate-400 text-xs font-medium">
-                    o haz clic en el botón para seleccionarlo desde tu equipo
-                  </p>
-                </div>
-
-                <label
-                  className={`cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-95 ${
-                    isUploading
-                      ? 'bg-orange-300 cursor-not-allowed'
-                      : 'bg-gradient-to-r from-[#EB5F46] to-[#d8482f] hover:from-[#c94a32] hover:to-[#b83e27] hover:shadow-lg shadow-[#EB5F46]/20'
+              {/* Área Interactiva: Barra de Progreso o Drag and Drop */}
+              {isUploading && uploadProgress ? (
+                <UploadProgressBar progress={uploadProgress} />
+              ) : (
+                <div
+                  onDragOver={handleDragOver}
+                  onDragLeave={handleDragLeave}
+                  onDrop={handleDrop}
+                  className={`relative border-2 border-dashed rounded-2xl p-8 sm:p-10 transition-all duration-200 flex flex-col items-center justify-center gap-4 ${
+                    isDragging
+                      ? 'border-[#EB5F46] bg-[#fff0ed]/40 scale-[1.01] shadow-lg ring-4 ring-[#EB5F46]/10'
+                      : 'border-slate-300 hover:border-[#EB5F46]/70 hover:bg-slate-50/50 bg-slate-50/30'
                   }`}
                 >
-                  {isUploading ? <Loader2 size={16} className="animate-spin" /> : <FileSpreadsheet size={16} />}
-                  <span>{isUploading ? 'Procesando archivo…' : 'Seleccionar Archivo Excel'}</span>
-                  <input
-                    type="file"
-                    accept=".xlsx,.xls"
-                    className="hidden"
-                    onChange={handleFileUpload}
-                    disabled={isUploading}
-                  />
-                </label>
+                  <div className={`w-16 h-16 rounded-2xl flex items-center justify-center transition-all ${
+                    isDragging
+                      ? 'bg-[#EB5F46] text-white shadow-md scale-110'
+                      : 'bg-[#fff0ed] text-[#EB5F46]'
+                  }`}>
+                    <Upload size={30} className={isDragging ? 'animate-bounce' : ''} />
+                  </div>
 
-                <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
-                  <CheckCircle2 size={12} className="text-emerald-500" />
-                  <span>Formatos soportados: <strong>.xlsx</strong>, <strong>.xls</strong></span>
+                  <div className="space-y-1">
+                    <p className="font-bold text-slate-800 text-sm sm:text-base">
+                      {isDragging ? '¡Suelta el archivo Excel aquí!' : 'Arrastra y suelta tu archivo Excel aquí'}
+                    </p>
+                    <p className="text-slate-400 text-xs font-medium">
+                      o haz clic en el botón para seleccionarlo desde tu equipo
+                    </p>
+                  </div>
+
+                  <label
+                    className="cursor-pointer inline-flex items-center gap-2 px-6 py-3 rounded-xl font-bold text-xs sm:text-sm text-white shadow-md transition-all active:scale-95 bg-gradient-to-r from-[#EB5F46] to-[#d8482f] hover:from-[#c94a32] hover:to-[#b83e27] hover:shadow-lg shadow-[#EB5F46]/20"
+                  >
+                    <FileSpreadsheet size={16} />
+                    <span>Seleccionar Archivo Excel</span>
+                    <input
+                      type="file"
+                      accept=".xlsx,.xls"
+                      className="hidden"
+                      onChange={handleFileUpload}
+                      disabled={isUploading}
+                    />
+                  </label>
+
+                  <div className="flex items-center gap-2 text-[11px] text-slate-400 font-medium">
+                    <CheckCircle2 size={12} className="text-emerald-500" />
+                    <span>Formatos soportados: <strong>.xlsx</strong>, <strong>.xls</strong></span>
+                  </div>
                 </div>
-              </div>
+              )}
 
               {/* Guía Colapsable de Hojas Esperadas */}
               <div className="pt-2 border-t border-slate-100 text-left">
@@ -997,6 +1082,15 @@ export default function App() {
           />
         )}
       </main>
+
+      {/* Modal de progreso cuando se carga un nuevo Excel desde el dashboard */}
+      {data !== null && isUploading && uploadProgress && (
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm z-[99999] flex items-center justify-center p-4 animate-in fade-in duration-200">
+          <div className="max-w-xl w-full bg-white rounded-3xl shadow-2xl p-4 sm:p-6 border border-slate-100">
+            <UploadProgressBar progress={uploadProgress} />
+          </div>
+        </div>
+      )}
 
       {/* Footer */}
       <footer className="bg-[#22223C] text-slate-400 text-center py-4 px-8 text-xs font-semibold tracking-wider border-t border-slate-800 shrink-0">

@@ -3,10 +3,10 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useRef, useEffect } from 'react';
+import React, { useState, useMemo, useRef, useEffect, startTransition } from 'react';
 import { Iniciativa, EtapaPipeline, FilterState } from '../types';
 import { ETAPAS_CONFIG, ETAPAS_MAP, ETAPAS_PLANIFICADAS_CONFIG, ETAPAS_PLANIFICADAS_MAP, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
-import { format, parseISO, differenceInCalendarDays } from 'date-fns';
+import { format, parseISO, differenceInCalendarDays, startOfDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
   ResponsiveContainer,
@@ -45,6 +45,11 @@ import {
   ArrowUpDown,
   Search,
   GripVertical,
+  Calendar,
+  Flag,
+  CheckCircle2,
+  Download,
+  Check,
 } from 'lucide-react';
 import { IniciativaDetailModal } from './DataTable';
 
@@ -2805,18 +2810,2667 @@ function buildNavFilters(
 }
 
 // ---------------------------------------------------------------------------
+// Helpers y Componente: Timeline de Iniciativas por Etapas Clave (con línea de HOY)
+// ---------------------------------------------------------------------------
+
+const timelineDateCache = new Map<string, Date | null>();
+
+function parseTimelineDate(d: string | null | undefined): Date | null {
+  if (!d || typeof d !== 'string') return null;
+  const s = d.trim();
+  if (!s || s === 'null' || s === 'undefined' || s === EMPTY_SENTINEL) return null;
+
+  const cached = timelineDateCache.get(s);
+  if (cached !== undefined) return cached;
+
+  // 1. Fast path: Date.parse native C++ parser in V8 engine
+  const ts = Date.parse(s);
+  if (!isNaN(ts)) {
+    const res = new Date(ts);
+    timelineDateCache.set(s, res);
+    return res;
+  }
+
+  // 2. Fallback para parseISO de date-fns
+  try {
+    const parsed = parseISO(s);
+    if (!isNaN(parsed.getTime())) {
+      timelineDateCache.set(s, parsed);
+      return parsed;
+    }
+  } catch {}
+
+  timelineDateCache.set(s, null);
+  return null;
+}
+
+type TimelineStageKey = 'estimacion' | 'reestimacion' | 'planificada' | 'implementada';
+
+interface TimelineSegment {
+  id: string;
+  stageKey: TimelineStageKey;
+  stageName: string;
+  start: Date;
+  end: Date;
+  isSingleDay: boolean;
+  color: string;
+  gradient: string;
+  borderColor: string;
+  textColor: string;
+  details?: string;
+  lane?: number;
+}
+
+type GrupoAMKey = 'requerimiento' | 'proyecto' | 'vacio';
+
+interface GrupoAMConfig {
+  key: GrupoAMKey;
+  title: string;
+  tag: string;
+  headerBg: string;
+  headerBorder: string;
+  headerText: string;
+  badgeBg: string;
+  badgeText: string;
+  barColor: string;
+  barGradient: string;
+  barBorder: string;
+}
+
+const GRUPOS_AM_CONFIG: Record<GrupoAMKey, GrupoAMConfig> = {
+  requerimiento: {
+    key: 'requerimiento',
+    title: 'Requerimientos (No BAU)',
+    tag: 'Requerimiento',
+    headerBg: '#ecfeff',
+    headerBorder: '#a5f3fc',
+    headerText: '#0e7490',
+    badgeBg: '#cffafe',
+    badgeText: '#0891b2',
+    barColor: '#0891b2',
+    barGradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
+    barBorder: '#0e7490',
+  },
+  proyecto: {
+    key: 'proyecto',
+    title: 'Proyectos',
+    tag: 'Proyecto',
+    headerBg: '#eff6ff',
+    headerBorder: '#bfdbfe',
+    headerText: '#1d4ed8',
+    badgeBg: '#dbeafe',
+    badgeText: '#2563eb',
+    barColor: '#2563eb',
+    barGradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+    barBorder: '#1d4ed8',
+  },
+  vacio: {
+    key: 'vacio',
+    title: 'Sin Regularizar / Vacíos (Columna AM pendiente)',
+    tag: '⚠️ Por regularizar',
+    headerBg: '#fffbeb',
+    headerBorder: '#fde68a',
+    headerText: '#b45309',
+    badgeBg: '#fef3c7',
+    badgeText: '#d97706',
+    barColor: '#f59e0b',
+    barGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+    barBorder: '#b45309',
+  },
+};
+
+function classifyAM(i: Iniciativa): GrupoAMKey {
+  const rawVal = i.proyecto_o_req || (i.raw_fields && (
+    i.raw_fields['Indicar si es Proyecto o Requerimiento No BAU'] ||
+    i.raw_fields['Proyecto o Requerimiento No BAU'] ||
+    i.raw_fields['Proyecto o Requerimiento'] ||
+    i.raw_fields['No BAU']
+  )) as string | undefined;
+
+  if (!rawVal) return 'vacio';
+  const s = String(rawVal).trim().toLowerCase();
+  if (
+    !s ||
+    s === 'null' ||
+    s === 'undefined' ||
+    s === EMPTY_SENTINEL.toLowerCase() ||
+    s === '(sin asignar)' ||
+    s.startsWith('http://') ||
+    s.startsWith('https://')
+  ) {
+    return 'vacio';
+  }
+
+  if (s.includes('requerimiento') || s.includes('no bau') || s.includes('req')) {
+    return 'requerimiento';
+  }
+
+  if (s.includes('proyecto')) {
+    return 'proyecto';
+  }
+
+  return 'vacio';
+}
+
+interface TimelineRowItem {
+  iniciativa: Iniciativa;
+  segments: TimelineSegment[];
+  hasDates: boolean;
+  startDate: Date | null;
+  endDate: Date | null;
+  earliestDate: Date | null;
+  latestDate: Date | null;
+  grupoAM: GrupoAMKey;
+  maxLane: number;
+}
+
+function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
+  const segs: TimelineSegment[] = [];
+
+  // Regla 1: Si la iniciativa ya está planificada, NO mostrar su línea de estimación
+  const isPlanificada =
+    ['planificadas', 'implementadas', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) ||
+    Boolean(i.fecha_inicio_planificada || i.fecha_fin_planificada || i.fecha_inicio_real || i.fecha_fin_real);
+
+  // 1. En Estimación (SOLO si la iniciativa NO está planificada)
+  if (!isPlanificada) {
+    const iniEst = parseTimelineDate(i.fecha_inicio_estimacion);
+    const finEst = parseTimelineDate(i.fecha_fin_estimacion);
+    if (iniEst || finEst) {
+      const s = iniEst || finEst!;
+      const e = finEst || iniEst!;
+      const start = s <= e ? s : e;
+      const end = s <= e ? e : s;
+      segs.push({
+        id: `${i.id}-est`,
+        stageKey: 'estimacion',
+        stageName: 'En Estimación',
+        start,
+        end,
+        isSingleDay: start.getTime() === end.getTime(),
+        color: '#f59e0b',
+        gradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+        borderColor: '#b45309',
+        textColor: '#ffffff',
+        details: i.estatus_estimacion ? `Estatus: ${i.estatus_estimacion}` : undefined,
+      });
+    }
+  }
+
+  // 2. Re-estimación
+  const iniReest = parseTimelineDate(i.fecha_inicio_reestimacion);
+  const finReest = parseTimelineDate(i.fecha_fin_reestimacion);
+  if (iniReest || finReest) {
+    const s = iniReest || finReest!;
+    const e = finReest || iniReest!;
+    const start = s <= e ? s : e;
+    const end = s <= e ? e : s;
+    const parts: string[] = [];
+    if (i.motivo_reestimacion) parts.push(`Motivo: ${i.motivo_reestimacion}`);
+    if (i.estatus_reestimacion) parts.push(`Estatus: ${i.estatus_reestimacion}`);
+    segs.push({
+      id: `${i.id}-reest`,
+      stageKey: 'reestimacion',
+      stageName: 'Re-estimación',
+      start,
+      end,
+      isSingleDay: start.getTime() === end.getTime(),
+      color: '#ea580c',
+      gradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+      borderColor: '#c2410c',
+      textColor: '#ffffff',
+      details: parts.length > 0 ? parts.join(' | ') : undefined,
+    });
+  }
+
+  // 3. Planificadas
+  const iniPlan = parseTimelineDate(i.fecha_inicio_planificada || i.fecha_inicio_real);
+  const finPlan = parseTimelineDate(i.fecha_fin_planificada || i.fecha_fin_real);
+  if (iniPlan || finPlan) {
+    const s = iniPlan || finPlan!;
+    const e = finPlan || iniPlan!;
+    const start = s <= e ? s : e;
+    const end = s <= e ? e : s;
+    segs.push({
+      id: `${i.id}-plan`,
+      stageKey: 'planificada',
+      stageName: 'Planificada',
+      start,
+      end,
+      isSingleDay: start.getTime() === end.getTime(),
+      color: '#10b981',
+      gradient: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+      borderColor: '#047857',
+      textColor: '#ffffff',
+      details: i.planificacion_aprobada ? `Planificación aprobada: ${i.planificacion_aprobada}` : undefined,
+    });
+  }
+
+  // 4. Implementadas
+  const fechaPase = parseTimelineDate(i.fecha_pase_produccion);
+  const fechaConf = parseTimelineDate(i.fecha_conformidad);
+  if (fechaPase || fechaConf) {
+    const s = fechaPase || fechaConf!;
+    const e = fechaConf || fechaPase!;
+    const start = s <= e ? s : e;
+    const end = s <= e ? e : s;
+    const parts: string[] = [];
+    if (fechaPase) parts.push(`Pase a producción: ${fmtDateShort(i.fecha_pase_produccion)}`);
+    if (fechaConf) parts.push(`Conformidad: ${fmtDateShort(i.fecha_conformidad)}`);
+    if (i.persona_conformidad) parts.push(`Por: ${i.persona_conformidad}`);
+    segs.push({
+      id: `${i.id}-imp`,
+      stageKey: 'implementada',
+      stageName: 'Implementada',
+      start,
+      end,
+      isSingleDay: start.getTime() === end.getTime(),
+      color: '#0284c7',
+      gradient: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+      borderColor: '#075985',
+      textColor: '#ffffff',
+      details: parts.length > 0 ? parts.join(' | ') : undefined,
+    });
+  }
+
+  return segs;
+}
+
+const DEFAULT_TIMELINE_PAGE_SIZE = 40;
+
+function TimelineIniciativasVP({
+  iniciativas,
+  onOpenDetailModal,
+}: {
+  iniciativas: Iniciativa[];
+  onOpenDetailModal?: (iniciativa: Iniciativa) => void;
+}) {
+  const [isReady, setIsReady] = useState<boolean>(false);
+  const [selectedVP, setSelectedVP] = useState<string>('TODAS');
+  const [searchTerm, setSearchTerm] = useState<string>('');
+  const [filterAM, setFilterAM] = useState<'TODOS' | GrupoAMKey>('TODOS');
+  const [onlyWithDates, setOnlyWithDates] = useState<boolean>(true);
+  const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
+  const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [displayLimits, setDisplayLimits] = useState<Record<string, number>>({
+    requerimiento: DEFAULT_TIMELINE_PAGE_SIZE,
+    proyecto: DEFAULT_TIMELINE_PAGE_SIZE,
+    vacio: DEFAULT_TIMELINE_PAGE_SIZE,
+  });
+  const [showAllRows, setShowAllRows] = useState<boolean>(false);
+
+  // Tooltip flotante
+  const [tooltipData, setTooltipData] = useState<{
+    seg: TimelineSegment;
+    iniciativa: Iniciativa;
+    x: number;
+    y: number;
+  } | null>(null);
+
+  // Inicialización diferida (1 frame) para permitir que el clic en "Abrir Reporte" sea 100% instantáneo
+  useEffect(() => {
+    const frameId = requestAnimationFrame(() => {
+      setIsReady(true);
+    });
+    return () => cancelAnimationFrame(frameId);
+  }, []);
+
+  const today = useMemo(() => new Date(), []);
+  const todayMs = today.getTime();
+
+  // Opciones de VP para el filtro
+  const vpOptions = useMemo(() => {
+    const set = new Set<string>();
+    iniciativas.forEach(i => {
+      const vp = normalize(i.vp_solicitante);
+      if (vp) set.add(vp);
+    });
+    return Array.from(set).sort((a, b) => optLabel(a).localeCompare(optLabel(b), 'es'));
+  }, [iniciativas]);
+
+  // Procesar todas las iniciativas con sus fechas, clasificación AM y segmentos
+  const allRows = useMemo<TimelineRowItem[]>(() => {
+    return iniciativas.map(i => {
+      const segments = buildTimelineSegments(i);
+      const hasDates = segments.length > 0;
+      let earliestDate: Date | null = null;
+      let latestDate: Date | null = null;
+      if (hasDates) {
+        earliestDate = new Date(Math.min(...segments.map(s => s.start.getTime())));
+        latestDate = new Date(Math.max(...segments.map(s => s.end.getTime())));
+      }
+
+      const isPlan =
+        ['planificadas', 'implementadas', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) ||
+        Boolean(i.fecha_inicio_planificada || i.fecha_fin_planificada || i.fecha_inicio_real || i.fecha_fin_real);
+
+      const startDate = isPlan
+        ? parseTimelineDate(i.fecha_inicio_planificada || i.fecha_inicio_real) || earliestDate
+        : parseTimelineDate(i.fecha_inicio_estimacion) || earliestDate;
+
+      const endDate = isPlan
+        ? parseTimelineDate(i.fecha_fin_planificada || i.fecha_fin_real) || latestDate
+        : parseTimelineDate(i.fecha_fin_estimacion) || latestDate;
+
+      const grupoAM = classifyAM(i);
+
+      return {
+        iniciativa: i,
+        segments,
+        hasDates,
+        startDate,
+        endDate,
+        earliestDate,
+        latestDate,
+        grupoAM,
+        maxLane: 0,
+      };
+    });
+  }, [iniciativas]);
+
+  // Filtrar iniciativas
+  const filteredRows = useMemo(() => {
+    return allRows.filter(row => {
+      if (selectedVP !== 'TODAS') {
+        const vp = normalize(row.iniciativa.vp_solicitante);
+        if (vp !== selectedVP) return false;
+      }
+      if (filterAM !== 'TODOS' && row.grupoAM !== filterAM) {
+        return false;
+      }
+      if (onlyWithDates && !row.hasDates) return false;
+
+      if (searchTerm.trim()) {
+        const term = searchTerm.toLowerCase().trim();
+        const idMatch = String(row.iniciativa.id).includes(term);
+        const titleMatch = (row.iniciativa.titulo || '').toLowerCase().includes(term);
+        const vpMatch = (row.iniciativa.vp_solicitante || '').toLowerCase().includes(term);
+        const liderMatch = (row.iniciativa.lider_dominio || '').toLowerCase().includes(term);
+        if (!idMatch && !titleMatch && !vpMatch && !liderMatch) return false;
+      }
+
+      return true;
+    });
+  }, [allRows, selectedVP, filterAM, onlyWithDates, searchTerm]);
+
+  // Ordenar iniciativas
+  const sortedRows = useMemo(() => {
+    const list = [...filteredRows];
+    list.sort((a, b) => {
+      if (sortOrder === 'recent') {
+        const timeA = a.latestDate ? a.latestDate.getTime() : 0;
+        const timeB = b.latestDate ? b.latestDate.getTime() : 0;
+        if (timeA !== timeB) return timeB - timeA;
+        return b.iniciativa.id - a.iniciativa.id;
+      }
+      if (sortOrder === 'oldest') {
+        const timeA = a.earliestDate ? a.earliestDate.getTime() : Infinity;
+        const timeB = b.earliestDate ? b.earliestDate.getTime() : Infinity;
+        if (timeA !== timeB) return timeA - timeB;
+        return a.iniciativa.id - b.iniciativa.id;
+      }
+      if (sortOrder === 'id') {
+        return a.iniciativa.id - b.iniciativa.id;
+      }
+      if (sortOrder === 'title') {
+        return (a.iniciativa.titulo || '').localeCompare(b.iniciativa.titulo || '', 'es');
+      }
+      return 0;
+    });
+    return list;
+  }, [filteredRows, sortOrder]);
+
+  // Agrupación por Columna AM (omitiendo grupos con 0 iniciativas)
+  const groupedData = useMemo(() => {
+    const order: GrupoAMKey[] = ['requerimiento', 'proyecto', 'vacio'];
+    return order
+      .filter(k => filterAM === 'TODOS' || filterAM === k)
+      .map(key => {
+        const cfg = GRUPOS_AM_CONFIG[key];
+        const rows = sortedRows.filter(r => r.grupoAM === key);
+        return {
+          ...cfg,
+          rows,
+        };
+      })
+      .filter(grp => grp.rows.length > 0);
+  }, [sortedRows, filterAM]);
+
+  // Contadores por grupo para badges
+  const reqTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'requerimiento').length, [allRows]);
+  const proyTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'proyecto').length, [allRows]);
+  const vacioTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'vacio').length, [allRows]);
+
+  const toggleGroup = (key: string) => {
+    setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
+  };
+
+  const expandAll = () => setCollapsedGroups({});
+  const collapseAll = () => setCollapsedGroups({ requerimiento: true, proyecto: true, vacio: true });
+
+  // Dominio temporal global (incorporando siempre HOY)
+  const { minDate, maxDate, totalDuration, todayPct } = useMemo(() => {
+    const timestamps: number[] = [todayMs];
+    filteredRows.forEach(row => {
+      row.segments.forEach(seg => {
+        timestamps.push(seg.start.getTime(), seg.end.getTime());
+      });
+    });
+
+    const minTs = Math.min(...timestamps);
+    const maxTs = Math.max(...timestamps);
+
+    const padStart = new Date(minTs);
+    padStart.setDate(padStart.getDate() - 15);
+    const minD = new Date(padStart.getFullYear(), padStart.getMonth(), 1);
+
+    const padEnd = new Date(maxTs);
+    padEnd.setDate(padEnd.getDate() + 20);
+    const maxD = new Date(padEnd.getFullYear(), padEnd.getMonth() + 1, 0, 23, 59, 59);
+
+    const dur = Math.max(1, maxD.getTime() - minD.getTime());
+    const tPct = Math.min(100, Math.max(0, ((todayMs - minD.getTime()) / dur) * 100));
+
+    return { minDate: minD, maxDate: maxD, totalDuration: dur, todayPct: tPct };
+  }, [filteredRows, todayMs]);
+
+  // Columnas mensuales
+  const monthColumns = useMemo(() => {
+    const cols: { date: Date; label: string; leftPct: number; widthPct: number }[] = [];
+    let curr = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
+
+    while (curr <= maxDate) {
+      const nextMonth = new Date(curr.getFullYear(), curr.getMonth() + 1, 1);
+      const startMs = curr.getTime();
+      const endMs = Math.min(nextMonth.getTime(), maxDate.getTime());
+      const leftPct = ((startMs - minDate.getTime()) / totalDuration) * 100;
+      const widthPct = ((endMs - startMs) / totalDuration) * 100;
+
+      cols.push({
+        date: new Date(curr),
+        label: format(curr, 'MMM yyyy', { locale: es }),
+        leftPct,
+        widthPct,
+      });
+
+      curr = nextMonth;
+    }
+    return cols;
+  }, [minDate, maxDate, totalDuration]);
+
+  if (!isReady) {
+    return (
+      <div
+        style={{
+          marginTop: 24,
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 14,
+          padding: '36px 20px',
+          textAlign: 'center',
+          color: '#64748b',
+          boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'center',
+          justifyContent: 'center',
+          gap: 8,
+        }}
+      >
+        <Calendar size={28} style={{ color: '#2563eb', opacity: 0.7 }} />
+        <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+          Cargando cronograma interactivo...
+        </span>
+        <span style={{ fontSize: 11, color: '#94a3b8' }}>
+          Preparando visualización por Columna AM y línea de HOY
+        </span>
+      </div>
+    );
+  }
+
+  return (
+    <div
+      style={{
+        marginTop: 24,
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 14,
+        overflow: 'hidden',
+        boxShadow: '0 4px 16px rgba(15, 23, 42, 0.04)',
+      }}
+    >
+      {/* Encabezado de la Sección Timeline */}
+      <div
+        style={{
+          padding: '14px 20px',
+          background: 'linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%)',
+          borderBottom: '1px solid #e2e8f0',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 12,
+        }}
+      >
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+          <div
+            style={{
+              width: 36,
+              height: 36,
+              borderRadius: 10,
+              background: 'linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%)',
+              border: '1px solid #bfdbfe',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#2563eb',
+            }}
+          >
+            <Calendar size={18} />
+          </div>
+          <div>
+            <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>
+              Cronograma de Iniciativas por Columna AM (Requerimientos / Proyectos / Vacíos)
+            </h4>
+            <p style={{ margin: '2px 0 0 0', fontSize: 11, color: '#64748b' }}>
+              Agrupadas por tipo en columna AM con orientación hacia la fecha de HOY
+            </p>
+          </div>
+        </div>
+
+        {/* Badges de Grupos y HOY (solo mostrar si > 0) */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 11 }}>
+          {reqTotalCount > 0 && (
+            <span
+              style={{
+                padding: '3px 8px',
+                borderRadius: 16,
+                background: '#ecfeff',
+                color: '#0e7490',
+                fontWeight: 600,
+                border: '1px solid #a5f3fc',
+              }}
+            >
+              Requerimientos: {reqTotalCount}
+            </span>
+          )}
+          {proyTotalCount > 0 && (
+            <span
+              style={{
+                padding: '3px 8px',
+                borderRadius: 16,
+                background: '#eff6ff',
+                color: '#1d4ed8',
+                fontWeight: 600,
+                border: '1px solid #bfdbfe',
+              }}
+            >
+              Proyectos: {proyTotalCount}
+            </span>
+          )}
+          {vacioTotalCount > 0 && (
+            <span
+              style={{
+                padding: '3px 8px',
+                borderRadius: 16,
+                background: '#fffbeb',
+                color: '#b45309',
+                fontWeight: 700,
+                border: '1px solid #fde68a',
+              }}
+              title="Iniciativas con la columna AM en blanco o pendiente de clasificación"
+            >
+              ⚠️ Vacíos: {vacioTotalCount}
+            </span>
+          )}
+          <span
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              padding: '3px 8px',
+              borderRadius: 16,
+              background: '#fef2f2',
+              color: '#b91c1c',
+              fontWeight: 700,
+              border: '1px solid #fecaca',
+            }}
+          >
+            <span style={{ width: 8, height: 8, borderRadius: '50%', backgroundColor: '#ef4444' }} />
+            HOY: {format(today, 'dd/MM/yyyy')}
+          </span>
+        </div>
+      </div>
+
+      {/* Barra de Filtros y Controles del Timeline */}
+      <div
+        style={{
+          padding: '10px 20px',
+          background: '#ffffff',
+          borderBottom: '1px solid #f1f5f9',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+        }}
+      >
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 10, flex: 1 }}>
+          {/* Buscador */}
+          <div
+            style={{
+              position: 'relative',
+              display: 'flex',
+              alignItems: 'center',
+              minWidth: 180,
+              maxWidth: 240,
+              flex: 1,
+            }}
+          >
+            <Search
+              size={13}
+              style={{ position: 'absolute', left: 10, color: '#94a3b8', pointerEvents: 'none' }}
+            />
+            <input
+              type="text"
+              placeholder="Buscar por ID, título..."
+              value={searchTerm}
+              onChange={e => setSearchTerm(e.target.value)}
+              style={{
+                width: '100%',
+                padding: '5px 26px 5px 28px',
+                fontSize: 11,
+                border: '1px solid #cbd5e1',
+                borderRadius: 8,
+                outline: 'none',
+                backgroundColor: '#f8fafc',
+              }}
+            />
+            {searchTerm && (
+              <button
+                onClick={() => setSearchTerm('')}
+                style={{
+                  position: 'absolute',
+                  right: 8,
+                  background: 'none',
+                  border: 'none',
+                  cursor: 'pointer',
+                  color: '#94a3b8',
+                  padding: 2,
+                  display: 'flex',
+                }}
+              >
+                <X size={12} />
+              </button>
+            )}
+          </div>
+
+          {/* Filtro por Columna AM */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Columna AM:</span>
+            <select
+              value={filterAM}
+              onChange={e => setFilterAM(e.target.value as any)}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#1e293b',
+              }}
+            >
+              <option value="TODOS">Todos los grupos ({allRows.length})</option>
+              {reqTotalCount > 0 && (
+                <option value="requerimiento">Requerimientos ({reqTotalCount})</option>
+              )}
+              {proyTotalCount > 0 && (
+                <option value="proyecto">Proyectos ({proyTotalCount})</option>
+              )}
+              {vacioTotalCount > 0 && (
+                <option value="vacio">⚠️ Vacíos / Por regularizar ({vacioTotalCount})</option>
+              )}
+            </select>
+          </div>
+
+          {/* Selector de VP */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>VP:</span>
+            <select
+              value={selectedVP}
+              onChange={e => setSelectedVP(e.target.value)}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#1e293b',
+                maxWidth: 190,
+              }}
+            >
+              <option value="TODAS">Todas las VPs ({iniciativas.length})</option>
+              {vpOptions.map(vp => (
+                <option key={vp} value={vp}>
+                  {optLabel(vp)}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          {/* Selector de Orden */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Orden:</span>
+            <select
+              value={sortOrder}
+              onChange={e => setSortOrder(e.target.value as any)}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#1e293b',
+              }}
+            >
+              <option value="recent">Fecha más reciente</option>
+              <option value="oldest">Fecha más antigua</option>
+              <option value="id">Por ID</option>
+              <option value="title">Por Título</option>
+            </select>
+          </div>
+
+          {/* Toggle Solo con fechas */}
+          <label
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 5,
+              fontSize: 11,
+              color: '#475569',
+              cursor: 'pointer',
+              userSelect: 'none',
+            }}
+          >
+            <input
+              type="checkbox"
+              checked={onlyWithDates}
+              onChange={e => setOnlyWithDates(e.target.checked)}
+              style={{ cursor: 'pointer', accentColor: '#2563eb' }}
+            />
+            Solo con fechas
+          </label>
+        </div>
+
+        {/* Acciones de Acordeón y Modo Paginado */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+          <button
+            type="button"
+            onClick={() => setShowAllRows(v => !v)}
+            style={{
+              padding: '4px 8px',
+              fontSize: 10,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: showAllRows ? '1px solid #93c5fd' : '1px solid #cbd5e1',
+              backgroundColor: showAllRows ? '#eff6ff' : '#ffffff',
+              color: showAllRows ? '#1d4ed8' : '#475569',
+              cursor: 'pointer',
+            }}
+            title="Alternar entre ver las primeras 40 filas o todas las filas de cada grupo"
+          >
+            {showAllRows ? 'Modo paginado (40/grupo)' : `Ver todas (${filteredRows.length})`}
+          </button>
+          <button
+            type="button"
+            onClick={expandAll}
+            style={{
+              padding: '4px 8px',
+              fontSize: 10,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#475569',
+              cursor: 'pointer',
+            }}
+            title="Expandir todos los grupos"
+          >
+            Expandir todos
+          </button>
+          <button
+            type="button"
+            onClick={collapseAll}
+            style={{
+              padding: '4px 8px',
+              fontSize: 10,
+              fontWeight: 600,
+              borderRadius: 6,
+              border: '1px solid #cbd5e1',
+              backgroundColor: '#ffffff',
+              color: '#475569',
+              cursor: 'pointer',
+            }}
+            title="Colapsar todos los grupos"
+          >
+            Colapsar todos
+          </button>
+        </div>
+      </div>
+
+      {/* Área del Timeline Gantt */}
+      {sortedRows.length === 0 ? (
+        <div style={{ padding: '48px 20px', textAlign: 'center', color: '#94a3b8' }}>
+          <Calendar size={32} style={{ margin: '0 auto 10px', opacity: 0.4 }} />
+          <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#475569' }}>
+            No se encontraron iniciativas con los filtros seleccionados
+          </p>
+          <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#94a3b8' }}>
+            Prueba ajustando el filtro de Columna AM, término de búsqueda, VP o desmarcando "Solo con fechas".
+          </p>
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto', position: 'relative' }}>
+          <div style={{ minWidth: 1240, display: 'flex', flexDirection: 'column' }}>
+            {/* Header del Gantt: Columnas a la izquierda (530px) | Meses y HOY a la derecha */}
+            <div
+              style={{
+                display: 'flex',
+                background: '#f8fafc',
+                borderBottom: '2px solid #e2e8f0',
+                position: 'relative',
+              }}
+            >
+              {/* Columnas Izquierdas Header (530px en total: 360px + 85px + 85px) */}
+              <div
+                style={{
+                  width: 530,
+                  minWidth: 530,
+                  maxWidth: 530,
+                  display: 'flex',
+                  alignItems: 'center',
+                  borderRight: '1px solid #e2e8f0',
+                  boxSizing: 'border-box',
+                }}
+              >
+                <div
+                  style={{
+                    width: 360,
+                    minWidth: 360,
+                    maxWidth: 360,
+                    padding: '8px 12px',
+                    fontWeight: 700,
+                    fontSize: 11,
+                    color: '#475569',
+                    borderRight: '1px solid #f1f5f9',
+                    boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                  }}
+                >
+                  <span>Iniciativa (Nombre completo)</span>
+                  <span style={{ fontSize: 10, color: '#94a3b8', fontWeight: 500 }}>
+                    ({sortedRows.length} en total)
+                  </span>
+                </div>
+                <div
+                  style={{
+                    width: 85,
+                    minWidth: 85,
+                    maxWidth: 85,
+                    padding: '8px 4px',
+                    fontWeight: 700,
+                    fontSize: 11,
+                    color: '#475569',
+                    textAlign: 'center',
+                    borderRight: '1px solid #f1f5f9',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  F. Inicio
+                </div>
+                <div
+                  style={{
+                    width: 85,
+                    minWidth: 85,
+                    maxWidth: 85,
+                    padding: '8px 4px',
+                    fontWeight: 700,
+                    fontSize: 11,
+                    color: '#475569',
+                    textAlign: 'center',
+                    boxSizing: 'border-box',
+                  }}
+                >
+                  F. Fin
+                </div>
+              </div>
+
+              {/* Pista Temporal Header */}
+              <div
+                style={{
+                  flex: 1,
+                  position: 'relative',
+                  height: 36,
+                  display: 'flex',
+                  boxSizing: 'border-box',
+                }}
+              >
+                {/* Meses */}
+                {monthColumns.map((col, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'absolute',
+                      left: `${col.leftPct}%`,
+                      width: `${col.widthPct}%`,
+                      height: '100%',
+                      borderRight: '1px solid #e2e8f0',
+                      padding: '8px 6px',
+                      boxSizing: 'border-box',
+                      fontSize: 10,
+                      fontWeight: 700,
+                      color: '#475569',
+                      textTransform: 'capitalize',
+                      overflow: 'hidden',
+                      whiteSpace: 'nowrap',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {col.label}
+                  </div>
+                ))}
+
+                {/* Badge flotante de HOY en la cabecera */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${todayPct}%`,
+                    top: 5,
+                    transform: 'translateX(-50%)',
+                    zIndex: 30,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 3,
+                    padding: '2px 7px',
+                    borderRadius: 12,
+                    backgroundColor: '#ef4444',
+                    color: '#ffffff',
+                    fontSize: 9,
+                    fontWeight: 800,
+                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.45)',
+                    whiteSpace: 'nowrap',
+                    pointerEvents: 'none',
+                  }}
+                >
+                  <span>📍 HOY</span>
+                  <span style={{ fontWeight: 600, opacity: 0.9 }}>
+                    ({format(today, 'dd/MM/yy')})
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            {/* GRUPOS POR COLUMNA AM */}
+            <div style={{ position: 'relative' }}>
+              {/* CUADRÍCULA GLOBAL DE MESES DE FONDO (una sola vez para toda la tabla, en vez de repetirla en cada fila) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 530,
+                  right: 0,
+                  top: 0,
+                  bottom: 0,
+                  pointerEvents: 'none',
+                  zIndex: 0,
+                }}
+              >
+                {monthColumns.map((col, idx) => (
+                  <div
+                    key={idx}
+                    style={{
+                      position: 'absolute',
+                      left: `${col.leftPct}%`,
+                      width: `${col.widthPct}%`,
+                      top: 0,
+                      bottom: 0,
+                      borderRight: '1px solid #f1f5f9',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                ))}
+              </div>
+
+              {/* LÍNEA VERTICAL DE HOY QUE ATRAVIESA TODAS LAS FILAS */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: `calc(530px + (100% - 530px) * ${todayPct / 100})`,
+                  top: 0,
+                  bottom: 0,
+                  width: 2,
+                  borderLeft: '2px dashed #ef4444',
+                  boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)',
+                  zIndex: 20,
+                  pointerEvents: 'none',
+                }}
+              />
+
+              {groupedData.map(grp => {
+                const isCollapsed = Boolean(collapsedGroups[grp.key]);
+
+                return (
+                  <div key={grp.key} style={{ borderBottom: '1px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
+                    {/* ENCABEZADO DE GRUPO (ACCORDION) */}
+                    <div
+                      onClick={() => toggleGroup(grp.key)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '7px 14px',
+                        background: grp.headerBg,
+                        borderBottom: isCollapsed ? 'none' : '1px solid ' + grp.headerBorder,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                        transition: 'background-color 0.15s ease',
+                      }}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.filter = 'brightness(0.97)';
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.filter = 'none';
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {isCollapsed ? (
+                          <ChevronRight size={14} style={{ color: grp.headerText }} />
+                        ) : (
+                          <ChevronDown size={14} style={{ color: grp.headerText }} />
+                        )}
+                        <span style={{ fontSize: 12, fontWeight: 700, color: grp.headerText }}>
+                          {grp.title} · {grp.rows.length} iniciativas
+                        </span>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        {grp.key === 'vacio' && grp.rows.length > 0 && (
+                          <span style={{ fontSize: 10, color: '#b45309', fontWeight: 600 }}>
+                            (Registros con columna AM pendiente de regularizar)
+                          </span>
+                        )}
+                        <span
+                          style={{
+                            fontSize: 10,
+                            fontWeight: 700,
+                            padding: '2px 8px',
+                            borderRadius: 12,
+                            background: grp.badgeBg,
+                            color: grp.badgeText,
+                            border: `1px solid ${grp.headerBorder}`,
+                          }}
+                        >
+                          {grp.tag} ({grp.rows.length})
+                        </span>
+                      </div>
+                    </div>
+
+                    {/* FILAS DE INICIATIVAS DEL GRUPO */}
+                    {!isCollapsed && (
+                      grp.rows.length === 0 ? (
+                        <div
+                          style={{
+                            padding: '10px 16px',
+                            color: '#94a3b8',
+                            fontSize: 11,
+                            fontStyle: 'italic',
+                            background: '#fafafa',
+                          }}
+                        >
+                          No hay iniciativas en este grupo con los filtros seleccionados.
+                        </div>
+                      ) : (
+                        (() => {
+                          const isSearchActive = Boolean(searchTerm.trim());
+                          const limit = showAllRows || isSearchActive
+                            ? grp.rows.length
+                            : (displayLimits[grp.key] || DEFAULT_TIMELINE_PAGE_SIZE);
+                          const visibleRows = grp.rows.slice(0, limit);
+                          const hasMore = grp.rows.length > limit;
+
+                          return (
+                            <>
+                              {visibleRows.map((row, rowIdx) => {
+                                const etapaCfg =
+                                  ETAPAS_MAP.get(row.iniciativa.etapa_actual) ||
+                                  ETAPAS_PLANIFICADAS_MAP.get(row.iniciativa.etapa_actual);
+
+                                return (
+                                  <div
+                                    key={row.iniciativa.id}
+                                    style={{
+                                      display: 'flex',
+                                      minHeight: 34,
+                                      background: rowIdx % 2 === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(252,252,253,0.85)',
+                                      borderBottom: '1px solid #f1f5f9',
+                                      transition: 'background-color 0.15s ease',
+                                    }}
+                                    onMouseEnter={e => {
+                                      (e.currentTarget as HTMLElement).style.backgroundColor = '#f1f5f9';
+                                    }}
+                                    onMouseLeave={e => {
+                                      (e.currentTarget as HTMLElement).style.backgroundColor =
+                                        rowIdx % 2 === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(252,252,253,0.85)';
+                                    }}
+                                  >
+                                    {/* Columna 1: ID · Título (360px) - Nombre Completo */}
+                                    <div
+                                      style={{
+                                        width: 360,
+                                        minWidth: 360,
+                                        maxWidth: 360,
+                                        padding: '6px 12px',
+                                        borderRight: '1px solid #f1f5f9',
+                                        display: 'flex',
+                                        alignItems: 'flex-start',
+                                        gap: 6,
+                                        boxSizing: 'border-box',
+                                      }}
+                                    >
+                                      <span
+                                        onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                        title={`Ver detalle de #${row.iniciativa.id}`}
+                                        style={{
+                                          fontSize: 10.5,
+                                          fontWeight: 700,
+                                          color: '#2563eb',
+                                          cursor: 'pointer',
+                                          flexShrink: 0,
+                                          paddingTop: 1.5,
+                                        }}
+                                      >
+                                        {row.iniciativa.id} ·
+                                      </span>
+
+                                      <span
+                                        onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                        title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${etapaCfg?.label || row.iniciativa.etapa_actual}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
+                                        style={{
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          color: '#1e293b',
+                                          cursor: 'pointer',
+                                          whiteSpace: 'normal',
+                                          wordBreak: 'break-word',
+                                          lineHeight: 1.35,
+                                          flex: 1,
+                                        }}
+                                      >
+                                        {row.iniciativa.titulo}
+                                      </span>
+                                    </div>
+
+                                    {/* Columna 2: F. Inicio (85px) */}
+                                    <div
+                                      style={{
+                                        width: 85,
+                                        minWidth: 85,
+                                        maxWidth: 85,
+                                        padding: '6px 4px',
+                                        borderRight: '1px solid #f1f5f9',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 11,
+                                        color: '#475569',
+                                        fontVariantNumeric: 'tabular-nums',
+                                        boxSizing: 'border-box',
+                                      }}
+                                    >
+                                      {fmtDateShort(row.startDate)}
+                                    </div>
+
+                                    {/* Columna 3: F. Fin (85px) */}
+                                    <div
+                                      style={{
+                                        width: 85,
+                                        minWidth: 85,
+                                        maxWidth: 85,
+                                        padding: '6px 4px',
+                                        borderRight: '1px solid #e2e8f0',
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'center',
+                                        fontSize: 11,
+                                        color: '#475569',
+                                        fontVariantNumeric: 'tabular-nums',
+                                        boxSizing: 'border-box',
+                                      }}
+                                    >
+                                      {fmtDateShort(row.endDate)}
+                                    </div>
+
+                                    {/* Columna 4: Pista Temporal (Gantt Track) */}
+                                    <div
+                                      style={{
+                                        flex: 1,
+                                        position: 'relative',
+                                        boxSizing: 'border-box',
+                                        minHeight: 34,
+                                      }}
+                                    >
+                                      {/* Si no tiene fechas */}
+                                      {!row.hasDates ? (
+                                        <div
+                                          style={{
+                                            position: 'absolute',
+                                            top: '50%',
+                                            transform: 'translateY(-50%)',
+                                            left: 16,
+                                            color: '#94a3b8',
+                                            fontSize: 10,
+                                            fontStyle: 'italic',
+                                          }}
+                                        >
+                                          Sin fechas registradas
+                                        </div>
+                                      ) : (
+                                        /* Segmentos de Tiempo con ID impreso dentro de la barra */
+                                        row.segments.map((seg, sIdx) => {
+                                          const leftPct = Math.max(
+                                            0,
+                                            ((seg.start.getTime() - minDate.getTime()) / totalDuration) * 100
+                                          );
+                                          const rightPct = Math.min(
+                                            100,
+                                            ((seg.end.getTime() - minDate.getTime()) / totalDuration) * 100
+                                          );
+                                          const rawWidthPct = Math.max(0, rightPct - leftPct);
+                                          const widthPct = seg.isSingleDay
+                                            ? Math.max(1.0, rawWidthPct)
+                                            : Math.max(1.5, rawWidthPct);
+
+                                          return (
+                                            <div
+                                              key={seg.id}
+                                              style={{
+                                                position: 'absolute',
+                                                left: `${leftPct}%`,
+                                                width: `${widthPct}%`,
+                                                top: '50%',
+                                                transform: 'translateY(-50%)',
+                                                height: 18,
+                                                borderRadius: 4,
+                                                background: grp.barGradient,
+                                                border: `1px solid ${grp.barBorder}`,
+                                                boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                                                cursor: 'pointer',
+                                                display: 'flex',
+                                                alignItems: 'center',
+                                                justifyContent: 'center',
+                                                padding: '0 4px',
+                                                boxSizing: 'border-box',
+                                                zIndex: seg.isSingleDay ? 8 : 4 + sIdx,
+                                                transition: 'transform 0.1s ease, filter 0.1s ease, z-index 0.1s ease',
+                                              }}
+                                              onMouseEnter={e => {
+                                                const target = e.currentTarget as HTMLElement;
+                                                target.style.transform = 'translateY(-50%) scaleY(1.2)';
+                                                target.style.filter = 'brightness(1.15)';
+                                                target.style.zIndex = '30';
+                                                const rect = target.getBoundingClientRect();
+                                                setTooltipData({
+                                                  seg,
+                                                  iniciativa: row.iniciativa,
+                                                  x: rect.left + rect.width / 2,
+                                                  y: rect.top,
+                                                });
+                                              }}
+                                              onMouseLeave={e => {
+                                                const target = e.currentTarget as HTMLElement;
+                                                target.style.transform = 'translateY(-50%)';
+                                                target.style.filter = 'none';
+                                                target.style.zIndex = String(seg.isSingleDay ? 8 : 4 + sIdx);
+                                                setTooltipData(null);
+                                              }}
+                                              onClick={() =>
+                                                onOpenDetailModal && onOpenDetailModal(row.iniciativa)
+                                              }
+                                            >
+                                              <span
+                                                style={{
+                                                  fontSize: 9,
+                                                  fontWeight: 800,
+                                                  color: '#ffffff',
+                                                  whiteSpace: 'nowrap',
+                                                  overflow: 'hidden',
+                                                  textOverflow: 'ellipsis',
+                                                  textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                                                }}
+                                              >
+                                                {row.iniciativa.id}
+                                              </span>
+                                            </div>
+                                          );
+                                        })
+                                      )}
+                                    </div>
+                                  </div>
+                                );
+                              })}
+
+                              {/* Footer de "Mostrar más" si el grupo tiene más registros */}
+                              {hasMore && (
+                                <div
+                                  style={{
+                                    padding: '8px 16px',
+                                    background: '#f8fafc',
+                                    borderBottom: '1px solid #e2e8f0',
+                                    display: 'flex',
+                                    alignItems: 'center',
+                                    justifyContent: 'space-between',
+                                    gap: 12,
+                                  }}
+                                >
+                                  <span style={{ fontSize: 11, color: '#64748b' }}>
+                                    Mostrando <strong>{visibleRows.length}</strong> de <strong>{grp.rows.length}</strong> {grp.tag.toLowerCase()}s
+                                  </span>
+                                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDisplayLimits(prev => ({
+                                        ...prev,
+                                        [grp.key]: (prev[grp.key] || DEFAULT_TIMELINE_PAGE_SIZE) + 40,
+                                      }))}
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        borderRadius: 6,
+                                        border: '1px solid #cbd5e1',
+                                        background: '#ffffff',
+                                        color: '#2563eb',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      Mostrar 40 más
+                                    </button>
+                                    <button
+                                      type="button"
+                                      onClick={() => setDisplayLimits(prev => ({
+                                        ...prev,
+                                        [grp.key]: grp.rows.length,
+                                      }))}
+                                      style={{
+                                        padding: '4px 10px',
+                                        fontSize: 11,
+                                        fontWeight: 700,
+                                        borderRadius: 6,
+                                        border: '1px solid #bfdbfe',
+                                        background: '#eff6ff',
+                                        color: '#1d4ed8',
+                                        cursor: 'pointer',
+                                      }}
+                                    >
+                                      Mostrar todas ({grp.rows.length})
+                                    </button>
+                                  </div>
+                                </div>
+                              )}
+                            </>
+                          );
+                        })()
+                      )
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Footer del Timeline */}
+      <div
+        style={{
+          padding: '10px 20px',
+          background: '#f8fafc',
+          borderTop: '1px solid #e2e8f0',
+          display: 'flex',
+          flexWrap: 'wrap',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 10,
+          fontSize: 11,
+          color: '#64748b',
+        }}
+      >
+        <div>
+          Total iniciativas visibles: <strong style={{ color: '#0f172a' }}>{sortedRows.length}</strong>
+          {sortedRows.filter(r => r.grupoAM === 'requerimiento').length > 0 && (
+            <>
+              {' • '}
+              Requerimientos: <strong style={{ color: '#0891b2' }}>{sortedRows.filter(r => r.grupoAM === 'requerimiento').length}</strong>
+            </>
+          )}
+          {sortedRows.filter(r => r.grupoAM === 'proyecto').length > 0 && (
+            <>
+              {' • '}
+              Proyectos: <strong style={{ color: '#2563eb' }}>{sortedRows.filter(r => r.grupoAM === 'proyecto').length}</strong>
+            </>
+          )}
+          {sortedRows.filter(r => r.grupoAM === 'vacio').length > 0 && (
+            <>
+              {' • '}
+              Por regularizar: <strong style={{ color: '#b45309' }}>{sortedRows.filter(r => r.grupoAM === 'vacio').length}</strong>
+            </>
+          )}
+          {selectedVP !== 'TODAS' && ` (filtradas por VP: ${optLabel(selectedVP)})`}
+        </div>
+
+        <div style={{ fontSize: 10, color: '#94a3b8' }}>
+          * Haz clic en los encabezados de grupo para expandir o colapsar. Clic en cualquier iniciativa para ver su detalle completo.
+        </div>
+      </div>
+
+      {/* Tooltip Flotante */}
+      {tooltipData && (
+        <div
+          style={{
+            position: 'fixed',
+            left: tooltipData.x,
+            top: tooltipData.y - 8,
+            transform: 'translate(-50%, -100%)',
+            background: '#0f172a',
+            color: '#f8fafc',
+            padding: '10px 14px',
+            borderRadius: 8,
+            fontSize: 11,
+            lineHeight: 1.4,
+            boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
+            zIndex: 99999,
+            pointerEvents: 'none',
+            maxWidth: 320,
+            whiteSpace: 'normal',
+          }}
+        >
+          {/* Cabecera del tooltip */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
+            <span
+              style={{
+                width: 8,
+                height: 8,
+                borderRadius: 2,
+                backgroundColor: tooltipData.seg.color,
+                display: 'inline-block',
+              }}
+            />
+            <span style={{ fontWeight: 700, color: '#ffffff' }}>
+              {tooltipData.seg.stageName}
+            </span>
+            <span style={{ color: '#94a3b8', fontSize: 10 }}>
+              (#{tooltipData.iniciativa.id})
+            </span>
+          </div>
+
+          <div style={{ color: '#cbd5e1', fontWeight: 600, marginBottom: 6, fontSize: 11 }}>
+            {tooltipData.iniciativa.titulo}
+          </div>
+
+          {/* Fechas */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10 }}>
+            <div>
+              <span style={{ color: '#94a3b8' }}>Inicio:</span>{' '}
+              <strong style={{ color: '#ffffff' }}>
+                {format(tooltipData.seg.start, 'dd/MM/yyyy')}
+              </strong>{' '}
+              <span style={{ color: '#94a3b8' }}>➔ Fin:</span>{' '}
+              <strong style={{ color: '#ffffff' }}>
+                {format(tooltipData.seg.end, 'dd/MM/yyyy')}
+              </strong>
+            </div>
+
+            <div>
+              <span style={{ color: '#94a3b8' }}>Duración:</span>{' '}
+              <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                {Math.max(1, differenceInCalendarDays(tooltipData.seg.end, tooltipData.seg.start) + 1)} días calendario
+              </span>
+            </div>
+
+            {/* Relación con HOY */}
+            <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid #334155' }}>
+              {tooltipData.seg.end < today ? (
+                <span style={{ color: '#94a3b8' }}>
+                  ✓ Concluida ({differenceInCalendarDays(today, tooltipData.seg.end)} días atrás vs HOY)
+                </span>
+              ) : tooltipData.seg.start <= today && tooltipData.seg.end >= today ? (
+                <span style={{ color: '#facc15', fontWeight: 700 }}>
+                  ⚡ En curso respecto a HOY (quedan {differenceInCalendarDays(tooltipData.seg.end, today)} días)
+                </span>
+              ) : (
+                <span style={{ color: '#60a5fa' }}>
+                  ⏳ Futura (inicia en {differenceInCalendarDays(tooltipData.seg.start, today)} días vs HOY)
+                </span>
+              )}
+            </div>
+
+            {tooltipData.seg.details && (
+              <div style={{ color: '#e2e8f0', marginTop: 4, fontStyle: 'italic' }}>
+                {tooltipData.seg.details}
+              </div>
+            )}
+
+            <div style={{ marginTop: 4, paddingTop: 4, borderTop: '1px solid #334155', color: '#94a3b8', fontSize: 10 }}>
+              <div>Columna AM: <span style={{ color: '#ffffff', fontWeight: 600 }}>{tooltipData.iniciativa.proyecto_o_req || '(Vacío / Por regularizar)'}</span></div>
+              <div>VP: <span style={{ color: '#ffffff', fontWeight: 500 }}>{optLabel(tooltipData.iniciativa.vp_solicitante)}</span></div>
+              {tooltipData.iniciativa.lider_dominio && (
+                <div>Líder: <span style={{ color: '#ffffff', fontWeight: 500 }}>{optLabel(tooltipData.iniciativa.lider_dominio)}</span></div>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Helpers para Dashboard Estadístico y Pipeline de 4 Fases
+// ---------------------------------------------------------------------------
+function getInitiativePhase(etapa: EtapaPipeline): 1 | 2 | 3 | 4 {
+  if (etapa === 'implementadas' || etapa === 'terminado') return 4;
+  if (
+    etapa === 'planificadas' ||
+    etapa === 'por_iniciar' ||
+    etapa === 'en_ejecucion' ||
+    etapa === 'detenido'
+  ) return 3;
+  if (
+    etapa === 'por_estimar' ||
+    etapa === 'por_reestimar' ||
+    etapa === 'por_aprobar_estimacion' ||
+    etapa === 'por_habilitar_presupuesto' ||
+    etapa === 'por_planificar' ||
+    etapa === 'aprobar_planificacion'
+  ) return 2;
+  return 1; // registro_incompleto y etapas preliminares
+}
+
+function getInitiativeActionOwner(i: Iniciativa): 'IT' | 'Negocio' | 'None' {
+  if (
+    i.etapa_actual === 'implementadas' ||
+    i.etapa_actual === 'terminado' ||
+    i.etapa_actual === 'eliminadas'
+  ) {
+    return 'None';
+  }
+  if (
+    i.etapa_actual === 'registro_incompleto' ||
+    i.etapa_actual === 'por_aprobar_estimacion' ||
+    i.etapa_actual === 'por_habilitar_presupuesto' ||
+    i.etapa_actual === 'aprobar_planificacion' ||
+    i.etapa_actual === 'detenido'
+  ) {
+    return 'Negocio';
+  }
+  // por_estimar, por_reestimar, por_planificar, planificadas, por_iniciar, en_ejecucion
+  return 'IT';
+}
+
+function getEcosistema(i: Iniciativa): string {
+  if (i.frente && i.frente.trim()) return i.frente.trim();
+  const raw = i.raw_fields;
+  if (raw) {
+    const rawEco = (raw['Ecosistema'] || raw['ecosistema'] || raw['Dominio'] || raw['dominio']) as string | undefined;
+    if (rawEco && typeof rawEco === 'string' && rawEco.trim()) return rawEco.trim();
+  }
+  if (i.pilar_estrategico && i.pilar_estrategico.trim()) return i.pilar_estrategico.trim();
+  if (i.lider_dominio && i.lider_dominio.trim()) return i.lider_dominio.trim();
+  if (i.institucion && i.institucion.trim()) return i.institucion.trim();
+  return 'General / Otros';
+}
+
+function getInitiativeMilestoneDate(i: Iniciativa): string | null {
+  const phase = getInitiativePhase(i.etapa_actual);
+  if (phase === 3) {
+    return i.fecha_fin_planificada || i.fecha_fin_real || i.fecha_inicio_planificada || i.fecha_entrega_requerida || null;
+  }
+  if (phase === 2) {
+    return i.fecha_fin_estimacion || i.fecha_fin_reestimacion || i.fecha_inicio_estimacion || i.fecha_entrega_requerida || null;
+  }
+  if (phase === 1) {
+    return i.fecha_entrega_requerida || i.fecha_registro || null;
+  }
+  return i.fecha_fin_planificada || i.fecha_pase_produccion || i.fecha_entrega_requerida || null;
+}
+
+function escapeHtml(str: unknown): string {
+  if (str === null || str === undefined) return '';
+  return String(str)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#39;');
+}
+
+function exportReportToHTML(
+  iniciativas: Iniciativa[],
+  selectedVPs: string[],
+  macro: MacroFilters,
+  reportTitle: string = 'Reporte de Gestión de la Demanda TI'
+) {
+  const now = new Date();
+  const fechaGeneracion = format(now, 'dd/MM/yyyy HH:mm:ss');
+  const fileDate = format(now, 'yyyyMMdd_HHmm');
+
+  const fase1 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 1);
+  const fase2 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 2);
+  const fase3 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 3);
+  const fase4 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 4);
+
+  const total = iniciativas.length;
+  const itCount = iniciativas.filter(i => getInitiativeActionOwner(i) === 'IT').length;
+  const negocioCount = iniciativas.filter(i => getInitiativeActionOwner(i) === 'Negocio').length;
+
+  const vpFiltrosTexto = selectedVPs.length > 0
+    ? selectedVPs.map(v => optLabel(v)).join(', ')
+    : 'Todas las Vicepresidencias';
+
+  const html = `<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>${escapeHtml(reportTitle)} - ${escapeHtml(fechaGeneracion)}</title>
+  <style>
+    :root {
+      --primary: #0284c7;
+      --bg: #f8fafc;
+      --border: #e2e8f0;
+      --text: #0f172a;
+      --text-muted: #64748b;
+    }
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      line-height: 1.5;
+      padding: 24px;
+    }
+    .header {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    .header h1 {
+      font-size: 22px;
+      font-weight: 800;
+      color: #0f172a;
+      margin-bottom: 6px;
+    }
+    .meta-bar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 16px;
+      font-size: 12px;
+      color: var(--text-muted);
+      margin-top: 10px;
+    }
+    .meta-pill {
+      background: #eff6ff;
+      color: #1e40af;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-weight: 600;
+      border: 1px solid #bfdbfe;
+    }
+    .kpi-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      gap: 14px;
+      margin-bottom: 24px;
+    }
+    .kpi-card {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
+      border-top: 4px solid var(--accent);
+    }
+    .kpi-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
+    .kpi-value { font-size: 26px; font-weight: 800; color: #0f172a; margin: 6px 0; }
+    .kpi-sub { font-size: 11px; color: var(--text-muted); }
+
+    .table-container {
+      background: white;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      overflow-x: auto;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+    }
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 12px;
+      text-align: left;
+    }
+    th {
+      background: #f8fafc;
+      padding: 10px 12px;
+      font-weight: 700;
+      color: #475569;
+      border-bottom: 2px solid var(--border);
+      white-space: nowrap;
+    }
+    td {
+      padding: 9px 12px;
+      border-bottom: 1px solid #f1f5f9;
+      vertical-align: middle;
+    }
+    tr:nth-child(even) td { background: #fafafa; }
+    tr:hover td { background: #f0fdf4; }
+
+    .badge {
+      display: inline-block;
+      padding: 2px 8px;
+      border-radius: 12px;
+      font-size: 11px;
+      font-weight: 600;
+      white-space: nowrap;
+    }
+    .badge-fase1 { background: #f1f5f9; color: #475569; }
+    .badge-fase2 { background: #fffbeb; color: #d97706; }
+    .badge-fase3 { background: #eff6ff; color: #1d4ed8; }
+    .badge-fase4 { background: #ecfdf5; color: #059669; }
+
+    .badge-it { background: #eff6ff; color: #2563eb; font-weight: 700; }
+    .badge-negocio { background: #fffbeb; color: #d97706; font-weight: 700; }
+
+    @media print {
+      body { background: white; padding: 0; }
+      .header, .kpi-card, .table-container { box-shadow: none; border-color: #cbd5e1; }
+      th, td { padding: 6px 8px; font-size: 10px; }
+      .no-print { display: none !important; }
+    }
+  </style>
+</head>
+<body>
+  <div class="header">
+    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+      <div>
+        <h1>${escapeHtml(reportTitle)}</h1>
+        <p style="color: #64748b; font-size: 13px;">Consolidado Ejecutivo de Iniciativas, Estados del Pipeline y Responsabilidades</p>
+      </div>
+      <button class="no-print" onclick="window.print()" style="padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Imprimir / Guardar PDF</button>
+    </div>
+    <div class="meta-bar">
+      <span>Generado: <strong>${escapeHtml(fechaGeneracion)}</strong></span>
+      <span>Iniciativas mostradas: <strong>${total}</strong></span>
+      <span>Vicepresidencias: <span class="meta-pill">${escapeHtml(vpFiltrosTexto)}</span></span>
+    </div>
+  </div>
+
+  <div class="kpi-grid">
+    <div class="kpi-card" style="--accent: #64748b;">
+      <div class="kpi-title">Fase 1: En Definición</div>
+      <div class="kpi-value">${fase1.length}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((fase1.length / total) * 100) : 0}% del total</div>
+    </div>
+    <div class="kpi-card" style="--accent: #f59e0b;">
+      <div class="kpi-title">Fase 2: Estimación y Aprobación</div>
+      <div class="kpi-value">${fase2.length}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((fase2.length / total) * 100) : 0}% del total</div>
+    </div>
+    <div class="kpi-card" style="--accent: #2563eb;">
+      <div class="kpi-title">Fase 3: Planificada / En Ejecución</div>
+      <div class="kpi-value">${fase3.length}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((fase3.length / total) * 100) : 0}% del total</div>
+    </div>
+    <div class="kpi-card" style="--accent: #10b981;">
+      <div class="kpi-title">Fase 4: Implementada</div>
+      <div class="kpi-value">${fase4.length}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((fase4.length / total) * 100) : 0}% del total</div>
+    </div>
+    <div class="kpi-card" style="--accent: #3b82f6;">
+      <div class="kpi-title">Acción Pendiente IT</div>
+      <div class="kpi-value">${itCount}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((itCount / total) * 100) : 0}% del total</div>
+    </div>
+    <div class="kpi-card" style="--accent: #d97706;">
+      <div class="kpi-title">Acción Pendiente Negocio</div>
+      <div class="kpi-value">${negocioCount}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((negocioCount / total) * 100) : 0}% del total</div>
+    </div>
+  </div>
+
+  <div class="table-container">
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 50px;">ID</th>
+          <th>Título de la Iniciativa</th>
+          <th>VP Solicitante</th>
+          <th>Institución</th>
+          <th>Etapa Pipeline</th>
+          <th>Fase</th>
+          <th>Siguiente Acción</th>
+          <th>Fecha Hito</th>
+          <th style="text-align: right;">Costo USD</th>
+          <th style="text-align: right;">Costo Soles</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${iniciativas.map(i => {
+          const phase = getInitiativePhase(i.etapa_actual);
+          const owner = getInitiativeActionOwner(i);
+          const phaseBadgeClass = `badge-fase${phase}`;
+          const ownerBadgeClass = owner === 'IT' ? 'badge-it' : owner === 'Negocio' ? 'badge-negocio' : '';
+          const milestoneDt = getInitiativeMilestoneDate(i);
+          const dtFormatted = milestoneDt ? fmtDateShort(milestoneDt) : '—';
+          return `<tr>
+            <td style="font-weight: 700; color: #475569;">#${i.id}</td>
+            <td style="font-weight: 600; color: #0f172a; max-width: 320px;">${escapeHtml(i.titulo || 'Sin Título')}</td>
+            <td>${escapeHtml(i.vp_solicitante || '—')}</td>
+            <td>${escapeHtml(i.institucion || '—')}</td>
+            <td><span class="badge" style="background: #f1f5f9; color: #334155;">${escapeHtml(ETAPAS_MAP[i.etapa_actual]?.label || ETAPAS_PLANIFICADAS_MAP[i.etapa_actual]?.label || i.etapa_actual)}</span></td>
+            <td><span class="badge ${phaseBadgeClass}">Fase ${phase}</span></td>
+            <td>${owner !== 'None' ? `<span class="badge ${ownerBadgeClass}">${owner}</span>` : '<span style="color: #94a3b8; font-size: 11px;">Completado</span>'}</td>
+            <td style="font-family: monospace; font-size: 11px;">${escapeHtml(dtFormatted)}</td>
+            <td style="text-align: right; font-family: monospace;">${i.costo_usd ? `$${i.costo_usd.toLocaleString('en-US')}` : '—'}</td>
+            <td style="text-align: right; font-family: monospace;">${i.costo_soles ? `S/ ${i.costo_soles.toLocaleString('es-PE')}` : '—'}</td>
+          </tr>`;
+        }).join('')}
+      </tbody>
+    </table>
+  </div>
+  <div style="margin-top: 16px; text-align: right; font-size: 11px; color: #94a3b8;">
+    Documento generado automáticamente por Dashboard de Gestión de la Demanda TI.
+  </div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8;' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `Reporte_Demanda_TI_${fileDate}.html`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+// ---------------------------------------------------------------------------
+// Componente: DashboardEstadisticoVP (Reemplazo visual de barras de colores)
+// ---------------------------------------------------------------------------
+interface DashboardEstadisticoVPProps {
+  iniciativas: Iniciativa[];
+  onOpenDetailModal?: (iniciativa: Iniciativa) => void;
+}
+
+function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEstadisticoVPProps) {
+  const total = iniciativas.length || 1;
+
+  // Clasificación por fase
+  const { fase1, fase2, fase3, fase4 } = useMemo(() => {
+    const f1: Iniciativa[] = [];
+    const f2: Iniciativa[] = [];
+    const f3: Iniciativa[] = [];
+    const f4: Iniciativa[] = [];
+
+    iniciativas.forEach(i => {
+      const p = getInitiativePhase(i.etapa_actual);
+      if (p === 1) f1.push(i);
+      else if (p === 2) f2.push(i);
+      else if (p === 3) f3.push(i);
+      else if (p === 4) f4.push(i);
+    });
+
+    return { fase1: f1, fase2: f2, fase3: f3, fase4: f4 };
+  }, [iniciativas]);
+
+  // Card 1: ¿Quién tiene la siguiente acción? (Fases 1, 2 y 3)
+  const actionStats = useMemo(() => {
+    const active = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) < 4 && i.etapa_actual !== 'eliminadas');
+    const itIniciativas = active.filter(i => getInitiativeActionOwner(i) === 'IT');
+    const negocioIniciativas = active.filter(i => getInitiativeActionOwner(i) === 'Negocio');
+    const actTotal = active.length || 1;
+    const itPct = Math.round((itIniciativas.length / actTotal) * 100);
+    const negPct = 100 - itPct;
+    return {
+      activeCount: active.length,
+      itCount: itIniciativas.length,
+      negocioCount: negocioIniciativas.length,
+      itPct,
+      negPct,
+    };
+  }, [iniciativas]);
+
+  // Card 2: Ecosistemas
+  const ecosistemas = useMemo(() => {
+    const map: Record<string, { total: number; f1: number; f2: number; f3: number; f4: number }> = {};
+    iniciativas.forEach(i => {
+      const eco = getEcosistema(i);
+      if (!map[eco]) map[eco] = { total: 0, f1: 0, f2: 0, f3: 0, f4: 0 };
+      map[eco].total++;
+      const p = getInitiativePhase(i.etapa_actual);
+      if (p === 1) map[eco].f1++;
+      else if (p === 2) map[eco].f2++;
+      else if (p === 3) map[eco].f3++;
+      else if (p === 4) map[eco].f4++;
+    });
+
+    return Object.entries(map)
+      .map(([name, s]) => ({ name, ...s }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 6);
+  }, [iniciativas]);
+
+  // Card 3: Fechas registradas frente al corte
+  const dateMilestones = useMemo(() => {
+    const now = startOfDay(new Date());
+    let vencidas = 0;
+    let vencePronto = 0;
+    let proximas = 0;
+    let sinFecha = 0;
+
+    const listWithDates: { iniciativa: Iniciativa; date: Date; dateStr: string; status: 'overdue' | 'soon' | 'future' }[] = [];
+
+    // Evaluamos iniciativas en curso (fases 1, 2 y 3)
+    iniciativas
+      .filter(i => getInitiativePhase(i.etapa_actual) < 4 && i.etapa_actual !== 'eliminadas')
+      .forEach(i => {
+        const rawDate = getInitiativeMilestoneDate(i);
+        if (!rawDate) {
+          sinFecha++;
+          return;
+        }
+        try {
+          const parsed = startOfDay(parseISO(rawDate));
+          if (isNaN(parsed.getTime())) {
+            sinFecha++;
+            return;
+          }
+          const diffDays = differenceInCalendarDays(parsed, now);
+          if (diffDays < 0) {
+            vencidas++;
+            listWithDates.push({ iniciativa: i, date: parsed, dateStr: rawDate, status: 'overdue' });
+          } else if (diffDays <= 15) {
+            vencePronto++;
+            listWithDates.push({ iniciativa: i, date: parsed, dateStr: rawDate, status: 'soon' });
+          } else {
+            proximas++;
+            listWithDates.push({ iniciativa: i, date: parsed, dateStr: rawDate, status: 'future' });
+          }
+        } catch {
+          sinFecha++;
+        }
+      });
+
+    listWithDates.sort((a, b) => a.date.getTime() - b.date.getTime());
+
+    return {
+      vencidas,
+      vencePronto,
+      proximas,
+      sinFecha,
+      upcoming: listWithDates.slice(0, 5),
+    };
+  }, [iniciativas]);
+
+  // Sub-etapas helper
+  const getSubEtapas = (list: Iniciativa[]) => {
+    const counts: Record<string, number> = {};
+    list.forEach(i => {
+      counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1;
+    });
+    return Object.entries(counts)
+      .filter(([, c]) => c > 0)
+      .map(([etapa, count]) => {
+        const cfg = ETAPAS_MAP[etapa as EtapaPipeline] || ETAPAS_PLANIFICADAS_MAP[etapa as EtapaPipeline];
+        return { etapa, label: cfg?.label || etapa, count };
+      })
+      .sort((a, b) => b.count - a.count);
+  };
+
+  const getActionBreakdown = (list: Iniciativa[]) => {
+    const it = list.filter(i => getInitiativeActionOwner(i) === 'IT').length;
+    const neg = list.filter(i => getInitiativeActionOwner(i) === 'Negocio').length;
+    const actTot = it + neg || 1;
+    const itPct = Math.round((it / actTot) * 100);
+    const negPct = 100 - itPct;
+    return { it, neg, itPct, negPct };
+  };
+
+  const f1Action = getActionBreakdown(fase1);
+  const f2Action = getActionBreakdown(fase2);
+  const f3Action = getActionBreakdown(fase3);
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+      {/* ------------------------------------------------------------- */}
+      {/* SECCIÓN SUPERIOR: 4 TARJETAS DEL PIPELINE (FASES 1 A 4) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
+          gap: 14,
+        }}
+      >
+        {/* FASE 1: En definición */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderTop: '4px solid #64748b',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4 }}>
+                FASE 1
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
+                {Math.round((fase1.length / total) * 100)}%
+              </span>
+            </div>
+            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
+              En definición
+            </h4>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
+              {fase1.length}
+            </div>
+
+            {/* Sub-etapas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+              {getSubEtapas(fase1).length > 0 ? (
+                getSubEtapas(fase1).map(s => (
+                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8' }} />
+                      {s.label}
+                    </span>
+                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                  </div>
+                ))
+              ) : (
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
+              )}
+            </div>
+          </div>
+
+          {/* Siguiente acción footer */}
+          <div style={{ paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+              <span>Siguiente acción</span>
+              <span>{f1Action.neg > 0 ? `Negocio (${f1Action.neg})` : f1Action.it > 0 ? `IT (${f1Action.it})` : 'Al día'}</span>
+            </div>
+            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${f1Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f1Action.it}`} />
+              <div style={{ width: `${f1Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f1Action.neg}`} />
+            </div>
+          </div>
+        </div>
+
+        {/* FASE 2: Estimación y aprobación */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #fde68a',
+            borderTop: '4px solid #f59e0b',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 4 }}>
+                FASE 2
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706' }}>
+                {Math.round((fase2.length / total) * 100)}%
+              </span>
+            </div>
+            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
+              Estimación y aprobación
+            </h4>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
+              {fase2.length}
+            </div>
+
+            {/* Sub-etapas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+              {getSubEtapas(fase2).length > 0 ? (
+                getSubEtapas(fase2).slice(0, 4).map(s => (
+                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.label}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                      {s.label}
+                    </span>
+                    <strong style={{ color: '#0f172a', marginLeft: 6 }}>{s.count}</strong>
+                  </div>
+                ))
+              ) : (
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
+              )}
+            </div>
+          </div>
+
+          {/* Siguiente acción footer */}
+          <div style={{ paddingTop: 10, borderTop: '1px solid #fef3c7' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+              <span>Siguiente acción</span>
+              <span>IT: {f2Action.it} · Neg: {f2Action.neg}</span>
+            </div>
+            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${f2Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f2Action.it} (${f2Action.itPct}%)`} />
+              <div style={{ width: `${f2Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f2Action.neg} (${f2Action.negPct}%)`} />
+            </div>
+          </div>
+        </div>
+
+        {/* FASE 3: Planificada o en ejecución */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #bfdbfe',
+            borderTop: '4px solid #2563eb',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: 4 }}>
+                FASE 3
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
+                {Math.round((fase3.length / total) * 100)}%
+              </span>
+            </div>
+            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
+              Planificada o en ejecución
+            </h4>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
+              {fase3.length}
+            </div>
+
+            {/* Sub-etapas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+              {getSubEtapas(fase3).length > 0 ? (
+                getSubEtapas(fase3).map(s => (
+                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
+                      {s.label}
+                    </span>
+                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                  </div>
+                ))
+              ) : (
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
+              )}
+            </div>
+          </div>
+
+          {/* Siguiente acción footer */}
+          <div style={{ paddingTop: 10, borderTop: '1px solid #dbeafe' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+              <span>Siguiente acción</span>
+              <span>IT: {f3Action.it} · Neg: {f3Action.neg}</span>
+            </div>
+            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+              <div style={{ width: `${f3Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f3Action.it} (${f3Action.itPct}%)`} />
+              <div style={{ width: `${f3Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f3Action.neg} (${f3Action.negPct}%)`} />
+            </div>
+          </div>
+        </div>
+
+        {/* FASE 4: Implementada */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #a7f3d0',
+            borderTop: '4px solid #059669',
+            borderRadius: 12,
+            padding: '14px 16px',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+          }}
+        >
+          <div>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#047857', background: '#d1fae5', padding: '2px 8px', borderRadius: 4 }}>
+                FASE 4
+              </span>
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                {Math.round((fase4.length / total) * 100)}%
+              </span>
+            </div>
+            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
+              Implementada
+            </h4>
+            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
+              {fase4.length}
+            </div>
+
+            {/* Sub-etapas */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+              {getSubEtapas(fase4).length > 0 ? (
+                getSubEtapas(fase4).map(s => (
+                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
+                      {s.label}
+                    </span>
+                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                  </div>
+                ))
+              ) : (
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
+              )}
+            </div>
+          </div>
+
+          {/* Siguiente acción footer */}
+          <div style={{ paddingTop: 10, borderTop: '1px solid #d1fae5' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#059669', marginBottom: 5 }}>
+              <span>Sin acción pendiente</span>
+              <span>100% Completado</span>
+            </div>
+            <div style={{ height: 6, width: '100%', background: '#10b981', borderRadius: 4 }} />
+          </div>
+        </div>
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* SECCIÓN INFERIOR: 3 TARJETAS ANALÍTICAS (ACCIÓN, ECOSISTEMA, FECHAS) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        style={{
+          display: 'grid',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gap: 14,
+        }}
+      >
+        {/* CARD 1: ¿Quién tiene la siguiente acción? */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: '16px 18px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
+              ¿Quién tiene la siguiente acción?
+            </h4>
+            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px 0' }}>
+              Iniciativas activas en curso (Fases 1, 2 y 3)
+            </p>
+
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>
+                  IT
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#1e40af', margin: '2px 0' }}>
+                  {actionStats.itCount}
+                </div>
+                <div style={{ fontSize: 10, color: '#3b82f6', fontWeight: 600 }}>
+                  {actionStats.itPct}% del trabajo activo
+                </div>
+              </div>
+
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
+                <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
+                  NEGOCIO
+                </div>
+                <div style={{ fontSize: 24, fontWeight: 800, color: '#d97706', margin: '2px 0' }}>
+                  {actionStats.negocioCount}
+                </div>
+                <div style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>
+                  {actionStats.negPct}% del trabajo activo
+                </div>
+              </div>
+            </div>
+
+            {/* Barra horizontal acumulada */}
+            <div style={{ height: 8, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
+              <div style={{ width: `${actionStats.itPct}%`, background: '#2563eb' }} title={`IT: ${actionStats.itPct}%`} />
+              <div style={{ width: `${actionStats.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${actionStats.negPct}%`} />
+            </div>
+          </div>
+
+          <div style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
+            <span>Total activas: <strong>{actionStats.activeCount}</strong></span>
+            <span>IT lidera estimación y planificación</span>
+          </div>
+        </div>
+
+        {/* CARD 2: Iniciativas por ecosistema */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: '16px 18px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
+              Iniciativas por ecosistema
+            </h4>
+            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px 0' }}>
+              Distribución por frente / dominio según fase
+            </p>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
+              {ecosistemas.length > 0 ? (
+                ecosistemas.map(eco => {
+                  const ecoTotal = eco.total || 1;
+                  const f1Pct = (eco.f1 / ecoTotal) * 100;
+                  const f2Pct = (eco.f2 / ecoTotal) * 100;
+                  const f3Pct = (eco.f3 / ecoTotal) * 100;
+                  const f4Pct = (eco.f4 / ecoTotal) * 100;
+
+                  return (
+                    <div key={eco.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
+                      <span
+                        style={{
+                          width: 85,
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                          color: '#334155',
+                          fontWeight: 600,
+                        }}
+                        title={eco.name}
+                      >
+                        {eco.name}
+                      </span>
+                      <div style={{ flex: 1, height: 7, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                        {f1Pct > 0 && <div style={{ width: `${f1Pct}%`, background: '#94a3b8' }} title={`F1: ${eco.f1}`} />}
+                        {f2Pct > 0 && <div style={{ width: `${f2Pct}%`, background: '#f59e0b' }} title={`F2: ${eco.f2}`} />}
+                        {f3Pct > 0 && <div style={{ width: `${f3Pct}%`, background: '#2563eb' }} title={`F3: ${eco.f3}`} />}
+                        {f4Pct > 0 && <div style={{ width: `${f4Pct}%`, background: '#10b981' }} title={`F4: ${eco.f4}`} />}
+                      </div>
+                      <span style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', width: 22, textAlign: 'right' }}>
+                        {eco.total}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin datos disponibles</span>
+              )}
+            </div>
+          </div>
+
+          {/* Leyenda miniatura */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, flexWrap: 'wrap', gap: 4 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8' }} /> F1 Def.
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} /> F2 Estim.
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} /> F3 Planif.
+            </span>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /> F4 Impl.
+            </span>
+          </div>
+        </div>
+
+        {/* CARD 3: Fechas registradas frente al corte */}
+        <div
+          style={{
+            background: '#ffffff',
+            border: '1px solid #e2e8f0',
+            borderRadius: 12,
+            padding: '16px 18px',
+            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'space-between',
+          }}
+        >
+          <div>
+            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
+              Fechas registradas frente al corte
+            </h4>
+            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px 0' }}>
+              Hitos comprometidos vs fecha de hoy
+            </p>
+
+            {/* 4 mini métricas */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 12 }}>
+              <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#be123c', lineHeight: 1 }}>{dateMilestones.vencidas}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#9f1239', marginTop: 3 }}>Superada</div>
+              </div>
+              <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#b45309', lineHeight: 1 }}>{dateMilestones.vencePronto}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#78350f', marginTop: 3 }}>≤ 15 días</div>
+              </div>
+              <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#1d4ed8', lineHeight: 1 }}>{dateMilestones.proximas}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#1e3a8a', marginTop: 3 }}>Próximas</div>
+              </div>
+              <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
+                <div style={{ fontSize: 16, fontWeight: 800, color: '#64748b', lineHeight: 1 }}>{dateMilestones.sinFecha}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#475569', marginTop: 3 }}>Sin fecha</div>
+              </div>
+            </div>
+
+            {/* Lista de próximos hitos */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+              {dateMilestones.upcoming.length > 0 ? (
+                dateMilestones.upcoming.map(({ iniciativa: i, dateStr, status }) => {
+                  const badgeBg = status === 'overdue' ? '#fee2e2' : status === 'soon' ? '#fef3c7' : '#dbeafe';
+                  const badgeColor = status === 'overdue' ? '#b91c1c' : status === 'soon' ? '#b45309' : '#1d4ed8';
+
+                  return (
+                    <div
+                      key={i.id}
+                      onClick={() => onOpenDetailModal && onOpenDetailModal(i)}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '4px 6px',
+                        borderRadius: 6,
+                        background: '#f8fafc',
+                        cursor: onOpenDetailModal ? 'pointer' : 'default',
+                        transition: 'background 0.15s',
+                      }}
+                      onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
+                      title={`Clic para ver detalle de: #${i.id} - ${i.titulo}`}
+                    >
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 700,
+                          padding: '1px 6px',
+                          borderRadius: 4,
+                          background: badgeBg,
+                          color: badgeColor,
+                          whiteSpace: 'nowrap',
+                          fontFamily: 'monospace',
+                        }}
+                      >
+                        {fmtDateShort(dateStr)}
+                      </span>
+                      <span
+                        style={{
+                          flex: 1,
+                          fontSize: 11,
+                          fontWeight: 600,
+                          color: '#1e293b',
+                          overflow: 'hidden',
+                          textOverflow: 'ellipsis',
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        {i.titulo || 'Sin título'}
+                      </span>
+                      <span style={{ fontSize: 10, color: '#64748b', flexShrink: 0 }}>
+                        #{i.id}
+                      </span>
+                    </div>
+                  );
+                })
+              ) : (
+                <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+                  Sin fechas de hitos comprometidos registradas
+                </div>
+              )}
+            </div>
+          </div>
+
+          <div style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, textAlign: 'right' }}>
+            Hitos en estimación, re-estimación y fin planificado
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
+// Componente de Cabecera Plegable (Toggle) para Secciones
+// ---------------------------------------------------------------------------
+interface SectionHeaderToggleProps {
+  title: string;
+  badge?: React.ReactNode;
+  isOpen: boolean;
+  onToggle: () => void;
+  actions?: React.ReactNode;
+}
+
+function SectionHeaderToggle({ title, badge, isOpen, onToggle, actions }: SectionHeaderToggleProps) {
+  return (
+    <div
+      onClick={onToggle}
+      style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: 10,
+        padding: '11px 16px',
+        background: '#f8fafc',
+        borderBottom: isOpen ? '1px solid #f1f5f9' : 'none',
+        cursor: 'pointer',
+        userSelect: 'none',
+        transition: 'all 0.15s ease',
+      }}
+      onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
+      onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
+    >
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+        <span
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            color: '#0284c7',
+            transition: 'transform 0.15s ease',
+          }}
+        >
+          {isOpen ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+        </span>
+        <span style={{ fontSize: 11, fontWeight: 800, color: '#334155', textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+          {title}
+        </span>
+        {badge}
+      </div>
+
+      <div
+        style={{ display: 'flex', alignItems: 'center', gap: 8 }}
+        onClick={e => e.stopPropagation()}
+      >
+        {actions}
+        <button
+          type="button"
+          onClick={onToggle}
+          style={{
+            background: 'none',
+            border: 'none',
+            fontSize: 11,
+            color: '#64748b',
+            cursor: 'pointer',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 4,
+            padding: '2px 6px',
+            borderRadius: 4,
+            fontWeight: 600,
+          }}
+        >
+          <span>{isOpen ? 'Plegar' : 'Desplegar'}</span>
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------------------------------------------------------------------------
 // REPORTE 1 — Por VP del Área Solicitante
 // ---------------------------------------------------------------------------
 function ReporteVP({
-  iniciativas, onNavigate, macro,
+  iniciativas, onNavigate, macro, onOpenDetailModal,
 }: {
   iniciativas: Iniciativa[];
   onNavigate: NavigateFn;
   macro: MacroFilters;
+  onOpenDetailModal?: (iniciativa: Iniciativa) => void;
 }) {
   const [sortField, setSortField] = useState<'total' | 'vp'>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
 
+  // Estados plegables (toggles) para cada sección
+  const [isPipelineStatsOpen, setIsPipelineStatsOpen] = useState(true);
+  const [isVpTableOpen, setIsVpTableOpen] = useState(true);
+  const [isTimelineOpen, setIsTimelineOpen] = useState(true);
+
+  // Datos para la tabla resumen agrupada por VP
   const data = useMemo(() => {
     const byVP: Record<string, { total: number; byEtapa: Record<EtapaPipeline, number> }> = {};
     iniciativas.forEach(i => {
@@ -2827,7 +5481,10 @@ function ReporteVP({
     });
     const total = iniciativas.length || 1;
     return Object.entries(byVP).map(([vp, s]) => ({
-      vp, total: s.total, pct: Math.round((s.total / total) * 100), byEtapa: s.byEtapa,
+      vp,
+      total: s.total,
+      pct: Math.round((s.total / total) * 100),
+      byEtapa: s.byEtapa,
     }));
   }, [iniciativas]);
 
@@ -2840,24 +5497,6 @@ function ReporteVP({
     });
   }, [data, sortField, sortDir]);
 
-  const topEtapas = useMemo(() => {
-    const counts: Record<string, number> = {};
-    iniciativas.forEach(i => { counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1; });
-    const configList = [...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG];
-    return configList.filter(e => counts[e.id] > 0)
-      .sort((a, b) => (counts[b.id] || 0) - (counts[a.id] || 0)).slice(0, 6);
-  }, [iniciativas]);
-
-  const stackedData = useMemo(() =>
-    sorted.slice(0, 15).map(d => {
-      const row: Record<string, string | number> = {
-        name: optLabel(d.vp).length > 28 ? optLabel(d.vp).slice(0, 26) + '…' : optLabel(d.vp),
-        total: d.total,
-      };
-      topEtapas.forEach(e => { row[e.label] = d.byEtapa[e.id] || 0; });
-      return row;
-    }), [sorted, topEtapas]);
-
   const toggleSort = (f: typeof sortField) => {
     if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
     else { setSortField(f); setSortDir('desc'); }
@@ -2868,98 +5507,155 @@ function ReporteVP({
       ? <ChevronRight size={12} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
       : sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
 
-  if (data.length === 0)
-    return <div style={{ textAlign: 'center', color: '#94a3b8', fontSize: 13, padding: '40px 0' }}>Sin datos disponibles.</div>;
+  if (iniciativas.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 24px', background: '#ffffff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
+        <Building2 size={36} style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
+        <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
+          No se encontraron iniciativas
+        </h4>
+        <p style={{ fontSize: 13, color: '#64748b', maxWidth: 450, margin: '0 auto' }}>
+          No hay iniciativas que coincidan con los filtros seleccionados en la cabecera. Intenta ajustar o limpiar los filtros.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      <div>
-        <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>Distribución por VP (top 15)</p>
-        <ResponsiveContainer width="100%" height={Math.max(220, sorted.slice(0, 15).length * 36 + 40)}>
-          <BarChart data={stackedData} layout="vertical" margin={{ top: 0, right: 65, left: 8, bottom: 0 }}>
-            <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
-            <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
-            <YAxis dataKey="name" type="category" width={180} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
-            <Tooltip content={<ReportTooltip />} />
-            {topEtapas.map((e, etapaIdx) => (
-              <Bar key={e.id} dataKey={e.label} stackId="a" fill={e.color} radius={[0, 2, 2, 0]}>
-                <LabelList
-                  content={(props: any) => {
-                    const { index, x, y, width, height } = props;
-                    const row = stackedData[index];
-                    if (!row || !row.total) return null;
-                    const currentVal = Number(row[topEtapas[etapaIdx]?.label]) || 0;
-                    if (currentVal <= 0) return null;
-                    for (let i = etapaIdx + 1; i < topEtapas.length; i++) {
-                      if ((Number(row[topEtapas[i]?.label]) || 0) > 0) return null;
-                    }
-                    return (
-                      <text
-                        x={x + width + 8}
-                        y={y + height / 2}
-                        fill="#0f172a"
-                        textAnchor="start"
-                        dominantBaseline="central"
-                        style={{ fontSize: 11, fontWeight: 700 }}
-                      >
-                        {row.total}
-                      </text>
-                    );
-                  }}
-                />
-              </Bar>
-            ))}
-          </BarChart>
-        </ResponsiveContainer>
-        <EtapasLegend etapas={topEtapas} />
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+      {/* ------------------------------------------------------------- */}
+      {/* SECCIÓN 1: PIPELINE ESTADÍSTICO DINÁMICO (PLEGABLE) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+        }}
+      >
+        <SectionHeaderToggle
+          title="Pipeline Estadístico de Iniciativas"
+          badge={
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+              {iniciativas.length} iniciativa{iniciativas.length === 1 ? '' : 's'}
+            </span>
+          }
+          isOpen={isPipelineStatsOpen}
+          onToggle={() => setIsPipelineStatsOpen(prev => !prev)}
+        />
+        {isPipelineStatsOpen && (
+          <div style={{ padding: 16 }}>
+            <DashboardEstadisticoVP
+              iniciativas={iniciativas}
+              onOpenDetailModal={onOpenDetailModal}
+            />
+          </div>
+        )}
       </div>
 
-      <div style={{ overflowX: 'auto' }}>
-        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-          <thead>
-            <tr style={{ background: '#f8fafc' }}>
-              <th onClick={() => toggleSort('vp')} style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>VP del Área Solicitante <SortIcon field="vp" /></span>
-              </th>
-              <th onClick={() => toggleSort('total')} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total <SortIcon field="total" /></span>
-              </th>
-              <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>% del Total</th>
-              <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>Distribución por Etapa</th>
-            </tr>
-          </thead>
-          <tbody>
-            {sorted.map((row, idx) => {
-              const base = buildNavFilters(macro, { vp_solicitantes: [row.vp] });
-              return (
-                <tr key={row.vp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                  <td style={{ padding: '8px 12px' }}>
-                    <ClickableCell label={optLabel(row.vp)} onClick={() => onNavigate(base)} title={`Ver iniciativas de: ${optLabel(row.vp)}`} />
-                  </td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{row.total}</td>
-                  <td style={{ padding: '8px 12px', textAlign: 'right' }}>
-                    <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#3b82f6', background: '#eff6ff', padding: '1px 8px', borderRadius: 20 }}>{row.pct}%</span>
-                  </td>
-                  <td style={{ padding: '8px 12px' }}>
-                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                      {[...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG].filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
-                        <EtapaBadge key={e.id} etapaId={e.id} count={row.byEtapa[e.id] || 0} navFilters={base} onNavigate={onNavigate} />
-                      ))}
-                    </div>
-                  </td>
+      {/* ------------------------------------------------------------- */}
+      {/* SECCIÓN 2: TABLA DE DISTRIBUCIÓN POR VP (PLEGABLE) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+        }}
+      >
+        <SectionHeaderToggle
+          title="Distribución por VP del Área Solicitante"
+          badge={
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+              {sorted.length} vicepresidencia{sorted.length === 1 ? '' : 's'}
+            </span>
+          }
+          isOpen={isVpTableOpen}
+          onToggle={() => setIsVpTableOpen(prev => !prev)}
+        />
+        {isVpTableOpen && (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th onClick={() => toggleSort('vp')} style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>VP del Área Solicitante <SortIcon field="vp" /></span>
+                  </th>
+                  <th onClick={() => toggleSort('total')} style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total <SortIcon field="total" /></span>
+                  </th>
+                  <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>% Relativo</th>
+                  <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>Distribución por Etapa</th>
                 </tr>
-              );
-            })}
-          </tbody>
-          <tfoot>
-            <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
-              <td style={{ padding: '8px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
-              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{iniciativas.length}</td>
-              <td style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, color: '#3b82f6' }}>100%</td>
-              <td />
-            </tr>
-          </tfoot>
-        </table>
+              </thead>
+              <tbody>
+                {sorted.map((row, idx) => {
+                  const base = buildNavFilters(macro, { vp_solicitantes: [row.vp] });
+                  return (
+                    <tr key={row.vp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '9px 12px' }}>
+                        <ClickableCell label={optLabel(row.vp)} onClick={() => onNavigate(base)} title={`Ver iniciativas de: ${optLabel(row.vp)}`} />
+                      </td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{row.total}</td>
+                      <td style={{ padding: '9px 12px', textAlign: 'right' }}>
+                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '1px 8px', borderRadius: 20 }}>{row.pct}%</span>
+                      </td>
+                      <td style={{ padding: '9px 12px' }}>
+                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+                          {[...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG].filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
+                            <EtapaBadge key={e.id} etapaId={e.id} count={row.byEtapa[e.id] || 0} navFilters={base} onNavigate={onNavigate} />
+                          ))}
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '9px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{iniciativas.length}</td>
+                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: '#0284c7' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        )}
+      </div>
+
+      {/* ------------------------------------------------------------- */}
+      {/* SECCIÓN 3: CRONOGRAMA DE INICIATIVAS (TIMELINE GANTT PLEGABLE) */}
+      {/* ------------------------------------------------------------- */}
+      <div
+        style={{
+          background: '#ffffff',
+          border: '1px solid #e2e8f0',
+          borderRadius: 12,
+          overflow: 'hidden',
+          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
+        }}
+      >
+        <SectionHeaderToggle
+          title="Cronograma de Iniciativas (Timeline Gantt)"
+          badge={
+            <span style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
+              {iniciativas.length} iniciativa{iniciativas.length === 1 ? '' : 's'}
+            </span>
+          }
+          isOpen={isTimelineOpen}
+          onToggle={() => setIsTimelineOpen(prev => !prev)}
+        />
+        {isTimelineOpen && (
+          <TimelineIniciativasVP
+            iniciativas={iniciativas}
+            onOpenDetailModal={onOpenDetailModal}
+          />
+        )}
       </div>
     </div>
   );
@@ -4448,6 +7144,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [macroEtapas,        setMacroEtapas]        = useState<string[]>([]);
   const [macroLideres,       setMacroLideres]       = useState<string[]>([]);
   const [macroMotivos,       setMacroMotivos]       = useState<string[]>([]);
+  const [isFilterPanelOpen,  setIsFilterPanelOpen]  = useState<boolean>(true);
 
   // ---- Estado del popup de iniciativas standard ----
   const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
@@ -5024,6 +7721,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setMacroMotivos([]);
   };
 
+  const isExportDisabled = filtered.length === 0;
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -5049,7 +7748,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             {/* Botón Volver al catálogo */}
             <button
               type="button"
-              onClick={() => setSelectedReport(null)}
+              onClick={() => startTransition(() => setSelectedReport(null))}
               style={{
                 display: 'inline-flex',
                 alignItems: 'center',
@@ -5096,7 +7795,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => setSelectedReport(opt.id)}
+                    onClick={() => startTransition(() => setSelectedReport(opt.id))}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -5124,142 +7823,215 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
           </div>
 
           {/* ================================================================
-              PANEL STICKY DE FILTROS (DISEÑO LIGHT Y ELEGANTE)
+              PANEL FIJO (STICKY TOP 0) DE FILTROS DEL REPORTE
           ================================================================ */}
           <div
             style={{
               position: 'sticky',
-              top: 64,           /* justo debajo del header fijo (h-16 = 64px) */
-              zIndex: 18,
-              borderRadius: 14,
+              top: 0,
+              zIndex: 45,
+              borderRadius: isFilterPanelOpen ? 12 : 10,
               background: '#ffffff',
-              boxShadow: '0 4px 16px rgba(0, 0, 0, 0.05)',
-              border: '1px solid #e2e8f0',
+              boxShadow: '0 6px 22px rgba(0, 0, 0, 0.10)',
+              border: '1px solid #cbd5e1',
               overflow: 'visible',
+              marginBottom: 12,
             }}
           >
-            {/* Cabecera del panel */}
-            <div
-              style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '10px 18px 8px',
-                borderBottom: '1px solid #f1f5f9',
-                background: 'linear-gradient(to right, #f8fafc, #ffffff)',
-                borderRadius: '14px 14px 0 0',
-              }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <Filter size={14} style={{ color: '#2563eb' }} />
-                <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Filtros del Reporte</span>
-                {totalActive > 0 && (
-                  <span style={{
-                    background: '#eff6ff', color: '#1d4ed8',
-                    fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
-                    border: '1px solid #bfdbfe',
-                  }}>
-                    {totalActive} activo{totalActive !== 1 ? 's' : ''}
-                  </span>
-                )}
-              </div>
+                {/* Cabecera del panel */}
+                <div
+                  style={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between',
+                    padding: '9px 18px',
+                    borderBottom: isFilterPanelOpen ? '1px solid #f1f5f9' : 'none',
+                    background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+                    borderRadius: isFilterPanelOpen ? '12px 12px 0 0' : '10px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <Filter size={14} style={{ color: '#2563eb' }} />
+                    <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>Filtros del Reporte</span>
+                    {totalActive > 0 && (
+                      <span style={{
+                        background: '#eff6ff', color: '#1d4ed8',
+                        fontSize: 9, fontWeight: 700, padding: '2px 8px', borderRadius: 20,
+                        border: '1px solid #bfdbfe',
+                      }}>
+                        {totalActive} activo{totalActive !== 1 ? 's' : ''}
+                      </span>
+                    )}
 
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                {/* Resumen de iniciativas */}
-                <span style={{ fontSize: 11, color: '#64748b' }}>
-                  <strong style={{ color: '#0f172a' }}>{filtered.length}</strong>
-                  <span style={{ opacity: 0.8 }}> / {iniciativas.length}</span>
-                  <span style={{ marginLeft: 4 }}>iniciativas</span>
-                </span>
-                {totalActive > 0 && (
-                  <button
-                    onClick={clearAll}
-                    style={{
-                      fontSize: 10, color: '#ef4444', fontWeight: 700,
-                      background: '#fff1f2',
-                      border: '1px solid #fecaca',
-                      borderRadius: 7, padding: '3px 10px', cursor: 'pointer',
-                      display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
-                    }}
-                    onMouseOver={e => (e.currentTarget.style.backgroundColor = '#fee2e2')}
-                    onMouseOut={e => (e.currentTarget.style.backgroundColor = '#fff1f2')}
-                  >
-                    <X size={10} /> Limpiar filtros
-                  </button>
-                )}
-              </div>
-            </div>
+                    {/* Botón Plegar / Desplegar panel de filtros */}
+                    <button
+                      type="button"
+                      onClick={() => setIsFilterPanelOpen(prev => !prev)}
+                      title={isFilterPanelOpen ? 'Plegar filtros para ganar espacio vertical' : 'Desplegar filtros'}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        padding: '2px 8px',
+                        borderRadius: 6,
+                        border: '1px solid #cbd5e1',
+                        background: '#f8fafc',
+                        fontSize: 10,
+                        fontWeight: 600,
+                        color: '#475569',
+                        cursor: 'pointer',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseOver={e => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
+                      onMouseOut={e => (e.currentTarget.style.backgroundColor = '#f8fafc')}
+                    >
+                      <span>{isFilterPanelOpen ? 'Plegar' : 'Desplegar'}</span>
+                      <ChevronDown
+                        size={11}
+                        style={{
+                          transform: isFilterPanelOpen ? 'rotate(180deg)' : 'none',
+                          transition: 'transform 0.15s ease',
+                        }}
+                      />
+                    </button>
+                  </div>
 
-            {/* Grid de filtros */}
-            <div
-              style={{
-                display: 'grid',
-                gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
-                gap: '10px 14px',
-                padding: '12px 18px 14px',
-              }}
-            >
-              {/* Institución */}
-              <MacroMultiSelect
-                label="Institución"
-                options={opts.instituciones}
-                selected={macroInstituciones}
-                onChange={setMacroInstituciones}
-                icon={<Building2 size={10} />}
-              />
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {/* Resumen de iniciativas */}
+                    <span style={{ fontSize: 11, color: '#64748b' }}>
+                      <strong style={{ color: '#0f172a' }}>{filtered.length}</strong>
+                      <span style={{ opacity: 0.8 }}> / {iniciativas.length}</span>
+                      <span style={{ marginLeft: 4 }}>iniciativas</span>
+                    </span>
 
-              {/* IT BP */}
-              <MacroMultiSelect
-                label="IT BP"
-                options={opts.itBPs}
-                selected={macroITBPs}
-                onChange={setMacroITBPs}
-                icon={<UserCog size={10} />}
-              />
+                    {/* BOTÓN ÚNICO DE EXPORTACIÓN HTML */}
+                    <button
+                      type="button"
+                      onClick={() => exportReportToHTML(
+                        filtered,
+                        macroVPs,
+                        macro,
+                        `Reporte_Demanda_TI_${selectedReport || 'General'}`
+                      )}
+                      disabled={isExportDisabled}
+                      title={isExportDisabled ? 'Selecciona al menos una vicepresidencia para exportar' : 'Exportar resultado filtrado actual en un archivo HTML independiente'}
+                      style={{
+                        fontSize: 11,
+                        color: isExportDisabled ? '#94a3b8' : '#ffffff',
+                        fontWeight: 700,
+                        background: isExportDisabled ? '#f1f5f9' : '#0284c7',
+                        border: isExportDisabled ? '1px solid #cbd5e1' : 'none',
+                        borderRadius: 7,
+                        padding: '5px 12px',
+                        cursor: isExportDisabled ? 'not-allowed' : 'pointer',
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 6,
+                        boxShadow: isExportDisabled ? 'none' : '0 1px 3px rgba(2, 132, 199, 0.3)',
+                        transition: 'all 0.15s ease',
+                      }}
+                      onMouseOver={e => {
+                        if (!isExportDisabled) e.currentTarget.style.backgroundColor = '#0369a1';
+                      }}
+                      onMouseOut={e => {
+                        if (!isExportDisabled) e.currentTarget.style.backgroundColor = '#0284c7';
+                      }}
+                    >
+                      <Download size={13} />
+                      <span>Exportar en HTML</span>
+                    </button>
 
-              {/* VP Solicitante */}
-              <MacroMultiSelect
-                label="VP Solicitante"
-                options={opts.vps}
-                selected={macroVPs}
-                onChange={setMacroVPs}
-                icon={<UserCheck size={10} />}
-              />
+                    {totalActive > 0 && (
+                      <button
+                        onClick={clearAll}
+                        style={{
+                          fontSize: 10, color: '#ef4444', fontWeight: 700,
+                          background: '#fff1f2',
+                          border: '1px solid #fecaca',
+                          borderRadius: 7, padding: '4px 10px', cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 4, transition: 'all 0.15s',
+                        }}
+                        onMouseOver={e => (e.currentTarget.style.backgroundColor = '#fee2e2')}
+                        onMouseOut={e => (e.currentTarget.style.backgroundColor = '#fff1f2')}
+                      >
+                        <X size={10} /> Limpiar filtros
+                      </button>
+                    )}
+                  </div>
+                </div>
 
-              {/* Estado (Etapa) */}
-              <MacroMultiSelect
-                label="Estado"
-                options={opts.etapas}
-                selected={macroEtapas}
-                onChange={setMacroEtapas}
-                labelFn={etapaLabel}
-                icon={<GitBranch size={10} />}
-              />
-
-              {/* Líder de Dominio */}
-              <MacroMultiSelect
-                label="Líder de Dominio"
-                options={opts.lideres}
-                selected={macroLideres}
-                onChange={setMacroLideres}
-                icon={<Users size={10} />}
-              />
-
-              {/* Motivo / Diagnóstico */}
-              {selectedReport === 'fuera_fecha' && (
+            {/* Grid de filtros (plegable) */}
+            {isFilterPanelOpen && (
+              <div
+                style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+                  gap: '10px 14px',
+                  padding: '12px 18px 14px',
+                }}
+              >
+                {/* Institución */}
                 <MacroMultiSelect
-                  label="Motivo / Diagnóstico"
-                  options={opts.motivos}
-                  selected={macroMotivos}
-                  onChange={setMacroMotivos}
-                  icon={<AlertTriangle size={10} />}
-                  isMotivoSelect={true}
+                  label="Institución"
+                  options={opts.instituciones}
+                  selected={macroInstituciones}
+                  onChange={setMacroInstituciones}
+                  icon={<Building2 size={10} />}
                 />
-              )}
 
-              {/* Proyecto SPO */}
-              <SpoToggle selected={macroSPO} onChange={setMacroSPO} />
-            </div>
+                {/* IT BP */}
+                <MacroMultiSelect
+                  label="IT BP"
+                  options={opts.itBPs}
+                  selected={macroITBPs}
+                  onChange={setMacroITBPs}
+                  icon={<UserCog size={10} />}
+                />
+
+                {/* VP Solicitante */}
+                <MacroMultiSelect
+                  label="VP Solicitante"
+                  options={opts.vps}
+                  selected={macroVPs}
+                  onChange={setMacroVPs}
+                  icon={<UserCheck size={10} />}
+                />
+
+                {/* Estado (Etapa) */}
+                <MacroMultiSelect
+                  label="Estado"
+                  options={opts.etapas}
+                  selected={macroEtapas}
+                  onChange={setMacroEtapas}
+                  labelFn={etapaLabel}
+                  icon={<GitBranch size={10} />}
+                />
+
+                {/* Líder de Dominio */}
+                <MacroMultiSelect
+                  label="Líder de Dominio"
+                  options={opts.lideres}
+                  selected={macroLideres}
+                  onChange={setMacroLideres}
+                  icon={<Users size={10} />}
+                />
+
+                {/* Motivo / Diagnóstico */}
+                {selectedReport === 'fuera_fecha' && (
+                  <MacroMultiSelect
+                    label="Motivo / Diagnóstico"
+                    options={opts.motivos}
+                    selected={macroMotivos}
+                    onChange={setMacroMotivos}
+                    icon={<AlertTriangle size={10} />}
+                    isMotivoSelect={true}
+                  />
+                )}
+
+                {/* Proyecto SPO */}
+                <SpoToggle selected={macroSPO} onChange={setMacroSPO} />
+              </div>
+            )}
           </div>
         </>
       ) : (
@@ -5291,7 +8063,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             {reportCatalog.map(opt => (
               <div
                 key={opt.id}
-                onClick={() => setSelectedReport(opt.id)}
+                onClick={() => startTransition(() => setSelectedReport(opt.id))}
                 style={{
                   backgroundColor: '#ffffff',
                   border: `1px solid ${opt.borderColor}`,
@@ -5472,7 +8244,12 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       {/* REPORTE 2: POR VP DEL ÁREA SOLICITANTE */}
       {selectedReport === 'vp' && (
         <ReportCard title="Reporte por VP del Área Solicitante" icon={<Users size={18} />}>
-          <ReporteVP iniciativas={filtered} onNavigate={setPopupFilters} macro={macro} />
+          <ReporteVP
+            iniciativas={filtered}
+            onNavigate={setPopupFilters}
+            macro={macro}
+            onOpenDetailModal={setDetailModalIniciativa}
+          />
         </ReportCard>
       )}
 

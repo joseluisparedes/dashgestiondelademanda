@@ -4896,48 +4896,96 @@ function exportReportToHTML(
       background: var(--bg);
       color: var(--text);
       line-height: 1.5;
-      padding: 24px;
+      padding: 20px;
     }
-    .header {
+
+    /* Barra Superior de Filtros idéntica a la app */
+    .top-filter-bar {
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 20px 24px;
-      margin-bottom: 20px;
+      padding: 14px 18px;
+      margin-bottom: 16px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.03);
     }
-    .header-top {
+    .top-filter-header {
       display: flex;
       justify-content: space-between;
       align-items: center;
-      gap: 16px;
+      margin-bottom: 12px;
       flex-wrap: wrap;
+      gap: 10px;
     }
-    .header h1 {
-      font-size: 20px;
+    .top-filter-title {
+      font-size: 13px;
       font-weight: 800;
       color: #0f172a;
-      letter-spacing: -0.01em;
-    }
-    .meta-bar {
       display: flex;
-      flex-wrap: wrap;
-      gap: 14px;
-      font-size: 12px;
-      color: var(--text-muted);
-      margin-top: 10px;
       align-items: center;
+      gap: 8px;
     }
-    .meta-pill {
-      background: #eff6ff;
-      color: #1e40af;
-      padding: 3px 10px;
-      border-radius: 6px;
+    .filter-inputs-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+      gap: 10px;
+    }
+    .filter-box {
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 6px 10px;
+    }
+    .filter-box-label {
+      font-size: 9.5px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 2px;
+    }
+    .filter-box-val {
+      font-size: 11.5px;
       font-weight: 700;
-      border: 1px solid #bfdbfe;
+      color: #0284c7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
     }
 
-    /* Phase Cards */
+    /* Card principal del reporte */
+    .report-card {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .report-card-title {
+      font-size: 15px;
+      font-weight: 800;
+      color: #0f172a;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+
+    /* Sección Colapsible de Pipeline */
+    .section-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      padding: 10px 14px;
+      background: #f8fafc;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      margin-bottom: 16px;
+      font-size: 12px;
+      font-weight: 800;
+      color: #0f172a;
+    }
+
+    /* 4 Phase Cards (Filtros dinámicos interactivos) */
     .phase-grid {
       display: grid;
       grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
@@ -4946,115 +4994,156 @@ function exportReportToHTML(
     }
     .phase-card {
       background: #ffffff;
-      border: 2px solid var(--border);
       border-radius: 12px;
       padding: 16px 18px;
       cursor: pointer;
       transition: all 0.15s ease;
       position: relative;
       user-select: none;
-      text-align: left;
+      display: flex;
+      flex-direction: column;
+      justify-content: space-between;
     }
     .phase-card:hover {
       transform: translateY(-2px);
       box-shadow: 0 6px 16px rgba(0,0,0,0.06);
     }
-    .phase-card.active {
-      border-color: #0284c7;
-      background: #f0f9ff;
-      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+    .phase-card-1 {
+      border: 1px solid #fed7aa;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
     }
-    .phase-tag {
+    .phase-card-1.active {
+      border-color: #f59e0b;
+      box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.35), 0 8px 18px rgba(0,0,0,0.06);
+    }
+    .phase-card-2 {
+      border: 1px solid #bfdbfe;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .phase-card-2.active {
+      border-color: #2563eb;
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.35), 0 8px 18px rgba(0,0,0,0.06);
+    }
+    .phase-card-3 {
+      border: 1px solid #a7f3d0;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .phase-card-3.active {
+      border-color: #059669;
+      box-shadow: 0 0 0 3px rgba(5, 150, 105, 0.35), 0 8px 18px rgba(0,0,0,0.06);
+    }
+    .phase-card-obs {
+      border: 1px solid #fecdd3;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
+    }
+    .phase-card-obs.active {
+      border-color: #e11d48;
+      box-shadow: 0 0 0 3px rgba(225, 29, 72, 0.35), 0 8px 18px rgba(0,0,0,0.06);
+    }
+
+    .phase-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 6px;
+    }
+    .phase-pill {
       font-size: 10px;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 0.05em;
-      margin-bottom: 4px;
-      display: inline-block;
+      letter-spacing: 0.06em;
+      padding: 2px 8px;
+      border-radius: 4px;
     }
-    .phase-num {
-      font-size: 28px;
+    .phase-title {
+      font-size: 13.5px;
       font-weight: 800;
-      color: #0f172a;
-      line-height: 1.1;
-      margin-bottom: 4px;
+      color: #1e293b;
+      margin: 0 0 2px 0;
     }
     .phase-desc {
-      font-size: 12px;
-      color: var(--text-muted);
-      font-weight: 600;
+      font-size: 10.5px;
+      color: #64748b;
+      margin: 0 0 8px 0;
     }
-    .phase-sublist {
-      margin-top: 10px;
-      padding-top: 10px;
-      border-top: 1px dashed var(--border);
+    .phase-count {
+      font-size: 28px;
+      font-weight: 900;
+      color: #0f172a;
+      margin-bottom: 10px;
+      line-height: 1;
+    }
+    .subetapa-list {
       display: flex;
       flex-direction: column;
-      gap: 3px;
-      font-size: 11px;
+      gap: 4px;
+      min-height: 48px;
+      margin-bottom: 12px;
     }
-    .phase-subitem {
+    .subetapa-item {
       display: flex;
       justify-content: space-between;
+      font-size: 11px;
       color: #475569;
     }
+    .phase-footer {
+      padding-top: 10px;
+      border-top: 1px solid #f1f5f9;
+    }
+    .action-row {
+      display: flex;
+      justify-content: space-between;
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      margin-bottom: 5px;
+    }
+    .progress-bar-container {
+      height: 6px;
+      width: 100%;
+      background: #f1f5f9;
+      border-radius: 4px;
+      overflow: hidden;
+      display: flex;
+      margin-bottom: 8px;
+    }
+    .filter-btn-pill {
+      font-size: 10px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 12px;
+      display: inline-block;
+      transition: all 0.15s ease;
+    }
 
-    /* Strategic Cards */
+    /* 3 Strategic Cards */
     .strat-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(290px, 1fr));
       gap: 14px;
-      margin-bottom: 20px;
+      margin-bottom: 24px;
     }
     .strat-card {
       background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px 18px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
-    }
-    .strat-title {
-      font-size: 13px;
-      font-weight: 700;
-      color: #0f172a;
-      margin-bottom: 12px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.04);
       display: flex;
-      align-items: center;
-      gap: 8px;
-    }
-
-    /* Filter banner */
-    .filter-banner {
-      background: #ffffff;
-      border: 1px solid var(--border);
-      border-radius: 10px;
-      padding: 10px 16px;
-      margin-bottom: 16px;
-      display: flex;
-      align-items: center;
+      flex-direction: column;
       justify-content: space-between;
-      flex-wrap: wrap;
-      gap: 10px;
     }
-    .filter-badge {
-      background: #0284c7;
-      color: white;
+    .strat-card-title {
+      font-size: 13.5px;
+      font-weight: 800;
+      color: #0f172a;
+      margin: 0 0 3px 0;
+    }
+    .strat-card-sub {
       font-size: 11px;
-      font-weight: 700;
-      padding: 2px 8px;
-      border-radius: 4px;
+      color: #64748b;
+      margin: 0 0 12px 0;
     }
-    .clear-btn {
-      background: #f1f5f9;
-      border: 1px solid var(--border);
-      color: #475569;
-      font-size: 11px;
-      font-weight: 700;
-      padding: 4px 10px;
-      border-radius: 6px;
-      cursor: pointer;
-    }
-    .clear-btn:hover { background: #e2e8f0; }
 
     /* Timeline Section */
     .timeline-container {
@@ -5062,19 +5151,30 @@ function exportReportToHTML(
       border: 1px solid var(--border);
       border-radius: 12px;
       overflow: hidden;
-      margin-bottom: 20px;
       box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
     .timeline-header {
-      padding: 14px 20px;
+      padding: 12px 18px;
       background: #f8fafc;
       border-bottom: 1px solid var(--border);
-      font-size: 14px;
-      font-weight: 700;
+      font-size: 13px;
+      font-weight: 800;
       color: #0f172a;
       display: flex;
       justify-content: space-between;
       align-items: center;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .filter-banner {
+      background: linear-gradient(135deg, #eff6ff 0%, #f0fdf4 100%);
+      border-bottom: 1px solid #bfdbfe;
+      padding: 8px 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
     }
     .timeline-body {
       overflow-x: auto;
@@ -5082,21 +5182,18 @@ function exportReportToHTML(
     }
     .timeline-table {
       width: 100%;
-      min-width: 900px;
+      min-width: 950px;
       border-collapse: collapse;
       font-size: 11px;
     }
     .timeline-table th {
-      background: #f1f5f9;
+      background: #f8fafc;
       color: #475569;
       font-weight: 700;
       padding: 8px 10px;
       border-bottom: 1px solid var(--border);
       text-align: left;
       font-size: 11px;
-      position: sticky;
-      top: 0;
-      z-index: 2;
     }
     .timeline-table td {
       padding: 8px 10px;
@@ -5109,23 +5206,23 @@ function exportReportToHTML(
     .gantt-cell {
       position: relative;
       height: 36px;
-      min-width: 500px;
-      background: linear-gradient(90deg, #f8fafc 0%, #f8fafc 100%);
+      min-width: 480px;
+      background: #fafafa;
     }
     .gantt-bar {
       position: absolute;
       top: 50%;
       transform: translateY(-50%);
-      height: 20px;
+      height: 18px;
       border-radius: 4px;
       display: flex;
       align-items: center;
       justify-content: center;
       color: #ffffff;
-      font-size: 9.5px;
+      font-size: 9px;
       font-weight: 800;
-      padding: 0 6px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      padding: 0 4px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.12);
       cursor: pointer;
       white-space: nowrap;
       overflow: hidden;
@@ -5133,24 +5230,10 @@ function exportReportToHTML(
       transition: transform 0.1s ease;
     }
     .gantt-bar:hover {
-      transform: translateY(-50%) scaleY(1.15);
-      filter: brightness(1.1);
-      z-index: 10;
+      transform: translateY(-50%) scaleY(1.2);
+      filter: brightness(1.15);
+      z-index: 20;
     }
-
-    /* Badges */
-    .badge {
-      display: inline-block;
-      padding: 2px 7px;
-      border-radius: 4px;
-      font-size: 10.5px;
-      font-weight: 600;
-      white-space: nowrap;
-    }
-    .badge-fase1 { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
-    .badge-fase2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
-    .badge-fase3 { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
-    .badge-faseobs { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 
     /* Tooltip */
     #tooltip {
@@ -5167,11 +5250,10 @@ function exportReportToHTML(
       max-width: 320px;
     }
 
-    /* Print */
     @media print {
       body { background: white; padding: 0; }
       .no-print { display: none !important; }
-      .phase-card, .strat-card, .timeline-container { box-shadow: none; border-color: #cbd5e1; }
+      .phase-card, .strat-card, .timeline-container, .top-filter-bar, .report-card { box-shadow: none; border-color: #cbd5e1; }
       .timeline-table th, .timeline-table td { font-size: 9.5px; padding: 4px 6px; }
     }
   </style>
@@ -5179,78 +5261,111 @@ function exportReportToHTML(
 <body>
   <div id="tooltip"></div>
 
-  <!-- Header -->
-  <div class="header">
-    <div class="header-top">
-      <div>
-        <h1>${escapeHtml(reportTitle)}</h1>
-        <p style="color: #64748b; font-size: 13px; margin-top: 2px;">
-          Consolidado Interactivo de Demanda TI • Cronograma Gantt y Fases
-        </p>
-      </div>
-      <button class="no-print" onclick="window.print()" style="padding: 7px 14px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
-        🖨️ Imprimir / Guardar PDF
-      </button>
-    </div>
-    <div class="meta-bar">
-      <span>Generado: <strong>${escapeHtml(fechaGeneracion)}</strong></span>
-      <span>Vicepresidencia(s): <span class="meta-pill">${escapeHtml(vpFiltrosTexto)}</span></span>
-      <span id="meta-total">Iniciativas: <strong>${dataFiltered.length}</strong></span>
-    </div>
-  </div>
-
-  <!-- 4 Phase Cards (Filtros dinámicos interactivos) -->
-  <div class="phase-grid" id="phase-cards-container">
-    <!-- Generado dinámicamente por JS -->
-  </div>
-
-  <!-- 3 Strategic Cards -->
-  <div class="strat-grid" id="strategic-cards-container">
-    <!-- Generado dinámicamente por JS -->
-  </div>
-
-  <!-- Timeline Gantt Section -->
-  <div class="timeline-container" id="timeline-section">
-    <div class="timeline-header">
-      <div style="display: flex; align-items: center; gap: 8px;">
-        <span>Cronograma de Iniciativas (Timeline Gantt)</span>
-        <span id="timeline-count-badge" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
+  <!-- Barra Superior de Filtros (Fija al estilo de la app) -->
+  <div class="top-filter-bar">
+    <div class="top-filter-header">
+      <div class="top-filter-title">
+        <span>🔍 Filtros del Reporte</span>
+        <span style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
           ${dataFiltered.length} iniciativas
         </span>
       </div>
-      <div class="no-print" style="display: flex; align-items: center; gap: 8px;">
-        <input type="text" id="filter-search" placeholder="🔍 Buscar ID, título..." style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; width: 180px;">
-        <button class="clear-btn" id="btn-clear-filters" style="display: none;" onclick="clearAllFilters()">✕ Restablecer Filtros</button>
-      </div>
-    </div>
-    <div class="filter-banner" id="active-filter-banner" style="display: none;">
       <div style="display: flex; align-items: center; gap: 8px;">
-        <span class="filter-badge">Filtro Activo</span>
-        <span style="font-size: 12px; font-weight: 700; color: #1e293b;" id="filter-banner-text"></span>
+        <span style="font-size: 11px; color: #64748b;">Generado: <strong>${escapeHtml(fechaGeneracion)}</strong></span>
+        <button class="no-print" onclick="window.print()" style="padding: 5px 12px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
+          🖨️ Imprimir / Guardar PDF
+        </button>
       </div>
-      <button class="clear-btn" onclick="clearAllFilters()">✕ Ver todas las iniciativas</button>
     </div>
-    <div class="timeline-body">
-      <table class="timeline-table">
-        <thead>
-          <tr>
-            <th style="width: 55px;">ID</th>
-            <th style="width: 260px;">Iniciativa</th>
-            <th style="width: 140px;">Fase / Etapa</th>
-            <th style="width: 80px;">Inicio</th>
-            <th style="width: 80px;">Fin</th>
-            <th>Cronograma Temporal</th>
-          </tr>
-        </thead>
-        <tbody id="timeline-tbody">
-          <!-- Renderizado dinámicamente -->
-        </tbody>
-      </table>
+    <div class="filter-inputs-grid">
+      <div class="filter-box">
+        <div class="filter-box-label">VP Solicitante</div>
+        <div class="filter-box-val" title="${escapeHtml(vpFiltrosTexto)}">${escapeHtml(vpFiltrosTexto)}</div>
+      </div>
+      <div class="filter-box">
+        <div class="filter-box-label">Institución</div>
+        <div class="filter-box-val">Todos</div>
+      </div>
+      <div class="filter-box">
+        <div class="filter-box-label">IT BP</div>
+        <div class="filter-box-val">Todos</div>
+      </div>
+      <div class="filter-box">
+        <div class="filter-box-label">Estado</div>
+        <div class="filter-box-val">Todos</div>
+      </div>
+      <div class="filter-box">
+        <div class="filter-box-label">Líder de Dominio</div>
+        <div class="filter-box-val">Todos</div>
+      </div>
     </div>
   </div>
 
-  <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 16px;">
-    Exportación de Gestión de la Demanda TI • Archivo interactivo autónomo
+  <!-- Card Principal: Reporte por VP del Área Solicitante -->
+  <div class="report-card">
+    <div class="report-card-title">
+      <span>👥 Reporte por VP del Área Solicitante</span>
+    </div>
+
+    <!-- Toggle Header: Pipeline Estadístico -->
+    <div class="section-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span>📊 PIPELINE ESTADÍSTICO DE INICIATIVAS</span>
+        <span style="font-size: 10.5px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
+          ${dataFiltered.length} iniciativas
+        </span>
+      </div>
+    </div>
+
+    <!-- 4 Tarjetas de Fases -->
+    <div class="phase-grid" id="phase-cards-container"></div>
+
+    <!-- 3 Tarjetas Estratégicas -->
+    <div class="strat-grid" id="strategic-cards-container"></div>
+
+    <!-- Cronograma Timeline Gantt -->
+    <div class="timeline-container" id="timeline-section">
+      <div class="timeline-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span>Cronograma de Iniciativas (Timeline Gantt)</span>
+          <span id="timeline-count-badge" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
+            ${dataFiltered.length} iniciativas
+          </span>
+        </div>
+        <div class="no-print" style="display: flex; align-items: center; gap: 8px;">
+          <input type="text" id="filter-search" placeholder="🔍 Buscar ID, título..." style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; width: 180px;">
+          <button id="btn-clear-filters" style="display: none; background: #f1f5f9; border: 1px solid var(--border); color: #475569; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer;" onclick="clearAllFilters()">✕ Restablecer</button>
+        </div>
+      </div>
+
+      <div class="filter-banner" id="active-filter-banner" style="display: none;">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 10px; font-weight: 800; text-transform: uppercase; padding: 2px 8px; border-radius: 4px; background: #0284c7; color: white;">Filtro Activo</span>
+          <span style="font-size: 12px; font-weight: 700; color: #1e293b;" id="filter-banner-text"></span>
+        </div>
+        <button style="background: white; border: 1px solid #cbd5e1; color: #475569; font-size: 11px; font-weight: 700; padding: 3px 8px; border-radius: 6px; cursor: pointer;" onclick="clearAllFilters()">✕ Ver todas las fases</button>
+      </div>
+
+      <div class="timeline-body">
+        <table class="timeline-table">
+          <thead>
+            <tr>
+              <th style="width: 55px;">ID</th>
+              <th style="width: 280px;">Iniciativa</th>
+              <th style="width: 140px;">Fase / Etapa</th>
+              <th style="width: 80px;">Inicio</th>
+              <th style="width: 80px;">Fin</th>
+              <th>Cronograma Temporal</th>
+            </tr>
+          </thead>
+          <tbody id="timeline-tbody"></tbody>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 14px;">
+    Documento interactivo generado automáticamente por Dashboard de Gestión de la Demanda TI.
   </div>
 
   <!-- Runtime JS Interactivo -->
@@ -5259,7 +5374,6 @@ function exportReportToHTML(
     let activePhaseFilter = null;
     let searchQuery = '';
 
-    // Mapeo de Fases según reglas de negocio
     function getPhase(etapa) {
       if (!etapa) return 1;
       const e = String(etapa).toLowerCase().trim();
@@ -5281,16 +5395,16 @@ function exportReportToHTML(
         'por_planificar': 'Por planificar',
         'aprobar_planificacion': 'Por aprobar planificación',
         'por_aprobar_planificacion': 'Por aprobar planificación',
-        'planificadas': 'Planificada',
-        'planificada': 'Planificada',
+        'planificadas': 'Planificadas',
+        'planificada': 'Planificadas',
         'por_iniciar': 'Por iniciar',
         'en_ejecucion': 'En ejecución',
         'terminado': 'Terminado',
         'detenido': 'Detenido',
-        'implementadas': 'Implementada',
-        'implementada': 'Implementada',
-        'eliminadas': 'Eliminada',
-        'eliminada': 'Eliminada'
+        'implementadas': 'Implementadas',
+        'implementada': 'Implementadas',
+        'eliminadas': 'Eliminadas',
+        'eliminada': 'Eliminadas'
       };
       return map[etapa] || etapa.replace(/_/g, ' ');
     }
@@ -5324,152 +5438,397 @@ function exportReportToHTML(
       return 'None';
     }
 
-    function normalizeEco(eco) {
-      if (!eco) return 'Sin Ecosistema';
-      const t = eco.trim();
-      return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+    function getFrenteName(i) {
+      let raw = '';
+      if (i.frente && i.frente.trim()) raw = i.frente.trim();
+      else if (i.raw_fields) {
+        const rf = i.raw_fields['Ecosistema'] || i.raw_fields['ecosistema'] || i.raw_fields['Dominio'] || i.raw_fields['dominio'];
+        if (rf && typeof rf === 'string' && rf.trim()) raw = rf.trim();
+      }
+      if (!raw && i.pilar_estrategico && i.pilar_estrategico.trim()) raw = i.pilar_estrategico.trim();
+      if (!raw && i.lider_dominio && i.lider_dominio.trim()) raw = i.lider_dominio.trim();
+      if (!raw && i.institucion && i.institucion.trim()) raw = i.institucion.trim();
+      if (!raw) return 'General / Otros';
+      return raw.charAt(0).toUpperCase() + raw.slice(1);
     }
 
-    // Render Cards de Fase
+    function getMilestoneDate(i) {
+      const phase = getPhase(i.etapa_actual);
+      if (phase === 3) return i.fecha_fin_planificada || i.fecha_fin_real || i.fecha_inicio_planificada || i.fecha_entrega_requerida || null;
+      if (phase === 2) return i.fecha_fin_planificada || i.fecha_inicio_planificada || i.fecha_entrega_requerida || null;
+      if (phase === 1) return i.fecha_fin_estimacion || i.fecha_inicio_estimacion || i.fecha_entrega_requerida || null;
+      return i.fecha_eliminacion || null;
+    }
+
+    // Render Cards de Fase con estilos idénticos a la app
     function renderPhaseCards() {
+      const total = RAW_DATA.length || 1;
       const f1 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 1);
       const f2 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 2);
       const f3 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 3);
       const fObs = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 'observaciones');
 
+      const calcAction = list => {
+        const it = list.filter(i => getResponsable(i) === 'IT').length;
+        const neg = list.filter(i => getResponsable(i) === 'Negocio').length;
+        const tot = it + neg || 1;
+        return { it, neg, itPct: Math.round((it / tot) * 100), negPct: Math.round((neg / tot) * 100) };
+      };
+
+      const a1 = calcAction(f1);
+      const a2 = calcAction(f2);
+      const a3 = calcAction(f3);
+
       const container = document.getElementById('phase-cards-container');
       container.innerHTML = \`
-        <div class="phase-card \${activePhaseFilter === 1 ? 'active' : ''}" onclick="togglePhase(1)">
-          <div class="phase-tag" style="color: #b45309;">Fase 1</div>
-          <div class="phase-num">\${f1.length}</div>
-          <div class="phase-desc">Estimación y Aprobación</div>
-          <div class="phase-sublist">
-            <div class="phase-subitem"><span>Por estimar</span><strong>\${f1.filter(i => i.etapa_actual === 'por_estimar').length}</strong></div>
-            <div class="phase-subitem"><span>Por aprobar estimación</span><strong>\${f1.filter(i => i.etapa_actual === 'por_aprobar_estimacion').length}</strong></div>
-            <div class="phase-subitem"><span>Por reestimar</span><strong>\${f1.filter(i => i.etapa_actual === 'por_reestimar').length}</strong></div>
+        <!-- FASE 1 -->
+        <div class="phase-card phase-card-1 \${activePhaseFilter === 1 ? 'active' : ''}" onclick="togglePhase(1)">
+          <div>
+            <div class="phase-top">
+              <span class="phase-pill" style="color: #b45309; background: #fef3c7;">FASE 1</span>
+              <span style="font-size: 11px; font-weight: 700; color: #b45309;">\${Math.round((f1.length / total) * 100)}%</span>
+            </div>
+            <h4 class="phase-title">Estimación y Aprobación</h4>
+            <p class="phase-desc">Por estimar, aprobar estimación y reestimar</p>
+            <div class="phase-count">\${f1.length}</div>
+            <div class="subetapa-list">
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></span>Por estimar</span>
+                <strong>\${f1.filter(i => i.etapa_actual === 'por_estimar').length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></span>Por aprobar estimación</span>
+                <strong>\${f1.filter(i => i.etapa_actual === 'por_aprobar_estimacion').length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #f59e0b;"></span>Por reestimar</span>
+                <strong>\${f1.filter(i => i.etapa_actual === 'por_reestimar').length}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="phase-footer" style="border-top: 1px solid #fed7aa;">
+            <div class="action-row">
+              <span>Siguiente acción</span>
+              <span>IT: \${a1.it} · Neg: \${a1.neg}</span>
+            </div>
+            <div class="progress-bar-container">
+              <div style="width: \${a1.itPct}%; background: #2563eb;"></div>
+              <div style="width: \${a1.negPct}%; background: #f59e0b;"></div>
+            </div>
+            <div style="text-align: center;">
+              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 1 ? '#b45309' : '#fffbeb'}; color: \${activePhaseFilter === 1 ? '#ffffff' : '#b45309'};">
+                \${activePhaseFilter === 1 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="phase-card \${activePhaseFilter === 2 ? 'active' : ''}" onclick="togglePhase(2)">
-          <div class="phase-tag" style="color: #1d4ed8;">Fase 2</div>
-          <div class="phase-num">\${f2.length}</div>
-          <div class="phase-desc">Planificación y Presupuesto</div>
-          <div class="phase-sublist">
-            <div class="phase-subitem"><span>Por planificar</span><strong>\${f2.filter(i => i.etapa_actual === 'por_planificar').length}</strong></div>
-            <div class="phase-subitem"><span>Por aprobar planif.</span><strong>\${f2.filter(i => ['aprobar_planificacion', 'por_aprobar_planificacion'].includes(i.etapa_actual)).length}</strong></div>
-            <div class="phase-subitem"><span>Habilitar presupuesto</span><strong>\${f2.filter(i => i.etapa_actual === 'por_habilitar_presupuesto').length}</strong></div>
+        <!-- FASE 2 -->
+        <div class="phase-card phase-card-2 \${activePhaseFilter === 2 ? 'active' : ''}" onclick="togglePhase(2)">
+          <div>
+            <div class="phase-top">
+              <span class="phase-pill" style="color: #1d4ed8; background: #dbeafe;">FASE 2</span>
+              <span style="font-size: 11px; font-weight: 700; color: #1d4ed8;">\${Math.round((f2.length / total) * 100)}%</span>
+            </div>
+            <h4 class="phase-title">Planificación y Presupuesto</h4>
+            <p class="phase-desc">Por planificar, aprobar planif. y habilitar presupuesto</p>
+            <div class="phase-count">\${f2.length}</div>
+            <div class="subetapa-list">
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2563eb;"></span>Por planificar</span>
+                <strong>\${f2.filter(i => i.etapa_actual === 'por_planificar').length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2563eb;"></span>Por aprobar planificación</span>
+                <strong>\${f2.filter(i => ['aprobar_planificacion', 'por_aprobar_planificacion'].includes(i.etapa_actual)).length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #2563eb;"></span>Habilitar presupuesto</span>
+                <strong>\${f2.filter(i => i.etapa_actual === 'por_habilitar_presupuesto').length}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="phase-footer" style="border-top: 1px solid #bfdbfe;">
+            <div class="action-row">
+              <span>Siguiente acción</span>
+              <span>IT: \${a2.it} · Neg: \${a2.neg}</span>
+            </div>
+            <div class="progress-bar-container">
+              <div style="width: \${a2.itPct}%; background: #2563eb;"></div>
+              <div style="width: \${a2.negPct}%; background: #f59e0b;"></div>
+            </div>
+            <div style="text-align: center;">
+              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 2 ? '#1d4ed8' : '#eff6ff'}; color: \${activePhaseFilter === 2 ? '#ffffff' : '#1d4ed8'};">
+                \${activePhaseFilter === 2 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="phase-card \${activePhaseFilter === 3 ? 'active' : ''}" onclick="togglePhase(3)">
-          <div class="phase-tag" style="color: #047857;">Fase 3</div>
-          <div class="phase-num">\${f3.length}</div>
-          <div class="phase-desc">Planificadas e Implementadas</div>
-          <div class="phase-sublist">
-            <div class="phase-subitem"><span>Planificadas</span><strong>\${f3.filter(i => ['planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(i.etapa_actual)).length}</strong></div>
-            <div class="phase-subitem"><span>Implementadas</span><strong>\${f3.filter(i => ['implementadas', 'implementada', 'terminado'].includes(i.etapa_actual)).length}</strong></div>
+        <!-- FASE 3 -->
+        <div class="phase-card phase-card-3 \${activePhaseFilter === 3 ? 'active' : ''}" onclick="togglePhase(3)">
+          <div>
+            <div class="phase-top">
+              <span class="phase-pill" style="color: #047857; background: #d1fae5;">FASE 3</span>
+              <span style="font-size: 11px; font-weight: 700; color: #059669;">\${Math.round((f3.length / total) * 100)}%</span>
+            </div>
+            <h4 class="phase-title">Planificadas e Implementadas</h4>
+            <p class="phase-desc">Iniciativas en ejecución, planificadas e implementadas</p>
+            <div class="phase-count">\${f3.length}</div>
+            <div class="subetapa-list">
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #059669;"></span>Planificadas</span>
+                <strong>\${f3.filter(i => ['planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(i.etapa_actual)).length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #059669;"></span>Implementadas</span>
+                <strong>\${f3.filter(i => ['implementadas', 'implementada', 'terminado'].includes(i.etapa_actual)).length}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="phase-footer" style="border-top: 1px solid #d1fae5;">
+            <div class="action-row">
+              <span>Siguiente acción</span>
+              <span>IT: \${a3.it} · Neg: \${a3.neg}</span>
+            </div>
+            <div class="progress-bar-container">
+              <div style="width: \${a3.itPct}%; background: #10b981;"></div>
+              <div style="width: \${a3.negPct}%; background: #f59e0b;"></div>
+            </div>
+            <div style="text-align: center;">
+              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 3 ? '#059669' : '#ecfdf5'}; color: \${activePhaseFilter === 3 ? '#ffffff' : '#047857'};">
+                \${activePhaseFilter === 3 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              </span>
+            </div>
           </div>
         </div>
 
-        <div class="phase-card \${activePhaseFilter === 'observaciones' ? 'active' : ''}" onclick="togglePhase('observaciones')">
-          <div class="phase-tag" style="color: #991b1b;">Con Observaciones</div>
-          <div class="phase-num">\${fObs.length}</div>
-          <div class="phase-desc">Eliminadas y Registro Incompleto</div>
-          <div class="phase-sublist">
-            <div class="phase-subitem"><span>Eliminadas</span><strong>\${fObs.filter(i => ['eliminadas', 'eliminada'].includes(i.etapa_actual)).length}</strong></div>
-            <div class="phase-subitem"><span>Registro incompleto</span><strong>\${fObs.filter(i => i.etapa_actual === 'registro_incompleto').length}</strong></div>
+        <!-- CON OBSERVACIONES -->
+        <div class="phase-card phase-card-obs \${activePhaseFilter === 'observaciones' ? 'active' : ''}" onclick="togglePhase('observaciones')">
+          <div>
+            <div class="phase-top">
+              <span class="phase-pill" style="color: #9f1239; background: #ffe4e6;">CON OBSERVACIONES</span>
+              <span style="font-size: 11px; font-weight: 700; color: #e11d48;">\${Math.round((fObs.length / total) * 100)}%</span>
+            </div>
+            <h4 class="phase-title">Con Observaciones</h4>
+            <p class="phase-desc">Registros incompletos y registros eliminados</p>
+            <div class="phase-count">\${fObs.length}</div>
+            <div class="subetapa-list">
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #e11d48;"></span>Eliminadas</span>
+                <strong>\${fObs.filter(i => ['eliminadas', 'eliminada'].includes(i.etapa_actual)).length}</strong>
+              </div>
+              <div class="subetapa-item">
+                <span style="display: flex; align-items: center; gap: 5px;"><span style="width: 6px; height: 6px; border-radius: 50%; background: #e11d48;"></span>Registro incompleto</span>
+                <strong>\${fObs.filter(i => i.etapa_actual === 'registro_incompleto').length}</strong>
+              </div>
+            </div>
+          </div>
+          <div class="phase-footer" style="border-top: 1px solid #ffe4e6;">
+            <div class="action-row">
+              <span>Siguiente acción</span>
+              <span>Revisión</span>
+            </div>
+            <div class="progress-bar-container">
+              <div style="width: 100%; background: #e11d48;"></div>
+            </div>
+            <div style="text-align: center;">
+              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 'observaciones' ? '#e11d48' : '#fff1f2'}; color: \${activePhaseFilter === 'observaciones' ? '#ffffff' : '#be123c'};">
+                \${activePhaseFilter === 'observaciones' ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              </span>
+            </div>
           </div>
         </div>
       \`;
     }
 
-    // Render Cards Estratégicos
+    // Render 3 Cards Estratégicos con layout idéntico a la app
     function renderStrategicCards() {
       const active = RAW_DATA.filter(i => !['eliminadas', 'eliminada', 'registro_incompleto'].includes(i.etapa_actual));
       const itItems = active.filter(i => getResponsable(i) === 'IT');
       const negItems = active.filter(i => getResponsable(i) === 'Negocio');
+      const totActive = itItems.length + negItems.length || 1;
+      const itPct = Math.round((itItems.length / totActive) * 100);
+      const negPct = Math.round((negItems.length / totActive) * 100);
 
-      // Top Ecosistemas
-      const ecoCount = {};
+      const itEst = itItems.filter(i => ['por_estimar', 'por_reestimar'].includes(i.etapa_actual)).length;
+      const itPlan = itItems.filter(i => i.etapa_actual === 'por_planificar').length;
+      const itEjec = itItems.filter(i => ['planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(i.etapa_actual)).length;
+
+      const negEst = negItems.filter(i => i.etapa_actual === 'por_aprobar_estimacion').length;
+      const negPpto = negItems.filter(i => i.etapa_actual === 'por_habilitar_presupuesto').length;
+      const negPlan = negItems.filter(i => ['aprobar_planificacion', 'por_aprobar_planificacion'].includes(i.etapa_actual)).length;
+
+      // Top Ecosistemas / Frente con desglose de fases
+      const ecoMap = {};
       RAW_DATA.forEach(i => {
-        const eco = normalizeEco(i.ecosistema);
-        ecoCount[eco] = (ecoCount[eco] || 0) + 1;
+        const name = getFrenteName(i);
+        if (!ecoMap[name]) ecoMap[name] = { name, total: 0, f1: 0, f2: 0, f3: 0, fObs: 0 };
+        ecoMap[name].total++;
+        const p = getPhase(i.etapa_actual);
+        if (p === 1) ecoMap[name].f1++;
+        else if (p === 2) ecoMap[name].f2++;
+        else if (p === 3) ecoMap[name].f3++;
+        else ecoMap[name].fObs++;
       });
-      const topEcos = Object.entries(ecoCount).sort((a,b) => b[1] - a[1]).slice(0, 4);
+      const topEcos = Object.values(ecoMap).sort((a,b) => b.total - a.total).slice(0, 5);
 
       // Fechas
       const now = new Date();
       let vencidas = 0;
+      let vencePronto = 0;
       let proximas = 0;
-      RAW_DATA.forEach(i => {
-        if (['eliminadas', 'eliminada'].includes(i.etapa_actual)) return;
-        const dStr = i.fecha_fin_planificada || i.fecha_fin_estimacion || i.fecha_fin_real;
-        const d = parseDate(dStr);
-        if (!d) return;
-        const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
-        if (diffDays < 0) vencidas++;
-        else if (diffDays <= 15) proximas++;
+      let sinFecha = 0;
+      const upcoming = [];
+
+      RAW_DATA.filter(i => !['eliminadas', 'eliminada'].includes(i.etapa_actual)).forEach(i => {
+        const rawDate = getMilestoneDate(i);
+        if (!rawDate) { sinFecha++; return; }
+        const dt = parseDate(rawDate);
+        if (!dt) { sinFecha++; return; }
+        const diff = Math.ceil((dt.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (diff < 0) {
+          vencidas++;
+          upcoming.push({ i, dt, dateStr: fmtDate(dt), status: 'overdue' });
+        } else if (diff <= 15) {
+          vencePronto++;
+          upcoming.push({ i, dt, dateStr: fmtDate(dt), status: 'soon' });
+        } else {
+          proximas++;
+          upcoming.push({ i, dt, dateStr: fmtDate(dt), status: 'future' });
+        }
       });
+      upcoming.sort((a,b) => a.dt.getTime() - b.dt.getTime());
+      const showUpcoming = upcoming.slice(0, 2);
 
       const container = document.getElementById('strategic-cards-container');
       container.innerHTML = \`
+        <!-- CARD 1 -->
         <div class="strat-card">
-          <div class="strat-title">⚖️ Cuello de Botella: Responsabilidad</div>
-          <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-            <div style="flex: 1; padding: 10px; background: #eff6ff; border-radius: 8px; border-left: 3px solid #2563eb;">
-              <div style="font-size: 11px; color: #1e40af; font-weight: 700;">EN CANCHA TI</div>
-              <div style="font-size: 22px; font-weight: 800; color: #1e3a8a;">\${itItems.length}</div>
-            </div>
-            <div style="flex: 1; padding: 10px; background: #fffbeb; border-radius: 8px; border-left: 3px solid #d97706;">
-              <div style="font-size: 11px; color: #b45309; font-weight: 700;">EN NEGOCIO</div>
-              <div style="font-size: 22px; font-weight: 800; color: #78350f;">\${negItems.length}</div>
-            </div>
-          </div>
-          <div style="font-size: 11.5px; color: #64748b; line-height: 1.4;">
-            Permite destrabar acuerdos identificando quién debe dar el siguiente paso de aprobación o avance técnico.
-          </div>
-        </div>
-
-        <div class="strat-card">
-          <div class="strat-title">🌐 Distribución por Ecosistema</div>
-          <div style="display: flex; flex-direction: column; gap: 8px;">
-            \${topEcos.map(([eco, count]) => {
-              const pct = Math.round((count / RAW_DATA.length) * 100);
-              return \`
-                <div>
-                  <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
-                    <span style="font-weight: 600; color: #334155;">\${eco}</span>
-                    <strong style="color: #0f172a;">\${count} (\${pct}%)</strong>
-                  </div>
-                  <div style="background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
-                    <div style="background: #0284c7; width: \${pct}%; height: 100%;"></div>
-                  </div>
+          <div>
+            <h4 class="strat-card-title">Responsabilidad: ¿Quién tiene la siguiente acción?</h4>
+            <p class="strat-card-sub">Balance operativo entre Sistemas (IT) y Áreas Solicitantes (Negocio)</p>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 12px;">
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 8px; padding: 10px 12px;">
+                <div style="font-size: 10px; fontWeight: 800; color: #1d4ed8; text-transform: uppercase;">IT / SISTEMAS</div>
+                <div style="font-size: 24px; font-weight: 900; color: #1e40af; margin: 3px 0 2px 0;">\${itItems.length}</div>
+                <div style="font-size: 10px; color: #3b82f6; font-weight: 700; margin-bottom: 6px;">\${itPct}% del trabajo activo</div>
+                <div style="display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #1e3a8a; border-top: 1px solid #dbeafe; padding-top: 6px;">
+                  <div>• Estimación técnica: <strong>\${itEst}</strong></div>
+                  <div>• Planificación técnica: <strong>\${itPlan}</strong></div>
+                  <div>• En ejecución técnica: <strong>\${itEjec}</strong></div>
                 </div>
-              \`;
-            }).join('')}
+              </div>
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 8px; padding: 10px 12px;">
+                <div style="font-size: 10px; font-weight: 800; color: #b45309; text-transform: uppercase;">NEGOCIO / SOLICITANTE</div>
+                <div style="font-size: 24px; font-weight: 900; color: #d97706; margin: 3px 0 2px 0;">\${negItems.length}</div>
+                <div style="font-size: 10px; color: #d97706; font-weight: 700; margin-bottom: 6px;">\${negPct}% del trabajo activo</div>
+                <div style="display: flex; flex-direction: column; gap: 2px; font-size: 10px; color: #78350f; border-top: 1px solid #fef3c7; padding-top: 6px;">
+                  <div>• Por aprobar estimación: <strong>\${negEst}</strong></div>
+                  <div>• Por habilitar presupuesto: <strong>\${negPpto}</strong></div>
+                  <div>• Por aprobar planificación: <strong>\${negPlan}</strong></div>
+                </div>
+              </div>
+            </div>
+            <div style="height: 8px; width: 100%; background: #f1f5f9; border-radius: 4px; overflow: hidden; display: flex; margin-bottom: 8px;">
+              <div style="width: \${itPct}%; background: #2563eb;"></div>
+              <div style="width: \${negPct}%; background: #f59e0b;"></div>
+            </div>
+          </div>
+          <div style="font-size: 10.5px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 8px; display: flex; justify-content: space-between;">
+            <span>Total en cartera activa: <strong>\${active.length} ini.</strong></span>
+            \${negItems.length > 0 ? \`<span style="color: #b45309; font-weight: 700;">⚠️ Negocio tiene \${negItems.length} aprobaciones pendientes</span>\` : '<span style="color: #059669; font-weight: 700;">✓ Negocio al día</span>'}
           </div>
         </div>
 
+        <!-- CARD 2 -->
         <div class="strat-card">
-          <div class="strat-title">📅 Salud y Cumplimiento de Fechas</div>
-          <div style="display: flex; gap: 10px; margin-bottom: 12px;">
-            <div style="flex: 1; padding: 10px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #ef4444;">
-              <div style="font-size: 11px; color: #991b1b; font-weight: 700;">HITOS VENCIDOS</div>
-              <div style="font-size: 22px; font-weight: 800; color: #7f1d1d;">\${vencidas}</div>
-            </div>
-            <div style="flex: 1; padding: 10px; background: #fff7ed; border-radius: 8px; border-left: 3px solid #f97316;">
-              <div style="font-size: 11px; color: #c2410c; font-weight: 700;">VENCE EN 15 DÍAS</div>
-              <div style="font-size: 22px; font-weight: 800; color: #9a3412;">\${proximas}</div>
+          <div>
+            <h4 class="strat-card-title">Distribución Estratégica por Frente / Ecosistema</h4>
+            <p class="strat-card-sub">Avance del pipeline por dominio tecnológico (textos completos)</p>
+            <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 12px;">
+              \${topEcos.map(eco => {
+                const tot = eco.total || 1;
+                const f1Pct = (eco.f1 / tot) * 100;
+                const f2Pct = (eco.f2 / tot) * 100;
+                const f3Pct = (eco.f3 / tot) * 100;
+                const fObsPct = (eco.fObs / tot) * 100;
+                const pctGlobal = Math.round((eco.total / RAW_DATA.length) * 100);
+                return \`
+                  <div style="display: flex; flex-direction: column; gap: 3px;">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
+                      <span style="font-size: 11.5px; font-weight: 700; color: #1e293b; word-break: break-word;">\${eco.name}</span>
+                      <span style="font-size: 10.5px; font-weight: 800; color: #0f172a; background: #f1f5f9; padding: 1px 7px; border-radius: 10px; flex-shrink: 0;">\${eco.total} ini. (\${pctGlobal}%)</span>
+                    </div>
+                    <div style="height: 8px; width: 100%; background: #f1f5f9; border-radius: 4px; overflow: hidden; display: flex;">
+                      \${f1Pct > 0 ? \`<div style="width: \${f1Pct}%; background: #f59e0b;"></div>\` : ''}
+                      \${f2Pct > 0 ? \`<div style="width: \${f2Pct}%; background: #2563eb;"></div>\` : ''}
+                      \${f3Pct > 0 ? \`<div style="width: \${f3Pct}%; background: #059669;"></div>\` : ''}
+                      \${fObsPct > 0 ? \`<div style="width: \${fObsPct}%; background: #e11d48;"></div>\` : ''}
+                    </div>
+                  </div>
+                \`;
+              }).join('')}
             </div>
           </div>
-          <div style="font-size: 11.5px; color: #64748b; line-height: 1.4;">
-            Seguimiento de fechas límite comprometidas para estimaciones y salidas a producción.
+          <div style="display: flex; align-items: center; justify-content: space-between; font-size: 10px; color: #64748b; border-top: 1px solid #f1f5f9; padding-top: 8px; flex-wrap: wrap; gap: 4px;">
+            <span style="display: flex; align-items: center; gap: 3px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #f59e0b;"></span> F1: Estimación</span>
+            <span style="display: flex; align-items: center; gap: 3px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #2563eb;"></span> F2: Planificación</span>
+            <span style="display: flex; align-items: center; gap: 3px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #059669;"></span> F3: Impl.</span>
+            <span style="display: flex; align-items: center; gap: 3px;"><span style="width: 7px; height: 7px; border-radius: 50%; background: #e11d48;"></span> Observadas</span>
+          </div>
+        </div>
+
+        <!-- CARD 3 -->
+        <div class="strat-card">
+          <div>
+            <h4 class="strat-card-title">Salud de Fechas y Próximos Hitos Críticos</h4>
+            <p class="strat-card-sub">Hitos comprometidos vs fecha de hoy (títulos completos legibles)</p>
+            <div style="display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; margin-bottom: 10px;">
+              <div style="background: #fff1f2; border: 1px solid #fecdd3; border-radius: 6px; padding: 6px 4px; text-align: center;">
+                <div style="font-size: 16px; font-weight: 900; color: #be123c;">\${vencidas}</div>
+                <div style="font-size: 9px; font-weight: 700; color: #9f1239; margin-top: 3px;">Superada</div>
+              </div>
+              <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 6px; padding: 6px 4px; text-align: center;">
+                <div style="font-size: 16px; font-weight: 900; color: #b45309;">\${vencePronto}</div>
+                <div style="font-size: 9px; font-weight: 700; color: #78350f; margin-top: 3px;">≤ 15 días</div>
+              </div>
+              <div style="background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 6px; padding: 6px 4px; text-align: center;">
+                <div style="font-size: 16px; font-weight: 900; color: #1d4ed8;">\${proximas}</div>
+                <div style="font-size: 9px; font-weight: 700; color: #1e3a8a; margin-top: 3px;">En fecha</div>
+              </div>
+              <div style="background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; padding: 6px 4px; text-align: center;">
+                <div style="font-size: 16px; font-weight: 900; color: #64748b;">\${sinFecha}</div>
+                <div style="font-size: 9px; font-weight: 700; color: #475569; margin-top: 3px;">Sin fecha</div>
+              </div>
+            </div>
+            <div style="display: flex; flex-direction: column; gap: 6px;">
+              \${showUpcoming.map(({ i, dateStr, status }) => {
+                const bg = status === 'overdue' ? '#fee2e2' : status === 'soon' ? '#fef3c7' : '#dbeafe';
+                const col = status === 'overdue' ? '#b91c1c' : status === 'soon' ? '#b45309' : '#1d4ed8';
+                const lbl = status === 'overdue' ? 'Superada' : status === 'soon' ? 'Vence pronto' : 'En fecha';
+                return \`
+                  <div style="padding: 7px 10px; background: #f8fafc; border: 1px solid #e2e8f0; border-radius: 6px; border-left: 3px solid \${col};">
+                    <div style="display: flex; align-items: center; justify-content: space-between; gap: 6px; margin-bottom: 2px;">
+                      <span style="font-size: 9.5px; font-weight: 800; color: \${col};">#\${i.id} · \${lbl} (\${dateStr})</span>
+                      <span style="font-size: 9px; color: #64748b;">\${getEtapaLabel(i.etapa_actual)}</span>
+                    </div>
+                    <div style="font-size: 11px; font-weight: 600; color: #0f172a; line-height: 1.35; word-break: break-word;">
+                      \${i.titulo || 'Sin título'}
+                    </div>
+                  </div>
+                \`;
+              }).join('')}
+            </div>
+          </div>
+          <div style="font-size: 10px; color: #94a3b8; font-style: italic; border-top: 1px solid #f1f5f9; padding-top: 8px;">
+            Hitos monitoreados según fase activa
           </div>
         </div>
       \`;
     }
 
-    // Toggle de fase interactivo
+    // Toggle interactivo de fase
     function togglePhase(phase) {
       if (activePhaseFilter === phase) {
         activePhaseFilter = null;
@@ -5478,6 +5837,8 @@ function exportReportToHTML(
       }
       renderPhaseCards();
       renderTimeline();
+      const el = document.getElementById('timeline-section');
+      if (el) el.scrollIntoView({ behavior: 'smooth' });
     }
 
     function clearAllFilters() {
@@ -5489,7 +5850,7 @@ function exportReportToHTML(
       renderTimeline();
     }
 
-    // Render del Timeline Gantt
+    // Render Timeline Gantt
     function renderTimeline() {
       let filtered = [...RAW_DATA];
 
@@ -5506,7 +5867,6 @@ function exportReportToHTML(
         );
       }
 
-      // Actualizar banners y contadores
       const banner = document.getElementById('active-filter-banner');
       const clearBtn = document.getElementById('btn-clear-filters');
       const bannerText = document.getElementById('filter-banner-text');
@@ -5528,7 +5888,6 @@ function exportReportToHTML(
         clearBtn.style.display = 'none';
       }
 
-      // Calcular rango temporal global para el Gantt
       let minTime = Infinity;
       let maxTime = -Infinity;
 
@@ -5560,8 +5919,8 @@ function exportReportToHTML(
       }
 
       const totalDuration = maxTime - minTime || 1;
-
       const tbody = document.getElementById('timeline-tbody');
+
       if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px; color: #94a3b8;">No hay iniciativas que coincidan con los filtros seleccionados.</td></tr>';
         return;
@@ -5572,7 +5931,6 @@ function exportReportToHTML(
         const phase = getPhase(i.etapa_actual);
         const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
 
-        // Segmentos específicos
         const segments = [];
         let startDisplay = '—';
         let endDisplay = '—';
@@ -5592,7 +5950,6 @@ function exportReportToHTML(
             });
           }
         } else {
-          // Estimación (solo si NO está planificada)
           const isPlan = ['planificadas', 'planificada', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) || Boolean(i.fecha_inicio_planificada || i.fecha_fin_planificada || i.fecha_inicio_real || i.fecha_fin_real);
           if (!isPlan) {
             const s = parseDate(i.fecha_inicio_estimacion);
@@ -5612,7 +5969,7 @@ function exportReportToHTML(
               });
             }
           }
-          // Planificada
+
           const sp = parseDate(i.fecha_inicio_planificada || i.fecha_inicio_real);
           const ep = parseDate(i.fecha_fin_planificada || i.fecha_fin_real);
           if (sp || ep) {
@@ -5645,7 +6002,9 @@ function exportReportToHTML(
               \` : ''}
             </td>
             <td>
-              <span class="badge \${phaseClass}">\${getEtapaLabel(i.etapa_actual)}</span>
+              <span style="display: inline-block; padding: 2px 8px; border-radius: 4px; font-size: 10.5px; font-weight: 700; background: #f1f5f9; color: #334155;">
+                \${getEtapaLabel(i.etapa_actual)}
+              </span>
             </td>
             <td style="font-family: monospace; color: #64748b;">\${startDisplay}</td>
             <td style="font-family: monospace; color: #64748b;">\${endDisplay}</td>
@@ -5654,7 +6013,7 @@ function exportReportToHTML(
               \${segments.map(seg => {
                 const left = Math.max(0, ((seg.start.getTime() - minTime) / totalDuration) * 100);
                 const right = Math.min(100, ((seg.end.getTime() - minTime) / totalDuration) * 100);
-                const width = Math.max(1.8, right - left);
+                const width = Math.max(2.0, right - left);
                 return \`
                   <div class="gantt-bar"
                        style="left: \${left}%; width: \${width}%; background: \${seg.bg}; border: 1px solid \${seg.border};"
@@ -5686,13 +6045,11 @@ function exportReportToHTML(
       tip.style.display = 'none';
     }
 
-    // Listener de búsqueda
     document.getElementById('filter-search').addEventListener('input', e => {
       searchQuery = e.target.value;
       renderTimeline();
     });
 
-    // Inicialización
     renderPhaseCards();
     renderStrategicCards();
     renderTimeline();

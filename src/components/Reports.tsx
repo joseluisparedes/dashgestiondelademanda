@@ -3163,7 +3163,6 @@ function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
     if (fechaElim) {
       const parts: string[] = [];
       parts.push(`Eliminada: ${fmtDateShort(i.fecha_eliminacion)}`);
-      if (i.solicitado_por) parts.push(`Solicitado por: ${i.solicitado_por}`);
       if (i.motivo_eliminacion) parts.push(`Motivo: ${i.motivo_eliminacion}`);
       segs.push({
         id: `${i.id}-elim`,
@@ -3293,7 +3292,6 @@ function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
   if (fechaElim) {
     const parts: string[] = [];
     parts.push(`Eliminada: ${fmtDateShort(i.fecha_eliminacion)}`);
-    if (i.solicitado_por) parts.push(`Solicitado por: ${i.solicitado_por}`);
     if (i.motivo_eliminacion) parts.push(`Motivo: ${i.motivo_eliminacion}`);
     segs.push({
       id: `${i.id}-elim`,
@@ -4380,11 +4378,7 @@ function TimelineIniciativasVP({
                                             >
                                               ✕ Eliminada: {row.iniciativa.fecha_eliminacion ? fmtDateShort(row.iniciativa.fecha_eliminacion) : 'Sin fecha'}
                                             </span>
-                                            {row.iniciativa.solicitado_por && (
-                                              <span style={{ fontSize: 9, color: '#7f1d1d', fontWeight: 600 }}>
-                                                Sol: {row.iniciativa.solicitado_por}
-                                              </span>
-                                            )}
+
                                           </div>
                                         )}
                                       </div>
@@ -4709,11 +4703,7 @@ function TimelineIniciativasVP({
                 <div style={{ color: '#fca5a5', fontWeight: 800 }}>
                   ✕ Iniciativa Eliminada el {format(tooltipData.seg.start, 'dd/MM/yyyy')}
                 </div>
-                {tooltipData.iniciativa.solicitado_por && (
-                  <div style={{ color: '#ffffff' }}>
-                    Solicitado por: <strong>{tooltipData.iniciativa.solicitado_por}</strong>
-                  </div>
-                )}
+
                 {tooltipData.iniciativa.motivo_eliminacion && (
                   <div style={{ color: '#fecdd3', fontStyle: 'italic' }}>
                     Motivo: {tooltipData.iniciativa.motivo_eliminacion}
@@ -5900,7 +5890,7 @@ function exportReportToHTML(
             </h2>
             <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: #475569;">
               <span>Institución: <strong>\${ini.institucion || '—'}</strong></span>
-              <span>Solicitante: <strong>\${ini.solicitado_por || ini.usuario_negocio || '—'}</strong></span>
+
               <span>IT BP: <strong>\${ini.it_bp || ini.it_business_partner || '—'}</strong></span>
               <span>Líder de Dominio: <strong>\${ini.lider_dominio || '—'}</strong></span>
               <span>VP: <strong>\${ini.vp_solicitante || '—'}</strong></span>
@@ -5965,7 +5955,7 @@ function exportReportToHTML(
               </div>
               <div style="font-size: 12px; color: #7f1d1d; display: flex; flex-direction: column; gap: 4px;">
                 <div>Fecha de Eliminación: <strong>\${fmtDate(ini.fecha_eliminacion)}</strong></div>
-                <div>Solicitado por: <strong>\${ini.solicitado_por || '—'}</strong></div>
+
                 <div>Motivo: <strong>\${ini.motivo_eliminacion || 'Sin motivo especificado'}</strong></div>
               </div>
             </div>
@@ -6727,7 +6717,7 @@ function exportReportToHTML(
               label: '✕ ' + i.id,
               bg: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
               border: '#991b1b',
-              tooltip: \`<b>[Eliminada]</b> \${i.id}<br>Fecha: \${fmtDate(dElim)}<br>\${i.solicitado_por ? 'Sol: ' + i.solicitado_por + '<br>' : ''}\${i.motivo_eliminacion ? 'Motivo: ' + i.motivo_eliminacion : ''}\`
+              tooltip: \`<b>[Eliminada]</b> \${i.id}<br>Fecha: \${fmtDate(dElim)}<br>\${i.motivo_eliminacion ? 'Motivo: ' + i.motivo_eliminacion : ''}\`
             });
           }
         } else {

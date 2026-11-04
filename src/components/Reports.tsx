@@ -5246,6 +5246,213 @@ function exportReportToHTML(
       z-index: 20;
     }
 
+    /* Multiselect Component Styles */
+    .ms-btn {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      cursor: pointer;
+      padding: 2px 0;
+      user-select: none;
+    }
+    .ms-btn-text {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #0284c7;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      max-width: 170px;
+    }
+    .ms-dropdown {
+      position: absolute;
+      top: 100%;
+      left: 0;
+      right: 0;
+      margin-top: 4px;
+      background: #ffffff;
+      border: 1px solid var(--border-dark);
+      border-radius: 8px;
+      box-shadow: 0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1);
+      z-index: 100;
+      max-height: 240px;
+      overflow-y: auto;
+      display: none;
+      padding: 6px;
+    }
+    .ms-dropdown.open {
+      display: block;
+    }
+    .ms-item {
+      display: flex;
+      align-items: center;
+      gap: 7px;
+      padding: 5px 8px;
+      border-radius: 5px;
+      font-size: 11px;
+      color: #334155;
+      cursor: pointer;
+      transition: background 0.1s ease;
+      user-select: none;
+    }
+    .ms-item:hover {
+      background: #f1f5f9;
+    }
+    .ms-item input[type="checkbox"] {
+      cursor: pointer;
+      accent-color: #0284c7;
+    }
+    .ms-actions {
+      display: flex;
+      justify-content: space-between;
+      padding: 4px 6px 6px 6px;
+      border-bottom: 1px solid var(--border);
+      margin-bottom: 4px;
+      font-size: 10.5px;
+      color: #0284c7;
+      font-weight: 700;
+      cursor: pointer;
+    }
+    .filter-box {
+      position: relative;
+    }
+
+    /* Modal de Detalle Completo de Iniciativa */
+    .detail-modal-overlay {
+      position: fixed;
+      inset: 0;
+      background: rgba(15, 23, 42, 0.65);
+      backdrop-filter: blur(2px);
+      z-index: 9999;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 16px;
+    }
+    .detail-modal-overlay.open {
+      display: flex;
+    }
+    .detail-modal-card {
+      background: #ffffff;
+      width: 100%;
+      max-width: 1000px;
+      max-height: 90vh;
+      border-radius: 16px;
+      box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
+      border: 1px solid var(--border);
+      display: flex;
+      flex-direction: column;
+      overflow: hidden;
+      animation: modalZoomIn 0.18s ease-out;
+    }
+    @keyframes modalZoomIn {
+      from { transform: scale(0.96); opacity: 0; }
+      to { transform: scale(1); opacity: 1; }
+    }
+    .detail-modal-header {
+      padding: 14px 20px;
+      background: #f8fafc;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+    .detail-modal-body {
+      padding: 20px;
+      overflow-y: auto;
+      flex: 1;
+      font-size: 12px;
+      color: #334155;
+    }
+    .detail-modal-footer {
+      padding: 12px 20px;
+      background: #f8fafc;
+      border-top: 1px solid var(--border);
+      display: flex;
+      justify-content: flex-end;
+    }
+    .detail-badge-pill {
+      font-size: 11px;
+      font-weight: 800;
+      padding: 2px 8px;
+      border-radius: 6px;
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .modal-box {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 12px 14px;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.02);
+    }
+    .modal-box-title {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #64748b;
+      margin-bottom: 4px;
+    }
+    .modal-box-val {
+      font-size: 14px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+
+    /* Enlace de ID para ver detalle */
+    .id-link {
+      font-weight: 800;
+      color: #0284c7;
+      text-decoration: none;
+      cursor: pointer;
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 2px 6px;
+      border-radius: 4px;
+      transition: all 0.12s ease;
+    }
+    .id-link:hover {
+      background: #e0f2fe;
+      color: #0369a1;
+      text-decoration: underline;
+    }
+
+    /* Gantt Estilizado Profesional */
+    .gantt-cell {
+      position: relative;
+      height: 38px;
+      min-width: 480px;
+      background: repeating-linear-gradient(90deg, #fafafa, #fafafa 40px, #ffffff 40px, #ffffff 80px);
+    }
+    .gantt-bar {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 22px;
+      border-radius: 5px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 0 6px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.14), inset 0 1px 0 rgba(255,255,255,0.25);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: transform 0.12s ease, filter 0.12s ease;
+    }
+    .gantt-bar:hover {
+      transform: translateY(-50%) scaleY(1.18);
+      filter: brightness(1.15) drop-shadow(0 4px 6px rgba(0,0,0,0.18));
+      z-index: 25;
+    }
+
     /* Tooltip */
     #tooltip {
       position: fixed;
@@ -5272,7 +5479,7 @@ function exportReportToHTML(
 <body>
   <div id="tooltip"></div>
 
-  <!-- Barra Superior de Filtros (Fija al estilo de la app, interactiva) -->
+  <!-- Barra Superior de Filtros (Fija al estilo de la app, interactiva con multiselectores) -->
   <div class="top-filter-bar">
     <div class="top-filter-header">
       <div class="top-filter-title">
@@ -5289,35 +5496,50 @@ function exportReportToHTML(
       </div>
     </div>
     <div class="filter-inputs-grid">
-      <div class="filter-box">
+      <!-- VP Solicitante -->
+      <div class="filter-box" id="fbox-vp">
         <div class="filter-box-label">VP Solicitante</div>
-        <select class="filter-select" id="select-vp" onchange="onFilterChange()">
-          <option value="TODAS">Todas (${dataFiltered.length})</option>
-        </select>
+        <div class="ms-btn" onclick="toggleMsDropdown('vp')">
+          <span class="ms-btn-text" id="ms-text-vp">Todas</span>
+          <span style="font-size: 9px; color: #64748b;">▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-drop-vp"></div>
       </div>
-      <div class="filter-box">
+      <!-- Institución -->
+      <div class="filter-box" id="fbox-institucion">
         <div class="filter-box-label">Institución</div>
-        <select class="filter-select" id="select-institucion" onchange="onFilterChange()">
-          <option value="TODAS">Todos</option>
-        </select>
+        <div class="ms-btn" onclick="toggleMsDropdown('institucion')">
+          <span class="ms-btn-text" id="ms-text-institucion">Todos</span>
+          <span style="font-size: 9px; color: #64748b;">▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-drop-institucion"></div>
       </div>
-      <div class="filter-box">
+      <!-- IT BP -->
+      <div class="filter-box" id="fbox-itbp">
         <div class="filter-box-label">IT BP</div>
-        <select class="filter-select" id="select-itbp" onchange="onFilterChange()">
-          <option value="TODOS">Todos</option>
-        </select>
+        <div class="ms-btn" onclick="toggleMsDropdown('itbp')">
+          <span class="ms-btn-text" id="ms-text-itbp">Todos</span>
+          <span style="font-size: 9px; color: #64748b;">▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-drop-itbp"></div>
       </div>
-      <div class="filter-box">
+      <!-- Estado -->
+      <div class="filter-box" id="fbox-estado">
         <div class="filter-box-label">Estado</div>
-        <select class="filter-select" id="select-estado" onchange="onFilterChange()">
-          <option value="TODOS">Todos</option>
-        </select>
+        <div class="ms-btn" onclick="toggleMsDropdown('estado')">
+          <span class="ms-btn-text" id="ms-text-estado">Todos</span>
+          <span style="font-size: 9px; color: #64748b;">▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-drop-estado"></div>
       </div>
-      <div class="filter-box">
+      <!-- Líder de Dominio -->
+      <div class="filter-box" id="fbox-lider">
         <div class="filter-box-label">Líder de Dominio</div>
-        <select class="filter-select" id="select-lider" onchange="onFilterChange()">
-          <option value="TODOS">Todos</option>
-        </select>
+        <div class="ms-btn" onclick="toggleMsDropdown('lider')">
+          <span class="ms-btn-text" id="ms-text-lider">Todos</span>
+          <span style="font-size: 9px; color: #64748b;">▼</span>
+        </div>
+        <div class="ms-dropdown" id="ms-drop-lider"></div>
       </div>
     </div>
   </div>
@@ -5387,6 +5609,30 @@ function exportReportToHTML(
     </div>
   </div>
 
+  <!-- Modal de Detalle Completo de la Iniciativa -->
+  <div class="detail-modal-overlay" id="detail-modal-overlay" onclick="closeDetailModal(event)">
+    <div class="detail-modal-card" onclick="event.stopPropagation()">
+      <div class="detail-modal-header">
+        <div style="display: flex; align-items: center; gap: 10px;">
+          <div style="width: 32px; height: 32px; border-radius: 8px; background: #0284c7; color: white; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 13px;">
+            TI
+          </div>
+          <div>
+            <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0;">Detalle Completo de la Iniciativa</h3>
+            <p style="font-size: 11px; color: #64748b; margin: 0;">Todos los campos, registros y fechas clave</p>
+          </div>
+        </div>
+        <button onclick="closeDetailModal()" style="background: none; border: none; font-size: 18px; color: #64748b; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
+      </div>
+      <div class="detail-modal-body" id="detail-modal-content"></div>
+      <div class="detail-modal-footer">
+        <button onclick="closeDetailModal()" style="padding: 7px 16px; background: #f1f5f9; color: #334155; border: 1px solid var(--border-dark); border-radius: 6px; font-size: 11.5px; font-weight: 700; cursor: pointer;">
+          Cerrar
+        </button>
+      </div>
+    </div>
+  </div>
+
   <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 14px;">
     Documento interactivo generado automáticamente por Dashboard de Gestión de la Demanda TI.
   </div>
@@ -5397,12 +5643,12 @@ function exportReportToHTML(
     let activePhaseFilter = null;
     let searchQuery = '';
 
-    // Variables de filtros superiores
-    let filterVP = 'TODAS';
-    let filterInstitucion = 'TODAS';
-    let filterITBP = 'TODOS';
-    let filterEstado = 'TODOS';
-    let filterLider = 'TODOS';
+    // Filtros superiores multiselector (Conjuntos de valores seleccionados)
+    let selectedVPs = new Set();
+    let selectedInstituciones = new Set();
+    let selectedITBPs = new Set();
+    let selectedEstados = new Set();
+    let selectedLideres = new Set();
 
     // Meses en español
     const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
@@ -5460,6 +5706,15 @@ function exportReportToHTML(
       return \`\${dd}/\${mm}/\${yyyy}\`;
     }
 
+    function fmtMoneyUSD(v) {
+      if (v === null || v === undefined || isNaN(v)) return '—';
+      return '$ ' + Number(v).toLocaleString('en-US');
+    }
+    function fmtMoneyPEN(v) {
+      if (v === null || v === undefined || isNaN(v)) return '—';
+      return 'S/ ' + Number(v).toLocaleString('es-PE');
+    }
+
     function getResponsable(i) {
       const e = (i.etapa_actual || '').toLowerCase();
       if (['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion', 'por_aprobar_planificacion'].includes(e)) {
@@ -5493,7 +5748,163 @@ function exportReportToHTML(
       return i.fecha_eliminacion || null;
     }
 
-    // Poblar las opciones de los selectores superiores
+    // Modal de Detalle Completo de la Iniciativa
+    function openDetailModal(id) {
+      const ini = RAW_DATA.find(x => String(x.id) === String(id));
+      if (!ini) return;
+
+      const phase = getPhase(ini.etapa_actual);
+      const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
+
+      const content = document.getElementById('detail-modal-content');
+      content.innerHTML = \`
+        <div style="display: flex; flex-direction: column; gap: 16px;">
+          <!-- Cabecera de la Iniciativa -->
+          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
+            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
+              <div style="display: flex; align-items: center; gap: 8px;">
+                <span style="font-size: 13px; font-weight: 900; color: #ffffff; background: #0284c7; padding: 3px 10px; border-radius: 6px;">
+                  ID: #\${ini.id}
+                </span>
+                <span class="detail-badge-pill \${phaseClass}">
+                  \${getEtapaLabel(ini.etapa_actual)}
+                </span>
+                \${ini.sub_estado ? \`<span style="font-size: 11px; font-weight: 700; background: #f1f5f9; color: #475569; padding: 2px 7px; border-radius: 4px;">\${ini.sub_estado}</span>\` : ''}
+              </div>
+              <button onclick="navigator.clipboard.writeText(JSON.stringify(RAW_DATA.find(x => String(x.id) === '\${ini.id}'), null, 2))" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #ffffff; border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: 6px; cursor: pointer;">
+                📋 Copiar Datos
+              </button>
+            </div>
+            <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 4px 0 10px 0; line-height: 1.4;">
+              \${ini.titulo || 'Sin Título'}
+            </h2>
+            <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: #475569;">
+              <span>Institución: <strong>\${ini.institucion || '—'}</strong></span>
+              <span>Solicitante: <strong>\${ini.solicitado_por || ini.usuario_negocio || '—'}</strong></span>
+              <span>IT BP: <strong>\${ini.it_business_partner || '—'}</strong></span>
+              <span>Líder de Dominio: <strong>\${ini.lider_dominio || '—'}</strong></span>
+              <span>VP: <strong>\${ini.vp_solicitante || '—'}</strong></span>
+            </div>
+          </div>
+
+          <!-- Cards Clave: Estimación y Planificación -->
+          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
+            <!-- Estimación Clave -->
+            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px;">
+              <div style="font-size: 11px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 8px;">
+                ⚡ ESTIMACIÓN CLAVE
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div class="modal-box">
+                  <div class="modal-box-title">Costo USD</div>
+                  <div class="modal-box-val" style="color: #047857;">\${fmtMoneyUSD(ini.costo_usd)}</div>
+                </div>
+                <div class="modal-box">
+                  <div class="modal-box-title">Costo Soles</div>
+                  <div class="modal-box-val" style="color: #047857;">\${fmtMoneyPEN(ini.costo_soles)}</div>
+                </div>
+                <div class="modal-box" style="grid-column: span 2;">
+                  <div class="modal-box-title">Fechas de Estimación</div>
+                  <div style="font-size: 11.5px; font-weight: 700; color: #334155; font-family: monospace;">
+                    \${fmtDate(ini.fecha_inicio_estimacion)} ➔ \${fmtDate(ini.fecha_fin_estimacion)}
+                  </div>
+                  \${ini.estatus_estimacion ? \`<div style="font-size: 10.5px; color: #b45309; margin-top: 3px;">Estatus: \${ini.estatus_estimacion}</div>\` : ''}
+                </div>
+              </div>
+            </div>
+
+            <!-- Planificación Clave -->
+            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px;">
+              <div style="font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; margin-bottom: 8px;">
+                📅 PLANIFICACIÓN Y PRODUCCIÓN
+              </div>
+              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
+                <div class="modal-box">
+                  <div class="modal-box-title">Inicio Planif.</div>
+                  <div class="modal-box-val" style="font-size: 12.5px; font-family: monospace;">\${fmtDate(ini.fecha_inicio_planificada)}</div>
+                </div>
+                <div class="modal-box">
+                  <div class="modal-box-title">Fin Planif.</div>
+                  <div class="modal-box-val" style="font-size: 12.5px; font-family: monospace;">\${fmtDate(ini.fecha_fin_planificada)}</div>
+                </div>
+                <div class="modal-box" style="grid-column: span 2;">
+                  <div class="modal-box-title">Pase a Prod. / Conformidad</div>
+                  <div style="font-size: 11.5px; font-weight: 700; color: #334155; font-family: monospace;">
+                    Prod: \${fmtDate(ini.fecha_pase_produccion)} | Conf: \${fmtDate(ini.fecha_conformidad)}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Información Adicional y de Eliminación -->
+          \${['eliminadas', 'eliminada'].includes(ini.etapa_actual) ? \`
+            <div style="background: #fef2f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 14px;">
+              <div style="font-size: 11px; font-weight: 800; color: #991b1b; text-transform: uppercase; margin-bottom: 6px;">
+                ✕ REGISTRO ELIMINADO
+              </div>
+              <div style="font-size: 12px; color: #7f1d1d; display: flex; flex-direction: column; gap: 4px;">
+                <div>Fecha de Eliminación: <strong>\${fmtDate(ini.fecha_eliminacion)}</strong></div>
+                <div>Solicitado por: <strong>\${ini.solicitado_por || '—'}</strong></div>
+                <div>Motivo: <strong>\${ini.motivo_eliminacion || 'Sin motivo especificado'}</strong></div>
+              </div>
+            </div>
+          \` : ''}
+
+          <!-- Contexto Estratégico -->
+          <div style="background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 14px;">
+            <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 8px;">
+              🌐 CLASIFICACIÓN ESTRATÉGICA
+            </div>
+            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 11.5px;">
+              <div>Frente / Ecosistema: <strong>\${getFrenteName(ini)}</strong></div>
+              <div>Pilar Estratégico: <strong>\${ini.pilar_estrategico || '—'}</strong></div>
+              <div>Beneficio Cualitativo: <strong>\${ini.beneficio_cualitativo || '—'}</strong></div>
+              <div>Proyecto SPO: <strong>\${ini.proyecto_spo ? 'SÍ' : 'NO'}</strong></div>
+            </div>
+          </div>
+        </div>
+      \`;
+
+      const overlay = document.getElementById('detail-modal-overlay');
+      overlay.classList.add('open');
+      document.body.style.overflow = 'hidden';
+    }
+
+    function closeDetailModal(e) {
+      if (e && e.target !== document.getElementById('detail-modal-overlay') && e.target.tagName !== 'BUTTON') return;
+      const overlay = document.getElementById('detail-modal-overlay');
+      overlay.classList.remove('open');
+      document.body.style.overflow = '';
+    }
+
+    // Toggle dropdown multiselector
+    let activeDropdown = null;
+    function toggleMsDropdown(key) {
+      const drop = document.getElementById('ms-drop-' + key);
+      if (!drop) return;
+      const isOpen = drop.classList.contains('open');
+
+      // Cerrar otros dropdowns abiertos
+      document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
+
+      if (!isOpen) {
+        drop.classList.add('open');
+        activeDropdown = key;
+      } else {
+        activeDropdown = null;
+      }
+    }
+
+    // Cerrar dropdown si se hace clic fuera
+    document.addEventListener('click', e => {
+      if (!e.target.closest('.filter-box')) {
+        document.querySelectorAll('.ms-dropdown').forEach(d => d.classList.remove('open'));
+        activeDropdown = null;
+      }
+    });
+
+    // Poblar las opciones de los multiselectores
     function initFilterOptions() {
       const vps = new Set();
       const insts = new Set();
@@ -5509,41 +5920,128 @@ function exportReportToHTML(
         if (i.lider_dominio) lideres.add(i.lider_dominio.trim());
       });
 
-      const fill = (id, set, allLabel) => {
-        const el = document.getElementById(id);
-        if (!el) return;
-        const current = el.value;
-        el.innerHTML = \`<option value="TODOS">\${allLabel}</option>\` +
-          Array.from(set).sort().map(val => \`<option value="\${escapeJs(val)}">\${val}</option>\`).join('');
-        if (current && Array.from(set).includes(current)) el.value = current;
+      const buildDropdown = (key, set, isState = false) => {
+        const drop = document.getElementById('ms-drop-' + key);
+        if (!drop) return;
+
+        const sorted = Array.from(set).sort((a,b) => {
+          if (isState) return getEtapaLabel(a).localeCompare(getEtapaLabel(b));
+          return a.localeCompare(b);
+        });
+
+        drop.innerHTML = \`
+          <div class="ms-actions">
+            <span onclick="selectAllMs('\${key}', true)">Seleccionar todos</span>
+            <span onclick="selectAllMs('\${key}', false)">Limpiar</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 2px;">
+            \${sorted.map(val => {
+              const label = isState ? getEtapaLabel(val) : val;
+              return \`
+                <label class="ms-item">
+                  <input type="checkbox" value="\${escapeJs(val)}" onchange="onCheckboxChange('\${key}')" checked>
+                  <span title="\${label}">\${label}</span>
+                </label>
+              \`;
+            }).join('')}
+          </div>
+        \`;
       };
 
-      fill('select-vp', vps, \`Todas las VPs (\${vps.size})\`);
-      fill('select-institucion', insts, 'Todas las Instituciones');
-      fill('select-itbp', bps, 'Todos los IT BP');
-      fill('select-estado', estados, 'Todos los Estados');
-      fill('select-lider', lideres, 'Todos los Líderes');
+      buildDropdown('vp', vps);
+      buildDropdown('institucion', insts);
+      buildDropdown('itbp', bps);
+      buildDropdown('estado', estados, true);
+      buildDropdown('lider', lideres);
+
+      // Iniciar todos como seleccionados
+      selectedVPs = new Set(vps);
+      selectedInstituciones = new Set(insts);
+      selectedITBPs = new Set(bps);
+      selectedEstados = new Set(estados);
+      selectedLideres = new Set(lideres);
+
+      updateButtonLabels();
     }
 
-    // Obtener data filtrada por los selectores superiores
+    function selectAllMs(key, selectAll) {
+      const drop = document.getElementById('ms-drop-' + key);
+      if (!drop) return;
+      const inputs = drop.querySelectorAll('input[type="checkbox"]');
+      inputs.forEach(input => { input.checked = selectAll; });
+      onCheckboxChange(key);
+    }
+
+    function onCheckboxChange(key) {
+      const drop = document.getElementById('ms-drop-' + key);
+      if (!drop) return;
+      const checkedVals = new Set(Array.from(drop.querySelectorAll('input[type="checkbox"]:checked')).map(i => i.value));
+
+      if (key === 'vp') selectedVPs = checkedVals;
+      else if (key === 'institucion') selectedInstituciones = checkedVals;
+      else if (key === 'itbp') selectedITBPs = checkedVals;
+      else if (key === 'estado') selectedEstados = checkedVals;
+      else if (key === 'lider') selectedLideres = checkedVals;
+
+      updateButtonLabels();
+      onFilterChange();
+    }
+
+    function updateButtonLabels() {
+      const setLabel = (key, set, totalCount, isState = false) => {
+        const textEl = document.getElementById('ms-text-' + key);
+        if (!textEl) return;
+        if (set.size === 0) {
+          textEl.innerText = 'Ninguno';
+          textEl.style.color = '#ef4444';
+        } else if (set.size === totalCount) {
+          textEl.innerText = 'Todos (' + totalCount + ')';
+          textEl.style.color = '#0284c7';
+        } else if (set.size === 1) {
+          const val = Array.from(set)[0];
+          textEl.innerText = isState ? getEtapaLabel(val) : val;
+          textEl.style.color = '#0284c7';
+        } else {
+          textEl.innerText = set.size + ' seleccionados';
+          textEl.style.color = '#0284c7';
+        }
+      };
+
+      const countTotal = key => {
+        const drop = document.getElementById('ms-drop-' + key);
+        return drop ? drop.querySelectorAll('input[type="checkbox"]').length : 0;
+      };
+
+      setLabel('vp', selectedVPs, countTotal('vp'));
+      setLabel('institucion', selectedInstituciones, countTotal('institucion'));
+      setLabel('itbp', selectedITBPs, countTotal('itbp'));
+      setLabel('estado', selectedEstados, countTotal('estado'), true);
+      setLabel('lider', selectedLideres, countTotal('lider'));
+    }
+
+    // Obtener data filtrada por los multiselectores
     function getActiveDataset() {
       return RAW_DATA.filter(i => {
-        if (filterVP !== 'TODOS' && filterVP !== 'TODAS' && (i.vp_solicitante || '').trim() !== filterVP) return false;
-        if (filterInstitucion !== 'TODOS' && filterInstitucion !== 'TODAS' && (i.institucion || '').trim() !== filterInstitucion) return false;
-        if (filterITBP !== 'TODOS' && (i.it_business_partner || '').trim() !== filterITBP) return false;
-        if (filterEstado !== 'TODOS' && (i.etapa_actual || '').trim() !== filterEstado) return false;
-        if (filterLider !== 'TODOS' && (i.lider_dominio || '').trim() !== filterLider) return false;
+        const vp = (i.vp_solicitante || '').trim();
+        if (selectedVPs.size > 0 && !selectedVPs.has(vp)) return false;
+
+        const inst = (i.institucion || '').trim();
+        if (selectedInstituciones.size > 0 && !selectedInstituciones.has(inst)) return false;
+
+        const bp = (i.it_business_partner || '').trim();
+        if (selectedITBPs.size > 0 && !selectedITBPs.has(bp)) return false;
+
+        const est = (i.etapa_actual || '').trim();
+        if (selectedEstados.size > 0 && !selectedEstados.has(est)) return false;
+
+        const lid = (i.lider_dominio || '').trim();
+        if (selectedLideres.size > 0 && !selectedLideres.has(lid)) return false;
+
         return true;
       });
     }
 
     function onFilterChange() {
-      filterVP = document.getElementById('select-vp').value;
-      filterInstitucion = document.getElementById('select-institucion').value;
-      filterITBP = document.getElementById('select-itbp').value;
-      filterEstado = document.getElementById('select-estado').value;
-      filterLider = document.getElementById('select-lider').value;
-
       const currentDataset = getActiveDataset();
       const badge = document.getElementById('top-counter-badge');
       if (badge) badge.innerText = \`\${currentDataset.length} iniciativa\${currentDataset.length === 1 ? '' : 's'}\`;
@@ -5939,17 +6437,11 @@ function exportReportToHTML(
     function clearAllFilters() {
       activePhaseFilter = null;
       searchQuery = '';
-      filterVP = 'TODOS';
-      filterInstitucion = 'TODOS';
-      filterITBP = 'TODOS';
-      filterEstado = 'TODOS';
-      filterLider = 'TODOS';
 
-      const sVP = document.getElementById('select-vp'); if (sVP) sVP.value = 'TODOS';
-      const sInst = document.getElementById('select-institucion'); if (sInst) sInst.value = 'TODOS';
-      const sITBP = document.getElementById('select-itbp'); if (sITBP) sITBP.value = 'TODOS';
-      const sEst = document.getElementById('select-estado'); if (sEst) sEst.value = 'TODOS';
-      const sLid = document.getElementById('select-lider'); if (sLid) sLid.value = 'TODOS';
+      // Re-seleccionar todos los checkboxes
+      document.querySelectorAll('.ms-dropdown input[type="checkbox"]').forEach(i => { i.checked = true; });
+
+      initFilterOptions();
       const input = document.getElementById('filter-search'); if (input) input.value = '';
 
       const badge = document.getElementById('top-counter-badge');
@@ -6144,9 +6636,15 @@ function exportReportToHTML(
 
         return \`
           <tr>
-            <td style="font-weight: 800; color: #475569;">#\${i.id}</td>
+            <td style="font-weight: 800; color: #475569; text-align: center;">
+              <span class="id-link" onclick="openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
+                #\${i.id}
+              </span>
+            </td>
             <td>
-              <div style="font-weight: 700; color: #0f172a; max-width: 280px; word-break: break-word;">\${i.titulo || 'Sin Título'}</div>
+              <div style="font-weight: 700; color: #0f172a; max-width: 280px; word-break: break-word; cursor: pointer;" onclick="openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
+                \${i.titulo || 'Sin Título'}
+              </div>
               \${isElim ? \`
                 <div style="margin-top: 2px;">
                   <span style="font-size: 9.5px; font-weight: 700; color: #991b1b; background: #fee2e2; border: 1px solid #fca5a5; padding: 1px 5px; border-radius: 4px;">
@@ -6174,6 +6672,7 @@ function exportReportToHTML(
                 return \`
                   <div class="gantt-bar"
                        style="left: \${left}%; width: \${width}%; background: \${seg.bg}; border: 1px solid \${seg.border};"
+                       onclick="openDetailModal('\${i.id}')"
                        onmouseenter="showTooltip(event, '\${escapeJs(seg.tooltip)}')"
                        onmouseleave="hideTooltip()">
                     \${seg.label}

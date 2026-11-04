@@ -4934,6 +4934,8 @@ function exportReportToHTML(
       border: 1px solid var(--border);
       border-radius: 8px;
       padding: 6px 10px;
+      display: flex;
+      flex-direction: column;
     }
     .filter-box-label {
       font-size: 9.5px;
@@ -4943,13 +4945,22 @@ function exportReportToHTML(
       color: #64748b;
       margin-bottom: 2px;
     }
-    .filter-box-val {
+    .filter-select {
       font-size: 11.5px;
       font-weight: 700;
       color: #0284c7;
-      white-space: nowrap;
-      overflow: hidden;
+      background: transparent;
+      border: none;
+      outline: none;
+      cursor: pointer;
+      width: 100%;
       text-overflow: ellipsis;
+      padding: 0;
+    }
+    .filter-select option {
+      color: #0f172a;
+      background: #ffffff;
+      font-weight: 500;
     }
 
     /* Card principal del reporte */
@@ -5261,12 +5272,12 @@ function exportReportToHTML(
 <body>
   <div id="tooltip"></div>
 
-  <!-- Barra Superior de Filtros (Fija al estilo de la app) -->
+  <!-- Barra Superior de Filtros (Fija al estilo de la app, interactiva) -->
   <div class="top-filter-bar">
     <div class="top-filter-header">
       <div class="top-filter-title">
         <span>🔍 Filtros del Reporte</span>
-        <span style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
+        <span id="top-counter-badge" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
           ${dataFiltered.length} iniciativas
         </span>
       </div>
@@ -5280,23 +5291,33 @@ function exportReportToHTML(
     <div class="filter-inputs-grid">
       <div class="filter-box">
         <div class="filter-box-label">VP Solicitante</div>
-        <div class="filter-box-val" title="${escapeHtml(vpFiltrosTexto)}">${escapeHtml(vpFiltrosTexto)}</div>
+        <select class="filter-select" id="select-vp" onchange="onFilterChange()">
+          <option value="TODAS">Todas (${dataFiltered.length})</option>
+        </select>
       </div>
       <div class="filter-box">
         <div class="filter-box-label">Institución</div>
-        <div class="filter-box-val">Todos</div>
+        <select class="filter-select" id="select-institucion" onchange="onFilterChange()">
+          <option value="TODAS">Todos</option>
+        </select>
       </div>
       <div class="filter-box">
         <div class="filter-box-label">IT BP</div>
-        <div class="filter-box-val">Todos</div>
+        <select class="filter-select" id="select-itbp" onchange="onFilterChange()">
+          <option value="TODOS">Todos</option>
+        </select>
       </div>
       <div class="filter-box">
         <div class="filter-box-label">Estado</div>
-        <div class="filter-box-val">Todos</div>
+        <select class="filter-select" id="select-estado" onchange="onFilterChange()">
+          <option value="TODOS">Todos</option>
+        </select>
       </div>
       <div class="filter-box">
         <div class="filter-box-label">Líder de Dominio</div>
-        <div class="filter-box-val">Todos</div>
+        <select class="filter-select" id="select-lider" onchange="onFilterChange()">
+          <option value="TODOS">Todos</option>
+        </select>
       </div>
     </div>
   </div>
@@ -5355,7 +5376,9 @@ function exportReportToHTML(
               <th style="width: 140px;">Fase / Etapa</th>
               <th style="width: 80px;">Inicio</th>
               <th style="width: 80px;">Fin</th>
-              <th>Cronograma Temporal</th>
+              <th style="padding: 0; min-width: 480px; position: relative; height: 38px;">
+                <div id="gantt-month-headers" style="position: relative; width: 100%; height: 100%;"></div>
+              </th>
             </tr>
           </thead>
           <tbody id="timeline-tbody"></tbody>
@@ -5373,6 +5396,16 @@ function exportReportToHTML(
     const RAW_DATA = ${serializedIniciativas};
     let activePhaseFilter = null;
     let searchQuery = '';
+
+    // Variables de filtros superiores
+    let filterVP = 'TODAS';
+    let filterInstitucion = 'TODAS';
+    let filterITBP = 'TODOS';
+    let filterEstado = 'TODOS';
+    let filterLider = 'TODOS';
+
+    // Meses en español
+    const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 
     function getPhase(etapa) {
       if (!etapa) return 1;
@@ -5460,13 +5493,74 @@ function exportReportToHTML(
       return i.fecha_eliminacion || null;
     }
 
+    // Poblar las opciones de los selectores superiores
+    function initFilterOptions() {
+      const vps = new Set();
+      const insts = new Set();
+      const bps = new Set();
+      const estados = new Set();
+      const lideres = new Set();
+
+      RAW_DATA.forEach(i => {
+        if (i.vp_solicitante) vps.add(i.vp_solicitante.trim());
+        if (i.institucion) insts.add(i.institucion.trim());
+        if (i.it_business_partner) bps.add(i.it_business_partner.trim());
+        if (i.etapa_actual) estados.add(i.etapa_actual.trim());
+        if (i.lider_dominio) lideres.add(i.lider_dominio.trim());
+      });
+
+      const fill = (id, set, allLabel) => {
+        const el = document.getElementById(id);
+        if (!el) return;
+        const current = el.value;
+        el.innerHTML = \`<option value="TODOS">\${allLabel}</option>\` +
+          Array.from(set).sort().map(val => \`<option value="\${escapeJs(val)}">\${val}</option>\`).join('');
+        if (current && Array.from(set).includes(current)) el.value = current;
+      };
+
+      fill('select-vp', vps, \`Todas las VPs (\${vps.size})\`);
+      fill('select-institucion', insts, 'Todas las Instituciones');
+      fill('select-itbp', bps, 'Todos los IT BP');
+      fill('select-estado', estados, 'Todos los Estados');
+      fill('select-lider', lideres, 'Todos los Líderes');
+    }
+
+    // Obtener data filtrada por los selectores superiores
+    function getActiveDataset() {
+      return RAW_DATA.filter(i => {
+        if (filterVP !== 'TODOS' && filterVP !== 'TODAS' && (i.vp_solicitante || '').trim() !== filterVP) return false;
+        if (filterInstitucion !== 'TODOS' && filterInstitucion !== 'TODAS' && (i.institucion || '').trim() !== filterInstitucion) return false;
+        if (filterITBP !== 'TODOS' && (i.it_business_partner || '').trim() !== filterITBP) return false;
+        if (filterEstado !== 'TODOS' && (i.etapa_actual || '').trim() !== filterEstado) return false;
+        if (filterLider !== 'TODOS' && (i.lider_dominio || '').trim() !== filterLider) return false;
+        return true;
+      });
+    }
+
+    function onFilterChange() {
+      filterVP = document.getElementById('select-vp').value;
+      filterInstitucion = document.getElementById('select-institucion').value;
+      filterITBP = document.getElementById('select-itbp').value;
+      filterEstado = document.getElementById('select-estado').value;
+      filterLider = document.getElementById('select-lider').value;
+
+      const currentDataset = getActiveDataset();
+      const badge = document.getElementById('top-counter-badge');
+      if (badge) badge.innerText = \`\${currentDataset.length} iniciativa\${currentDataset.length === 1 ? '' : 's'}\`;
+
+      renderPhaseCards();
+      renderStrategicCards();
+      renderTimeline();
+    }
+
     // Render Cards de Fase con estilos idénticos a la app
     function renderPhaseCards() {
-      const total = RAW_DATA.length || 1;
-      const f1 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 1);
-      const f2 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 2);
-      const f3 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 3);
-      const fObs = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 'observaciones');
+      const dataset = getActiveDataset();
+      const total = dataset.length || 1;
+      const f1 = dataset.filter(i => getPhase(i.etapa_actual) === 1);
+      const f2 = dataset.filter(i => getPhase(i.etapa_actual) === 2);
+      const f3 = dataset.filter(i => getPhase(i.etapa_actual) === 3);
+      const fObs = dataset.filter(i => getPhase(i.etapa_actual) === 'observaciones');
 
       const calcAction = list => {
         const it = list.filter(i => getResponsable(i) === 'IT').length;
@@ -5644,7 +5738,8 @@ function exportReportToHTML(
 
     // Render 3 Cards Estratégicos con layout idéntico a la app
     function renderStrategicCards() {
-      const active = RAW_DATA.filter(i => !['eliminadas', 'eliminada', 'registro_incompleto'].includes(i.etapa_actual));
+      const dataset = getActiveDataset();
+      const active = dataset.filter(i => !['eliminadas', 'eliminada', 'registro_incompleto'].includes(i.etapa_actual));
       const itItems = active.filter(i => getResponsable(i) === 'IT');
       const negItems = active.filter(i => getResponsable(i) === 'Negocio');
       const totActive = itItems.length + negItems.length || 1;
@@ -5661,7 +5756,7 @@ function exportReportToHTML(
 
       // Top Ecosistemas / Frente con desglose de fases
       const ecoMap = {};
-      RAW_DATA.forEach(i => {
+      dataset.forEach(i => {
         const name = getFrenteName(i);
         if (!ecoMap[name]) ecoMap[name] = { name, total: 0, f1: 0, f2: 0, f3: 0, fObs: 0 };
         ecoMap[name].total++;
@@ -5681,7 +5776,7 @@ function exportReportToHTML(
       let sinFecha = 0;
       const upcoming = [];
 
-      RAW_DATA.filter(i => !['eliminadas', 'eliminada'].includes(i.etapa_actual)).forEach(i => {
+      dataset.filter(i => !['eliminadas', 'eliminada'].includes(i.etapa_actual)).forEach(i => {
         const rawDate = getMilestoneDate(i);
         if (!rawDate) { sinFecha++; return; }
         const dt = parseDate(rawDate);
@@ -5753,7 +5848,7 @@ function exportReportToHTML(
                 const f2Pct = (eco.f2 / tot) * 100;
                 const f3Pct = (eco.f3 / tot) * 100;
                 const fObsPct = (eco.fObs / tot) * 100;
-                const pctGlobal = Math.round((eco.total / RAW_DATA.length) * 100);
+                const pctGlobal = Math.round((eco.total / dataset.length) * 100);
                 return \`
                   <div style="display: flex; flex-direction: column; gap: 3px;">
                     <div style="display: flex; align-items: center; justify-content: space-between; gap: 8px;">
@@ -5844,15 +5939,30 @@ function exportReportToHTML(
     function clearAllFilters() {
       activePhaseFilter = null;
       searchQuery = '';
-      const input = document.getElementById('filter-search');
-      if (input) input.value = '';
+      filterVP = 'TODOS';
+      filterInstitucion = 'TODOS';
+      filterITBP = 'TODOS';
+      filterEstado = 'TODOS';
+      filterLider = 'TODOS';
+
+      const sVP = document.getElementById('select-vp'); if (sVP) sVP.value = 'TODOS';
+      const sInst = document.getElementById('select-institucion'); if (sInst) sInst.value = 'TODOS';
+      const sITBP = document.getElementById('select-itbp'); if (sITBP) sITBP.value = 'TODOS';
+      const sEst = document.getElementById('select-estado'); if (sEst) sEst.value = 'TODOS';
+      const sLid = document.getElementById('select-lider'); if (sLid) sLid.value = 'TODOS';
+      const input = document.getElementById('filter-search'); if (input) input.value = '';
+
+      const badge = document.getElementById('top-counter-badge');
+      if (badge) badge.innerText = \`\${RAW_DATA.length} iniciativas\`;
+
       renderPhaseCards();
+      renderStrategicCards();
       renderTimeline();
     }
 
-    // Render Timeline Gantt
+    // Render Timeline Gantt con cabecera de meses y línea de HOY
     function renderTimeline() {
-      let filtered = [...RAW_DATA];
+      let filtered = getActiveDataset();
 
       if (activePhaseFilter !== null) {
         filtered = filtered.filter(i => getPhase(i.etapa_actual) === activePhaseFilter);
@@ -5888,8 +5998,11 @@ function exportReportToHTML(
         clearBtn.style.display = 'none';
       }
 
-      let minTime = Infinity;
-      let maxTime = -Infinity;
+      // Fechas para calcular rango global
+      const now = new Date();
+      const todayTime = now.getTime();
+      let minTime = todayTime;
+      let maxTime = todayTime;
 
       filtered.forEach(i => {
         const isElim = ['eliminadas', 'eliminada'].includes(i.etapa_actual);
@@ -5912,15 +6025,56 @@ function exportReportToHTML(
         }
       });
 
-      if (minTime === Infinity || maxTime === -Infinity || minTime === maxTime) {
-        const now = new Date();
-        minTime = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
-        maxTime = new Date(now.getFullYear(), now.getMonth() + 4, 1).getTime();
+      // Asegurar margen temporal
+      const minDateObj = new Date(minTime);
+      const maxDateObj = new Date(maxTime);
+      const startRange = new Date(minDateObj.getFullYear(), minDateObj.getMonth(), 1);
+      const endRange = new Date(maxDateObj.getFullYear(), maxDateObj.getMonth() + 2, 1);
+      const rangeMin = startRange.getTime();
+      const rangeMax = endRange.getTime();
+      const totalDuration = rangeMax - rangeMin || 1;
+
+      // Calcular posición de la línea de HOY
+      const todayLeftPct = Math.max(0, Math.min(100, ((todayTime - rangeMin) / totalDuration) * 100));
+
+      // 1. Renderizar Cabecera de Meses en la columna Gantt
+      const monthHeaderContainer = document.getElementById('gantt-month-headers');
+      if (monthHeaderContainer) {
+        let curr = new Date(startRange);
+        const months = [];
+        while (curr < endRange) {
+          const next = new Date(curr.getFullYear(), curr.getMonth() + 1, 1);
+          const startMs = curr.getTime();
+          const endMs = Math.min(next.getTime(), rangeMax);
+          const leftPct = ((startMs - rangeMin) / totalDuration) * 100;
+          const widthPct = ((endMs - startMs) / totalDuration) * 100;
+          months.push({
+            label: MONTH_NAMES[curr.getMonth()] + ' ' + curr.getFullYear(),
+            leftPct,
+            widthPct
+          });
+          curr = next;
+        }
+
+        monthHeaderContainer.innerHTML = \`
+          <div style="position: absolute; inset: 0; display: flex;">
+            \${months.map(m => \`
+              <div style="position: absolute; left: \${m.leftPct}%; width: \${m.widthPct}%; height: 100%; border-right: 1px solid #e2e8f0; padding: 9px 6px; box-sizing: border-box; font-size: 10px; font-weight: 700; color: #475569; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-transform: capitalize;">
+                \${m.label}
+              </div>
+            \`).join('')}
+
+            <!-- Badge flotante de HOY -->
+            <div style="position: absolute; left: \${todayLeftPct}%; top: 5px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
+              <span>📍 HOY</span>
+              <span style="font-weight: 600; opacity: 0.9;">(\${fmtDate(now)})</span>
+            </div>
+          </div>
+        \`;
       }
 
-      const totalDuration = maxTime - minTime || 1;
+      // 2. Renderizar Filas de iniciativas
       const tbody = document.getElementById('timeline-tbody');
-
       if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px; color: #94a3b8;">No hay iniciativas que coincidan con los filtros seleccionados.</td></tr>';
         return;
@@ -6009,10 +6163,13 @@ function exportReportToHTML(
             <td style="font-family: monospace; color: #64748b;">\${startDisplay}</td>
             <td style="font-family: monospace; color: #64748b;">\${endDisplay}</td>
             <td class="gantt-cell">
-              \${segments.length === 0 ? '<span style="font-size: 10px; color: #94a3b8; font-style: italic;">Sin fechas</span>' : ''}
+              <!-- Línea vertical de HOY -->
+              <div style="position: absolute; left: \${todayLeftPct}%; top: 0; bottom: 0; width: 2px; border-left: 2px dashed #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.35); z-index: 15; pointer-events: none;"></div>
+
+              \${segments.length === 0 ? '<span style="font-size: 10px; color: #94a3b8; font-style: italic; position: relative; z-index: 2;">Sin fechas</span>' : ''}
               \${segments.map(seg => {
-                const left = Math.max(0, ((seg.start.getTime() - minTime) / totalDuration) * 100);
-                const right = Math.min(100, ((seg.end.getTime() - minTime) / totalDuration) * 100);
+                const left = Math.max(0, ((seg.start.getTime() - rangeMin) / totalDuration) * 100);
+                const right = Math.min(100, ((seg.end.getTime() - rangeMin) / totalDuration) * 100);
                 const width = Math.max(2.0, right - left);
                 return \`
                   <div class="gantt-bar"
@@ -6050,6 +6207,8 @@ function exportReportToHTML(
       renderTimeline();
     });
 
+    // Inicialización completa
+    initFilterOptions();
     renderPhaseCards();
     renderStrategicCards();
     renderTimeline();

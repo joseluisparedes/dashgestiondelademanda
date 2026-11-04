@@ -4864,30 +4864,29 @@ function exportReportToHTML(
   const fechaGeneracion = format(now, 'dd/MM/yyyy HH:mm:ss');
   const fileDate = format(now, 'yyyyMMdd_HHmm');
 
-  const fase1 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 1);
-  const fase2 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 2);
-  const fase3 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 3);
-  const faseObs = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 'observaciones');
-
-  const total = iniciativas.length;
-  const itCount = iniciativas.filter(i => getInitiativeActionOwner(i) === 'IT').length;
-  const negocioCount = iniciativas.filter(i => getInitiativeActionOwner(i) === 'Negocio').length;
+  // Solo incluir iniciativas correspondientes a la VP seleccionada (o las VPs seleccionadas)
+  const dataFiltered = iniciativas;
 
   const vpFiltrosTexto = selectedVPs.length > 0
     ? selectedVPs.map(v => optLabel(v)).join(', ')
     : 'Todas las Vicepresidencias';
+
+  // Serializar datos limpios para el runtime JS interactivo del HTML exportado
+  const serializedIniciativas = JSON.stringify(dataFiltered).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>${escapeHtml(reportTitle)} - ${escapeHtml(fechaGeneracion)}</title>
+  <title>${escapeHtml(reportTitle)} - ${escapeHtml(vpFiltrosTexto)}</title>
   <style>
     :root {
       --primary: #0284c7;
+      --primary-dark: #0369a1;
       --bg: #f8fafc;
       --border: #e2e8f0;
+      --border-dark: #cbd5e1;
       --text: #0f172a;
       --text-muted: #64748b;
     }
@@ -4900,199 +4899,804 @@ function exportReportToHTML(
       padding: 24px;
     }
     .header {
-      background: white;
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
-      padding: 24px;
-      margin-bottom: 24px;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      padding: 20px 24px;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+    }
+    .header-top {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 16px;
+      flex-wrap: wrap;
     }
     .header h1 {
-      font-size: 22px;
+      font-size: 20px;
       font-weight: 800;
       color: #0f172a;
-      margin-bottom: 6px;
+      letter-spacing: -0.01em;
     }
     .meta-bar {
       display: flex;
       flex-wrap: wrap;
-      gap: 16px;
+      gap: 14px;
       font-size: 12px;
       color: var(--text-muted);
       margin-top: 10px;
+      align-items: center;
     }
     .meta-pill {
       background: #eff6ff;
       color: #1e40af;
       padding: 3px 10px;
       border-radius: 6px;
-      font-weight: 600;
+      font-weight: 700;
       border: 1px solid #bfdbfe;
     }
-    .kpi-grid {
+
+    /* Phase Cards */
+    .phase-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
       gap: 14px;
-      margin-bottom: 24px;
+      margin-bottom: 20px;
     }
-    .kpi-card {
-      background: white;
+    .phase-card {
+      background: #ffffff;
+      border: 2px solid var(--border);
+      border-radius: 12px;
+      padding: 16px 18px;
+      cursor: pointer;
+      transition: all 0.15s ease;
+      position: relative;
+      user-select: none;
+      text-align: left;
+    }
+    .phase-card:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 6px 16px rgba(0,0,0,0.06);
+    }
+    .phase-card.active {
+      border-color: #0284c7;
+      background: #f0f9ff;
+      box-shadow: 0 0 0 3px rgba(2, 132, 199, 0.2);
+    }
+    .phase-tag {
+      font-size: 10px;
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      margin-bottom: 4px;
+      display: inline-block;
+    }
+    .phase-num {
+      font-size: 28px;
+      font-weight: 800;
+      color: #0f172a;
+      line-height: 1.1;
+      margin-bottom: 4px;
+    }
+    .phase-desc {
+      font-size: 12px;
+      color: var(--text-muted);
+      font-weight: 600;
+    }
+    .phase-sublist {
+      margin-top: 10px;
+      padding-top: 10px;
+      border-top: 1px dashed var(--border);
+      display: flex;
+      flex-direction: column;
+      gap: 3px;
+      font-size: 11px;
+    }
+    .phase-subitem {
+      display: flex;
+      justify-content: space-between;
+      color: #475569;
+    }
+
+    /* Strategic Cards */
+    .strat-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+      gap: 14px;
+      margin-bottom: 20px;
+    }
+    .strat-card {
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
       padding: 16px 18px;
-      box-shadow: 0 1px 2px rgba(0,0,0,0.04);
-      border-top: 4px solid var(--accent);
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
-    .kpi-title { font-size: 11px; font-weight: 700; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.05em; }
-    .kpi-value { font-size: 26px; font-weight: 800; color: #0f172a; margin: 6px 0; }
-    .kpi-sub { font-size: 11px; color: var(--text-muted); }
+    .strat-title {
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
 
-    .table-container {
-      background: white;
+    /* Filter banner */
+    .filter-banner {
+      background: #ffffff;
+      border: 1px solid var(--border);
+      border-radius: 10px;
+      padding: 10px 16px;
+      margin-bottom: 16px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 10px;
+    }
+    .filter-badge {
+      background: #0284c7;
+      color: white;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 2px 8px;
+      border-radius: 4px;
+    }
+    .clear-btn {
+      background: #f1f5f9;
+      border: 1px solid var(--border);
+      color: #475569;
+      font-size: 11px;
+      font-weight: 700;
+      padding: 4px 10px;
+      border-radius: 6px;
+      cursor: pointer;
+    }
+    .clear-btn:hover { background: #e2e8f0; }
+
+    /* Timeline Section */
+    .timeline-container {
+      background: #ffffff;
       border: 1px solid var(--border);
       border-radius: 12px;
-      overflow-x: auto;
-      box-shadow: 0 1px 3px rgba(0,0,0,0.05);
+      overflow: hidden;
+      margin-bottom: 20px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.02);
     }
-    table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 12px;
-      text-align: left;
-    }
-    th {
+    .timeline-header {
+      padding: 14px 20px;
       background: #f8fafc;
-      padding: 10px 12px;
+      border-bottom: 1px solid var(--border);
+      font-size: 14px;
       font-weight: 700;
-      color: #475569;
-      border-bottom: 2px solid var(--border);
-      white-space: nowrap;
+      color: #0f172a;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
     }
-    td {
-      padding: 9px 12px;
+    .timeline-body {
+      overflow-x: auto;
+      min-width: 100%;
+    }
+    .timeline-table {
+      width: 100%;
+      min-width: 900px;
+      border-collapse: collapse;
+      font-size: 11px;
+    }
+    .timeline-table th {
+      background: #f1f5f9;
+      color: #475569;
+      font-weight: 700;
+      padding: 8px 10px;
+      border-bottom: 1px solid var(--border);
+      text-align: left;
+      font-size: 11px;
+      position: sticky;
+      top: 0;
+      z-index: 2;
+    }
+    .timeline-table td {
+      padding: 8px 10px;
       border-bottom: 1px solid #f1f5f9;
       vertical-align: middle;
     }
-    tr:nth-child(even) td { background: #fafafa; }
-    tr:hover td { background: #f0fdf4; }
+    .timeline-table tr:hover td {
+      background: #f8fafc;
+    }
+    .gantt-cell {
+      position: relative;
+      height: 36px;
+      min-width: 500px;
+      background: linear-gradient(90deg, #f8fafc 0%, #f8fafc 100%);
+    }
+    .gantt-bar {
+      position: absolute;
+      top: 50%;
+      transform: translateY(-50%);
+      height: 20px;
+      border-radius: 4px;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      color: #ffffff;
+      font-size: 9.5px;
+      font-weight: 800;
+      padding: 0 6px;
+      box-shadow: 0 1px 3px rgba(0,0,0,0.15);
+      cursor: pointer;
+      white-space: nowrap;
+      overflow: hidden;
+      text-overflow: ellipsis;
+      transition: transform 0.1s ease;
+    }
+    .gantt-bar:hover {
+      transform: translateY(-50%) scaleY(1.15);
+      filter: brightness(1.1);
+      z-index: 10;
+    }
 
+    /* Badges */
     .badge {
       display: inline-block;
-      padding: 2px 8px;
-      border-radius: 12px;
-      font-size: 11px;
+      padding: 2px 7px;
+      border-radius: 4px;
+      font-size: 10.5px;
       font-weight: 600;
       white-space: nowrap;
     }
-    .badge-fase1 { background: #fef3c7; color: #b45309; }
-    .badge-fase2 { background: #eff6ff; color: #1d4ed8; }
-    .badge-fase3 { background: #ecfdf5; color: #047857; }
-    .badge-faseobs { background: #fff1f2; color: #991b1b; }
+    .badge-fase1 { background: #fef3c7; color: #92400e; border: 1px solid #fde68a; }
+    .badge-fase2 { background: #dbeafe; color: #1e40af; border: 1px solid #bfdbfe; }
+    .badge-fase3 { background: #d1fae5; color: #065f46; border: 1px solid #a7f3d0; }
+    .badge-faseobs { background: #fee2e2; color: #991b1b; border: 1px solid #fca5a5; }
 
-    .badge-it { background: #eff6ff; color: #2563eb; font-weight: 700; }
-    .badge-negocio { background: #fffbeb; color: #d97706; font-weight: 700; }
+    /* Tooltip */
+    #tooltip {
+      position: fixed;
+      display: none;
+      background: #0f172a;
+      color: #ffffff;
+      padding: 8px 12px;
+      border-radius: 6px;
+      font-size: 11px;
+      pointer-events: none;
+      z-index: 1000;
+      box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+      max-width: 320px;
+    }
 
+    /* Print */
     @media print {
       body { background: white; padding: 0; }
-      .header, .kpi-card, .table-container { box-shadow: none; border-color: #cbd5e1; }
-      th, td { padding: 6px 8px; font-size: 10px; }
       .no-print { display: none !important; }
+      .phase-card, .strat-card, .timeline-container { box-shadow: none; border-color: #cbd5e1; }
+      .timeline-table th, .timeline-table td { font-size: 9.5px; padding: 4px 6px; }
     }
   </style>
 </head>
 <body>
+  <div id="tooltip"></div>
+
+  <!-- Header -->
   <div class="header">
-    <div style="display: flex; justify-content: space-between; align-items: flex-start; gap: 16px;">
+    <div class="header-top">
       <div>
         <h1>${escapeHtml(reportTitle)}</h1>
-        <p style="color: #64748b; font-size: 13px;">Consolidado Ejecutivo de Iniciativas, Estados del Pipeline y Responsabilidades</p>
+        <p style="color: #64748b; font-size: 13px; margin-top: 2px;">
+          Consolidado Interactivo de Demanda TI • Cronograma Gantt y Fases
+        </p>
       </div>
-      <button class="no-print" onclick="window.print()" style="padding: 8px 16px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 12px; font-weight: 600; cursor: pointer;">Imprimir / Guardar PDF</button>
+      <button class="no-print" onclick="window.print()" style="padding: 7px 14px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
+        🖨️ Imprimir / Guardar PDF
+      </button>
     </div>
     <div class="meta-bar">
       <span>Generado: <strong>${escapeHtml(fechaGeneracion)}</strong></span>
-      <span>Iniciativas mostradas: <strong>${total}</strong></span>
-      <span>Vicepresidencias: <span class="meta-pill">${escapeHtml(vpFiltrosTexto)}</span></span>
+      <span>Vicepresidencia(s): <span class="meta-pill">${escapeHtml(vpFiltrosTexto)}</span></span>
+      <span id="meta-total">Iniciativas: <strong>${dataFiltered.length}</strong></span>
     </div>
   </div>
 
-  <div class="kpi-grid">
-    <div class="kpi-card" style="--accent: #f59e0b;">
-      <div class="kpi-title">Fase 1: Estimación y Aprobación</div>
-      <div class="kpi-value">${fase1.length}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((fase1.length / total) * 100) : 0}% del total</div>
+  <!-- 4 Phase Cards (Filtros dinámicos interactivos) -->
+  <div class="phase-grid" id="phase-cards-container">
+    <!-- Generado dinámicamente por JS -->
+  </div>
+
+  <!-- 3 Strategic Cards -->
+  <div class="strat-grid" id="strategic-cards-container">
+    <!-- Generado dinámicamente por JS -->
+  </div>
+
+  <!-- Timeline Gantt Section -->
+  <div class="timeline-container" id="timeline-section">
+    <div class="timeline-header">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span>Cronograma de Iniciativas (Timeline Gantt)</span>
+        <span id="timeline-count-badge" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
+          ${dataFiltered.length} iniciativas
+        </span>
+      </div>
+      <div class="no-print" style="display: flex; align-items: center; gap: 8px;">
+        <input type="text" id="filter-search" placeholder="🔍 Buscar ID, título..." style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; width: 180px;">
+        <button class="clear-btn" id="btn-clear-filters" style="display: none;" onclick="clearAllFilters()">✕ Restablecer Filtros</button>
+      </div>
     </div>
-    <div class="kpi-card" style="--accent: #2563eb;">
-      <div class="kpi-title">Fase 2: Planificación y Presupuesto</div>
-      <div class="kpi-value">${fase2.length}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((fase2.length / total) * 100) : 0}% del total</div>
+    <div class="filter-banner" id="active-filter-banner" style="display: none;">
+      <div style="display: flex; align-items: center; gap: 8px;">
+        <span class="filter-badge">Filtro Activo</span>
+        <span style="font-size: 12px; font-weight: 700; color: #1e293b;" id="filter-banner-text"></span>
+      </div>
+      <button class="clear-btn" onclick="clearAllFilters()">✕ Ver todas las iniciativas</button>
     </div>
-    <div class="kpi-card" style="--accent: #059669;">
-      <div class="kpi-title">Fase 3: Planificadas e Implementadas</div>
-      <div class="kpi-value">${fase3.length}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((fase3.length / total) * 100) : 0}% del total</div>
-    </div>
-    <div class="kpi-card" style="--accent: #e11d48;">
-      <div class="kpi-title">Con Observaciones (Incompleto / Eliminadas)</div>
-      <div class="kpi-value">${faseObs.length}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((faseObs.length / total) * 100) : 0}% del total</div>
-    </div>
-    <div class="kpi-card" style="--accent: #3b82f6;">
-      <div class="kpi-title">Acción Pendiente IT</div>
-      <div class="kpi-value">${itCount}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((itCount / total) * 100) : 0}% del total</div>
-    </div>
-    <div class="kpi-card" style="--accent: #d97706;">
-      <div class="kpi-title">Acción Pendiente Negocio</div>
-      <div class="kpi-value">${negocioCount}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((negocioCount / total) * 100) : 0}% del total</div>
+    <div class="timeline-body">
+      <table class="timeline-table">
+        <thead>
+          <tr>
+            <th style="width: 55px;">ID</th>
+            <th style="width: 260px;">Iniciativa</th>
+            <th style="width: 140px;">Fase / Etapa</th>
+            <th style="width: 80px;">Inicio</th>
+            <th style="width: 80px;">Fin</th>
+            <th>Cronograma Temporal</th>
+          </tr>
+        </thead>
+        <tbody id="timeline-tbody">
+          <!-- Renderizado dinámicamente -->
+        </tbody>
+      </table>
     </div>
   </div>
 
-  <div class="table-container">
-    <table>
-      <thead>
-        <tr>
-          <th style="width: 50px;">ID</th>
-          <th>Título de la Iniciativa</th>
-          <th>VP Solicitante</th>
-          <th>Institución</th>
-          <th>Etapa Pipeline</th>
-          <th>Fase</th>
-          <th>Siguiente Acción</th>
-          <th>Fecha Hito</th>
-          <th style="text-align: right;">Costo USD</th>
-          <th style="text-align: right;">Costo Soles</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${iniciativas.map(i => {
-          const phase = getVpPipelinePhase(i.etapa_actual);
-          const owner = getInitiativeActionOwner(i);
-          const phaseBadgeClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
-          const phaseLabel = phase === 1 ? 'Fase 1: Estimación' : phase === 2 ? 'Fase 2: Planificación' : phase === 3 ? 'Fase 3: Planif./Impl.' : 'Con Observaciones';
-          const ownerBadgeClass = owner === 'IT' ? 'badge-it' : owner === 'Negocio' ? 'badge-negocio' : '';
-          const milestoneDt = getInitiativeMilestoneDate(i);
-          const dtFormatted = milestoneDt ? fmtDateShort(milestoneDt) : '—';
-          return `<tr>
-            <td style="font-weight: 700; color: #475569;">#${i.id}</td>
-            <td style="font-weight: 600; color: #0f172a; max-width: 320px;">${escapeHtml(i.titulo || 'Sin Título')}</td>
-            <td>${escapeHtml(i.vp_solicitante || '—')}</td>
-            <td>${escapeHtml(i.institucion || '—')}</td>
-            <td><span class="badge" style="background: #f1f5f9; color: #334155;">${escapeHtml(getEtapaHumanLabel(i.etapa_actual))}</span></td>
-            <td><span class="badge ${phaseBadgeClass}">${escapeHtml(phaseLabel)}</span></td>
-            <td>${owner !== 'None' ? `<span class="badge ${ownerBadgeClass}">${owner}</span>` : '<span style="color: #94a3b8; font-size: 11px;">Completado</span>'}</td>
-            <td style="font-family: monospace; font-size: 11px;">${escapeHtml(dtFormatted)}</td>
-            <td style="text-align: right; font-family: monospace;">${i.costo_usd ? `$${i.costo_usd.toLocaleString('en-US')}` : '—'}</td>
-            <td style="text-align: right; font-family: monospace;">${i.costo_soles ? `S/ ${i.costo_soles.toLocaleString('es-PE')}` : '—'}</td>
-          </tr>`;
-        }).join('')}
-      </tbody>
-    </table>
+  <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 16px;">
+    Exportación de Gestión de la Demanda TI • Archivo interactivo autónomo
   </div>
-  <div style="margin-top: 16px; text-align: right; font-size: 11px; color: #94a3b8;">
-    Documento generado automáticamente por Dashboard de Gestión de la Demanda TI.
-  </div>
+
+  <!-- Runtime JS Interactivo -->
+  <script>
+    const RAW_DATA = ${serializedIniciativas};
+    let activePhaseFilter = null;
+    let searchQuery = '';
+
+    // Mapeo de Fases según reglas de negocio
+    function getPhase(etapa) {
+      if (!etapa) return 1;
+      const e = String(etapa).toLowerCase().trim();
+      if (['por_estimar', 'por_aprobar_estimacion', 'por_reestimar'].includes(e)) return 1;
+      if (['por_planificar', 'aprobar_planificacion', 'por_aprobar_planificacion', 'por_habilitar_presupuesto'].includes(e)) return 2;
+      if (['planificadas', 'planificada', 'implementadas', 'implementada', 'por_iniciar', 'en_ejecucion', 'terminado', 'detenido'].includes(e)) return 3;
+      if (['eliminadas', 'eliminada', 'registro_incompleto'].includes(e)) return 'observaciones';
+      return 1;
+    }
+
+    function getEtapaLabel(etapa) {
+      if (!etapa) return 'Sin etapa';
+      const map = {
+        'registro_incompleto': 'Registro incompleto',
+        'por_estimar': 'Por estimar',
+        'por_aprobar_estimacion': 'Por aprobar estimación',
+        'por_reestimar': 'Por reestimar',
+        'por_habilitar_presupuesto': 'Habilitar presupuesto',
+        'por_planificar': 'Por planificar',
+        'aprobar_planificacion': 'Por aprobar planificación',
+        'por_aprobar_planificacion': 'Por aprobar planificación',
+        'planificadas': 'Planificada',
+        'planificada': 'Planificada',
+        'por_iniciar': 'Por iniciar',
+        'en_ejecucion': 'En ejecución',
+        'terminado': 'Terminado',
+        'detenido': 'Detenido',
+        'implementadas': 'Implementada',
+        'implementada': 'Implementada',
+        'eliminadas': 'Eliminada',
+        'eliminada': 'Eliminada'
+      };
+      return map[etapa] || etapa.replace(/_/g, ' ');
+    }
+
+    function parseDate(val) {
+      if (!val) return null;
+      try {
+        const d = new Date(val);
+        return isNaN(d.getTime()) ? null : d;
+      } catch { return null; }
+    }
+
+    function fmtDate(d) {
+      if (!d) return '—';
+      const dt = typeof d === 'string' ? parseDate(d) : d;
+      if (!dt) return '—';
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const mm = String(dt.getMonth() + 1).padStart(2, '0');
+      const yyyy = dt.getFullYear();
+      return \`\${dd}/\${mm}/\${yyyy}\`;
+    }
+
+    function getResponsable(i) {
+      const e = (i.etapa_actual || '').toLowerCase();
+      if (['por_aprobar_estimacion', 'por_habilitar_presupuesto', 'aprobar_planificacion', 'por_aprobar_planificacion'].includes(e)) {
+        return 'Negocio';
+      }
+      if (['por_estimar', 'por_reestimar', 'por_planificar', 'planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(e)) {
+        return 'IT';
+      }
+      return 'None';
+    }
+
+    function normalizeEco(eco) {
+      if (!eco) return 'Sin Ecosistema';
+      const t = eco.trim();
+      return t.charAt(0).toUpperCase() + t.slice(1).toLowerCase();
+    }
+
+    // Render Cards de Fase
+    function renderPhaseCards() {
+      const f1 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 1);
+      const f2 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 2);
+      const f3 = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 3);
+      const fObs = RAW_DATA.filter(i => getPhase(i.etapa_actual) === 'observaciones');
+
+      const container = document.getElementById('phase-cards-container');
+      container.innerHTML = \`
+        <div class="phase-card \${activePhaseFilter === 1 ? 'active' : ''}" onclick="togglePhase(1)">
+          <div class="phase-tag" style="color: #b45309;">Fase 1</div>
+          <div class="phase-num">\${f1.length}</div>
+          <div class="phase-desc">Estimación y Aprobación</div>
+          <div class="phase-sublist">
+            <div class="phase-subitem"><span>Por estimar</span><strong>\${f1.filter(i => i.etapa_actual === 'por_estimar').length}</strong></div>
+            <div class="phase-subitem"><span>Por aprobar estimación</span><strong>\${f1.filter(i => i.etapa_actual === 'por_aprobar_estimacion').length}</strong></div>
+            <div class="phase-subitem"><span>Por reestimar</span><strong>\${f1.filter(i => i.etapa_actual === 'por_reestimar').length}</strong></div>
+          </div>
+        </div>
+
+        <div class="phase-card \${activePhaseFilter === 2 ? 'active' : ''}" onclick="togglePhase(2)">
+          <div class="phase-tag" style="color: #1d4ed8;">Fase 2</div>
+          <div class="phase-num">\${f2.length}</div>
+          <div class="phase-desc">Planificación y Presupuesto</div>
+          <div class="phase-sublist">
+            <div class="phase-subitem"><span>Por planificar</span><strong>\${f2.filter(i => i.etapa_actual === 'por_planificar').length}</strong></div>
+            <div class="phase-subitem"><span>Por aprobar planif.</span><strong>\${f2.filter(i => ['aprobar_planificacion', 'por_aprobar_planificacion'].includes(i.etapa_actual)).length}</strong></div>
+            <div class="phase-subitem"><span>Habilitar presupuesto</span><strong>\${f2.filter(i => i.etapa_actual === 'por_habilitar_presupuesto').length}</strong></div>
+          </div>
+        </div>
+
+        <div class="phase-card \${activePhaseFilter === 3 ? 'active' : ''}" onclick="togglePhase(3)">
+          <div class="phase-tag" style="color: #047857;">Fase 3</div>
+          <div class="phase-num">\${f3.length}</div>
+          <div class="phase-desc">Planificadas e Implementadas</div>
+          <div class="phase-sublist">
+            <div class="phase-subitem"><span>Planificadas</span><strong>\${f3.filter(i => ['planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(i.etapa_actual)).length}</strong></div>
+            <div class="phase-subitem"><span>Implementadas</span><strong>\${f3.filter(i => ['implementadas', 'implementada', 'terminado'].includes(i.etapa_actual)).length}</strong></div>
+          </div>
+        </div>
+
+        <div class="phase-card \${activePhaseFilter === 'observaciones' ? 'active' : ''}" onclick="togglePhase('observaciones')">
+          <div class="phase-tag" style="color: #991b1b;">Con Observaciones</div>
+          <div class="phase-num">\${fObs.length}</div>
+          <div class="phase-desc">Eliminadas y Registro Incompleto</div>
+          <div class="phase-sublist">
+            <div class="phase-subitem"><span>Eliminadas</span><strong>\${fObs.filter(i => ['eliminadas', 'eliminada'].includes(i.etapa_actual)).length}</strong></div>
+            <div class="phase-subitem"><span>Registro incompleto</span><strong>\${fObs.filter(i => i.etapa_actual === 'registro_incompleto').length}</strong></div>
+          </div>
+        </div>
+      \`;
+    }
+
+    // Render Cards Estratégicos
+    function renderStrategicCards() {
+      const active = RAW_DATA.filter(i => !['eliminadas', 'eliminada', 'registro_incompleto'].includes(i.etapa_actual));
+      const itItems = active.filter(i => getResponsable(i) === 'IT');
+      const negItems = active.filter(i => getResponsable(i) === 'Negocio');
+
+      // Top Ecosistemas
+      const ecoCount = {};
+      RAW_DATA.forEach(i => {
+        const eco = normalizeEco(i.ecosistema);
+        ecoCount[eco] = (ecoCount[eco] || 0) + 1;
+      });
+      const topEcos = Object.entries(ecoCount).sort((a,b) => b[1] - a[1]).slice(0, 4);
+
+      // Fechas
+      const now = new Date();
+      let vencidas = 0;
+      let proximas = 0;
+      RAW_DATA.forEach(i => {
+        if (['eliminadas', 'eliminada'].includes(i.etapa_actual)) return;
+        const dStr = i.fecha_fin_planificada || i.fecha_fin_estimacion || i.fecha_fin_real;
+        const d = parseDate(dStr);
+        if (!d) return;
+        const diffDays = Math.ceil((d.getTime() - now.getTime()) / (1000 * 60 * 60 * 24));
+        if (diffDays < 0) vencidas++;
+        else if (diffDays <= 15) proximas++;
+      });
+
+      const container = document.getElementById('strategic-cards-container');
+      container.innerHTML = \`
+        <div class="strat-card">
+          <div class="strat-title">⚖️ Cuello de Botella: Responsabilidad</div>
+          <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+            <div style="flex: 1; padding: 10px; background: #eff6ff; border-radius: 8px; border-left: 3px solid #2563eb;">
+              <div style="font-size: 11px; color: #1e40af; font-weight: 700;">EN CANCHA TI</div>
+              <div style="font-size: 22px; font-weight: 800; color: #1e3a8a;">\${itItems.length}</div>
+            </div>
+            <div style="flex: 1; padding: 10px; background: #fffbeb; border-radius: 8px; border-left: 3px solid #d97706;">
+              <div style="font-size: 11px; color: #b45309; font-weight: 700;">EN NEGOCIO</div>
+              <div style="font-size: 22px; font-weight: 800; color: #78350f;">\${negItems.length}</div>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: #64748b; line-height: 1.4;">
+            Permite destrabar acuerdos identificando quién debe dar el siguiente paso de aprobación o avance técnico.
+          </div>
+        </div>
+
+        <div class="strat-card">
+          <div class="strat-title">🌐 Distribución por Ecosistema</div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            \${topEcos.map(([eco, count]) => {
+              const pct = Math.round((count / RAW_DATA.length) * 100);
+              return \`
+                <div>
+                  <div style="display: flex; justify-content: space-between; font-size: 11.5px; margin-bottom: 3px;">
+                    <span style="font-weight: 600; color: #334155;">\${eco}</span>
+                    <strong style="color: #0f172a;">\${count} (\${pct}%)</strong>
+                  </div>
+                  <div style="background: #e2e8f0; border-radius: 4px; height: 6px; overflow: hidden;">
+                    <div style="background: #0284c7; width: \${pct}%; height: 100%;"></div>
+                  </div>
+                </div>
+              \`;
+            }).join('')}
+          </div>
+        </div>
+
+        <div class="strat-card">
+          <div class="strat-title">📅 Salud y Cumplimiento de Fechas</div>
+          <div style="display: flex; gap: 10px; margin-bottom: 12px;">
+            <div style="flex: 1; padding: 10px; background: #fef2f2; border-radius: 8px; border-left: 3px solid #ef4444;">
+              <div style="font-size: 11px; color: #991b1b; font-weight: 700;">HITOS VENCIDOS</div>
+              <div style="font-size: 22px; font-weight: 800; color: #7f1d1d;">\${vencidas}</div>
+            </div>
+            <div style="flex: 1; padding: 10px; background: #fff7ed; border-radius: 8px; border-left: 3px solid #f97316;">
+              <div style="font-size: 11px; color: #c2410c; font-weight: 700;">VENCE EN 15 DÍAS</div>
+              <div style="font-size: 22px; font-weight: 800; color: #9a3412;">\${proximas}</div>
+            </div>
+          </div>
+          <div style="font-size: 11.5px; color: #64748b; line-height: 1.4;">
+            Seguimiento de fechas límite comprometidas para estimaciones y salidas a producción.
+          </div>
+        </div>
+      \`;
+    }
+
+    // Toggle de fase interactivo
+    function togglePhase(phase) {
+      if (activePhaseFilter === phase) {
+        activePhaseFilter = null;
+      } else {
+        activePhaseFilter = phase;
+      }
+      renderPhaseCards();
+      renderTimeline();
+    }
+
+    function clearAllFilters() {
+      activePhaseFilter = null;
+      searchQuery = '';
+      const input = document.getElementById('filter-search');
+      if (input) input.value = '';
+      renderPhaseCards();
+      renderTimeline();
+    }
+
+    // Render del Timeline Gantt
+    function renderTimeline() {
+      let filtered = [...RAW_DATA];
+
+      if (activePhaseFilter !== null) {
+        filtered = filtered.filter(i => getPhase(i.etapa_actual) === activePhaseFilter);
+      }
+
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase().trim();
+        filtered = filtered.filter(i =>
+          String(i.id).includes(q) ||
+          (i.titulo || '').toLowerCase().includes(q) ||
+          (i.lider_dominio || '').toLowerCase().includes(q)
+        );
+      }
+
+      // Actualizar banners y contadores
+      const banner = document.getElementById('active-filter-banner');
+      const clearBtn = document.getElementById('btn-clear-filters');
+      const bannerText = document.getElementById('filter-banner-text');
+      const countBadge = document.getElementById('timeline-count-badge');
+      countBadge.innerText = \`\${filtered.length} iniciativa\${filtered.length === 1 ? '' : 's'}\`;
+
+      if (activePhaseFilter !== null || searchQuery.trim()) {
+        banner.style.display = 'flex';
+        clearBtn.style.display = 'inline-block';
+        let txt = '';
+        if (activePhaseFilter === 1) txt = 'Fase 1 (Estimación y Aprobación)';
+        else if (activePhaseFilter === 2) txt = 'Fase 2 (Planificación y Presupuesto)';
+        else if (activePhaseFilter === 3) txt = 'Fase 3 (Planificadas e Implementadas)';
+        else if (activePhaseFilter === 'observaciones') txt = 'Con Observaciones (Registro Incompleto y Eliminadas)';
+        if (searchQuery.trim()) txt += (txt ? ' • ' : '') + \`Búsqueda: "\${searchQuery}"\`;
+        bannerText.innerText = \`Mostrando \${filtered.length} iniciativas: \${txt}\`;
+      } else {
+        banner.style.display = 'none';
+        clearBtn.style.display = 'none';
+      }
+
+      // Calcular rango temporal global para el Gantt
+      let minTime = Infinity;
+      let maxTime = -Infinity;
+
+      filtered.forEach(i => {
+        const isElim = ['eliminadas', 'eliminada'].includes(i.etapa_actual);
+        if (isElim) {
+          const d = parseDate(i.fecha_eliminacion);
+          if (d) {
+            const t = d.getTime();
+            if (t < minTime) minTime = t;
+            if (t > maxTime) maxTime = t;
+          }
+        } else {
+          [i.fecha_inicio_estimacion, i.fecha_fin_estimacion, i.fecha_inicio_planificada, i.fecha_fin_planificada, i.fecha_inicio_real, i.fecha_fin_real, i.fecha_pase_produccion, i.fecha_conformidad].forEach(ds => {
+            const d = parseDate(ds);
+            if (d) {
+              const t = d.getTime();
+              if (t < minTime) minTime = t;
+              if (t > maxTime) maxTime = t;
+            }
+          });
+        }
+      });
+
+      if (minTime === Infinity || maxTime === -Infinity || minTime === maxTime) {
+        const now = new Date();
+        minTime = new Date(now.getFullYear(), now.getMonth() - 2, 1).getTime();
+        maxTime = new Date(now.getFullYear(), now.getMonth() + 4, 1).getTime();
+      }
+
+      const totalDuration = maxTime - minTime || 1;
+
+      const tbody = document.getElementById('timeline-tbody');
+      if (filtered.length === 0) {
+        tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px; color: #94a3b8;">No hay iniciativas que coincidan con los filtros seleccionados.</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = filtered.map(i => {
+        const isElim = ['eliminadas', 'eliminada'].includes(i.etapa_actual);
+        const phase = getPhase(i.etapa_actual);
+        const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
+
+        // Segmentos específicos
+        const segments = [];
+        let startDisplay = '—';
+        let endDisplay = '—';
+
+        if (isElim) {
+          const dElim = parseDate(i.fecha_eliminacion);
+          if (dElim) {
+            startDisplay = fmtDate(dElim);
+            endDisplay = fmtDate(dElim);
+            segments.push({
+              start: dElim,
+              end: dElim,
+              label: '✕ ' + i.id,
+              bg: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+              border: '#991b1b',
+              tooltip: \`<b>[Eliminada]</b> \${i.id}<br>Fecha: \${fmtDate(dElim)}<br>\${i.solicitado_por ? 'Sol: ' + i.solicitado_por + '<br>' : ''}\${i.motivo_eliminacion ? 'Motivo: ' + i.motivo_eliminacion : ''}\`
+            });
+          }
+        } else {
+          // Estimación (solo si NO está planificada)
+          const isPlan = ['planificadas', 'planificada', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) || Boolean(i.fecha_inicio_planificada || i.fecha_fin_planificada || i.fecha_inicio_real || i.fecha_fin_real);
+          if (!isPlan) {
+            const s = parseDate(i.fecha_inicio_estimacion);
+            const e = parseDate(i.fecha_fin_estimacion);
+            if (s || e) {
+              const st = (s && e) ? (s <= e ? s : e) : (s || e);
+              const en = (s && e) ? (s <= e ? e : s) : (e || s);
+              startDisplay = fmtDate(st);
+              endDisplay = fmtDate(en);
+              segments.push({
+                start: st,
+                end: en,
+                label: String(i.id),
+                bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+                border: '#b45309',
+                tooltip: \`<b>[Estimación]</b> \${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.estatus_estimacion || ''}\`
+              });
+            }
+          }
+          // Planificada
+          const sp = parseDate(i.fecha_inicio_planificada || i.fecha_inicio_real);
+          const ep = parseDate(i.fecha_fin_planificada || i.fecha_fin_real);
+          if (sp || ep) {
+            const st = (sp && ep) ? (sp <= ep ? sp : ep) : (sp || ep);
+            const en = (sp && ep) ? (sp <= ep ? ep : sp) : (ep || sp);
+            startDisplay = fmtDate(st);
+            endDisplay = fmtDate(en);
+            segments.push({
+              start: st,
+              end: en,
+              label: String(i.id),
+              bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
+              border: '#047857',
+              tooltip: \`<b>[Planificada]</b> \${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.planificacion_aprobada ? 'Aprobada: ' + i.planificacion_aprobada : ''}\`
+            });
+          }
+        }
+
+        return \`
+          <tr>
+            <td style="font-weight: 800; color: #475569;">#\${i.id}</td>
+            <td>
+              <div style="font-weight: 700; color: #0f172a; max-width: 280px; word-break: break-word;">\${i.titulo || 'Sin Título'}</div>
+              \${isElim ? \`
+                <div style="margin-top: 2px;">
+                  <span style="font-size: 9.5px; font-weight: 700; color: #991b1b; background: #fee2e2; border: 1px solid #fca5a5; padding: 1px 5px; border-radius: 4px;">
+                    ✕ Eliminada: \${fmtDate(i.fecha_eliminacion)}
+                  </span>
+                </div>
+              \` : ''}
+            </td>
+            <td>
+              <span class="badge \${phaseClass}">\${getEtapaLabel(i.etapa_actual)}</span>
+            </td>
+            <td style="font-family: monospace; color: #64748b;">\${startDisplay}</td>
+            <td style="font-family: monospace; color: #64748b;">\${endDisplay}</td>
+            <td class="gantt-cell">
+              \${segments.length === 0 ? '<span style="font-size: 10px; color: #94a3b8; font-style: italic;">Sin fechas</span>' : ''}
+              \${segments.map(seg => {
+                const left = Math.max(0, ((seg.start.getTime() - minTime) / totalDuration) * 100);
+                const right = Math.min(100, ((seg.end.getTime() - minTime) / totalDuration) * 100);
+                const width = Math.max(1.8, right - left);
+                return \`
+                  <div class="gantt-bar"
+                       style="left: \${left}%; width: \${width}%; background: \${seg.bg}; border: 1px solid \${seg.border};"
+                       onmouseenter="showTooltip(event, '\${escapeJs(seg.tooltip)}')"
+                       onmouseleave="hideTooltip()">
+                    \${seg.label}
+                  </div>
+                \`;
+              }).join('')}
+            </td>
+          </tr>
+        \`;
+      }).join('');
+    }
+
+    function escapeJs(str) {
+      if (!str) return '';
+      return str.replace(/'/g, "\\\\'").replace(/"/g, '&quot;');
+    }
+
+    const tip = document.getElementById('tooltip');
+    function showTooltip(e, html) {
+      tip.innerHTML = html;
+      tip.style.display = 'block';
+      tip.style.left = (e.clientX + 14) + 'px';
+      tip.style.top = (e.clientY + 14) + 'px';
+    }
+    function hideTooltip() {
+      tip.style.display = 'none';
+    }
+
+    // Listener de búsqueda
+    document.getElementById('filter-search').addEventListener('input', e => {
+      searchQuery = e.target.value;
+      renderTimeline();
+    });
+
+    // Inicialización
+    renderPhaseCards();
+    renderStrategicCards();
+    renderTimeline();
+  </script>
 </body>
 </html>`;
 

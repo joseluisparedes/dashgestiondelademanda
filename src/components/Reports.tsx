@@ -508,6 +508,9 @@ interface MacroMultiSelectProps {
   icon?: React.ReactNode;
   labelFn?: (v: string) => string;
   isMotivoSelect?: boolean;
+  placeholder?: string;
+  isOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
 }
 
 function MacroMultiSelect({
@@ -518,13 +521,27 @@ function MacroMultiSelect({
   icon,
   labelFn,
   isMotivoSelect = false,
+  placeholder,
+  isOpen,
+  onOpenChange,
 }: MacroMultiSelectProps) {
-  const [open, setOpen] = useState(false);
+  const [internalOpen, setInternalOpen] = useState(false);
+  const open = isOpen !== undefined ? isOpen : internalOpen;
+  const setOpen = (next: boolean | ((prev: boolean) => boolean)) => {
+    const val = typeof next === 'function' ? next(open) : next;
+    if (onOpenChange) onOpenChange(val);
+    else setInternalOpen(val);
+  };
+
+  const [search, setSearch] = useState('');
   const ref = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     function onOut(e: MouseEvent) {
-      if (ref.current && !ref.current.contains(e.target as Node)) setOpen(false);
+      if (ref.current && !ref.current.contains(e.target as Node)) {
+        setOpen(false);
+        setSearch('');
+      }
     }
     document.addEventListener('mousedown', onOut);
     return () => document.removeEventListener('mousedown', onOut);
@@ -535,6 +552,12 @@ function MacroMultiSelect({
 
   const hasSelection = selected.length > 0;
   const displayLabel = (v: string) => optLabel(v, labelFn);
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const q = search.toLowerCase().trim();
+    return options.filter(opt => displayLabel(opt).toLowerCase().includes(q));
+  }, [options, search, labelFn]);
 
   return (
     <div ref={ref} style={{ position: 'relative', zIndex: open ? 9000 : 1 }}>
@@ -592,7 +615,7 @@ function MacroMultiSelect({
             ? selected.length === 1
               ? displayLabel(selected[0]).slice(0, 22) + (displayLabel(selected[0]).length > 22 ? '…' : '')
               : `${selected.length} seleccionados`
-            : 'Todos'}
+            : placeholder || 'Todos'}
         </span>
         <ChevronDown
           size={12}
@@ -692,117 +715,188 @@ function MacroMultiSelect({
             border: '1px solid #e2e8f0',
             borderRadius: 10,
             boxShadow: '0 12px 28px -4px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.04)',
-            minWidth: isMotivoSelect ? 280 : 220,
-            maxWidth: isMotivoSelect ? 360 : 280,
-            maxHeight: 280,
-            overflowY: 'auto',
+            minWidth: isMotivoSelect ? 280 : 230,
+            maxWidth: isMotivoSelect ? 360 : 300,
+            maxHeight: 320,
+            display: 'flex',
+            flexDirection: 'column',
+            overflow: 'hidden',
             zIndex: 99999,
           }}
         >
-          {hasSelection && (
+          {/* Cabecera de acciones rápidas */}
+          <div
+            style={{
+              display: 'flex',
+              borderBottom: '1px solid #f1f5f9',
+              background: '#f8fafc',
+            }}
+          >
             <button
-              onClick={() => onChange([])}
+              type="button"
+              onClick={() => onChange([...options])}
               style={{
-                width: '100%',
-                textAlign: 'left',
-                padding: '8px 12px',
-                fontSize: 11,
-                color: '#ef4444',
-                background: '#fff1f2',
+                flex: 1,
+                textAlign: 'center',
+                padding: '6px 8px',
+                fontSize: 10.5,
+                color: '#2563eb',
+                background: 'transparent',
                 border: 'none',
-                borderBottom: '1px solid #fee2e2',
+                borderRight: hasSelection ? '1px solid #e2e8f0' : 'none',
                 cursor: 'pointer',
                 fontWeight: 700,
               }}
             >
-              Limpiar selección
+              Seleccionar todas
             </button>
-          )}
-          {options.map(opt => {
-            const isSelected = selected.includes(opt);
-            if (isMotivoSelect) {
-              const conf = getMotivoStyle(opt);
-              return (
-                <label
-                  key={opt}
-                  style={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 8,
-                    padding: '6px 10px',
-                    cursor: 'pointer',
-                    background: isSelected ? '#f8fafc' : 'transparent',
-                    borderBottom: '1px solid #f8fafc',
-                    transition: 'background 0.1s',
-                  }}
-                  onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
-                  onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = isSelected ? '#f8fafc' : 'transparent'; }}
-                >
-                  <input
-                    type="checkbox"
-                    checked={isSelected}
-                    onChange={() => toggle(opt)}
-                    style={{ width: 13, height: 13, accentColor: conf.dotColor, flexShrink: 0 }}
-                  />
-                  <span
-                    style={{
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 5,
-                      fontSize: 10.5,
-                      fontWeight: isSelected ? 800 : 600,
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      backgroundColor: conf.bg,
-                      border: `1px solid ${conf.border}`,
-                      color: conf.color,
-                      lineHeight: 1.25,
-                      textAlign: 'left',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 5.5,
-                        height: 5.5,
-                        borderRadius: '50%',
-                        backgroundColor: conf.dotColor,
-                        flexShrink: 0,
-                      }}
-                    />
-                    {displayLabel(opt)}
-                  </span>
-                </label>
-              );
-            }
-            return (
-              <label
-                key={opt}
+            {hasSelection && (
+              <button
+                type="button"
+                onClick={() => onChange([])}
+                style={{
+                  flex: 1,
+                  textAlign: 'center',
+                  padding: '6px 8px',
+                  fontSize: 10.5,
+                  color: '#ef4444',
+                  background: 'transparent',
+                  border: 'none',
+                  cursor: 'pointer',
+                  fontWeight: 700,
+                }}
+              >
+                Limpiar selección
+              </button>
+            )}
+          </div>
+
+          {/* Buscador interno si hay más de 6 opciones */}
+          {options.length > 6 && (
+            <div style={{ padding: '6px 8px', borderBottom: '1px solid #f1f5f9' }}>
+              <div
                 style={{
                   display: 'flex',
                   alignItems: 'center',
-                  gap: 8,
-                  padding: '7px 12px',
-                  fontSize: 11,
-                  color: opt === EMPTY_SENTINEL ? '#b45309' : isSelected ? '#1d4ed8' : '#334155',
-                  cursor: 'pointer',
-                  fontWeight: isSelected ? 700 : 400,
-                  fontStyle: opt === EMPTY_SENTINEL ? 'italic' : 'normal',
-                  background: isSelected ? '#eff6ff' : 'transparent',
-                  transition: 'background 0.1s',
+                  gap: 6,
+                  background: '#f8fafc',
+                  padding: '4px 8px',
+                  borderRadius: 6,
+                  border: '1px solid #e2e8f0',
                 }}
-                onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
-                onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
               >
+                <Search size={11} style={{ color: '#94a3b8' }} />
                 <input
-                  type="checkbox"
-                  checked={isSelected}
-                  onChange={() => toggle(opt)}
-                  style={{ width: 13, height: 13, accentColor: '#3b82f6', flexShrink: 0 }}
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar..."
+                  style={{ border: 'none', background: 'transparent', fontSize: 11, outline: 'none', width: '100%', color: '#1e293b' }}
+                  onClick={e => e.stopPropagation()}
                 />
-                <span>{displayLabel(opt)}</span>
-              </label>
-            );
-          })}
+                {search && (
+                  <button type="button" onClick={() => setSearch('')} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', color: '#94a3b8' }}>
+                    <X size={10} />
+                  </button>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* Lista de opciones scrolleable */}
+          <div style={{ overflowY: 'auto', maxHeight: 230 }}>
+            {filteredOptions.length === 0 ? (
+              <div style={{ padding: '12px 14px', fontSize: 11, color: '#94a3b8', textAlign: 'center' }}>
+                No hay coincidencias
+              </div>
+            ) : (
+              filteredOptions.map(opt => {
+                const isSelected = selected.includes(opt);
+                if (isMotivoSelect) {
+                  const conf = getMotivoStyle(opt);
+                  return (
+                    <label
+                      key={opt}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '6px 10px',
+                        cursor: 'pointer',
+                        background: isSelected ? '#f8fafc' : 'transparent',
+                        borderBottom: '1px solid #f8fafc',
+                        transition: 'background 0.1s',
+                      }}
+                      onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                      onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = isSelected ? '#f8fafc' : 'transparent'; }}
+                    >
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => toggle(opt)}
+                        style={{ width: 13, height: 13, accentColor: conf.dotColor, flexShrink: 0 }}
+                      />
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          fontSize: 10.5,
+                          fontWeight: isSelected ? 800 : 600,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          backgroundColor: conf.bg,
+                          border: `1px solid ${conf.border}`,
+                          color: conf.color,
+                          lineHeight: 1.25,
+                          textAlign: 'left',
+                        }}
+                      >
+                        <span
+                          style={{
+                            width: 5.5,
+                            height: 5.5,
+                            borderRadius: '50%',
+                            backgroundColor: conf.dotColor,
+                            flexShrink: 0,
+                          }}
+                        />
+                        {displayLabel(opt)}
+                      </span>
+                    </label>
+                  );
+                }
+                return (
+                  <label
+                    key={opt}
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: 8,
+                      padding: '7px 12px',
+                      fontSize: 11,
+                      color: opt === EMPTY_SENTINEL ? '#b45309' : isSelected ? '#1d4ed8' : '#334155',
+                      cursor: 'pointer',
+                      fontWeight: isSelected ? 700 : 400,
+                      fontStyle: opt === EMPTY_SENTINEL ? 'italic' : 'normal',
+                      background: isSelected ? '#eff6ff' : 'transparent',
+                      transition: 'background 0.1s',
+                    }}
+                    onMouseEnter={e => { if (!isSelected) e.currentTarget.style.backgroundColor = '#f8fafc'; }}
+                    onMouseLeave={e => { if (!isSelected) e.currentTarget.style.backgroundColor = 'transparent'; }}
+                  >
+                    <input
+                      type="checkbox"
+                      checked={isSelected}
+                      onChange={() => toggle(opt)}
+                      style={{ width: 13, height: 13, accentColor: '#3b82f6', flexShrink: 0 }}
+                    />
+                    <span>{displayLabel(opt)}</span>
+                  </label>
+                );
+              })
+            )}
+          </div>
         </div>
       )}
     </div>
@@ -2844,7 +2938,7 @@ function parseTimelineDate(d: string | null | undefined): Date | null {
   return null;
 }
 
-type TimelineStageKey = 'estimacion' | 'reestimacion' | 'planificada' | 'implementada';
+type TimelineStageKey = 'estimacion' | 'reestimacion' | 'planificada' | 'implementada' | 'eliminada';
 
 interface TimelineSegment {
   id: string;
@@ -2950,6 +3044,101 @@ function classifyAM(i: Iniciativa): GrupoAMKey {
   }
 
   return 'vacio';
+}
+
+// ---------------------------------------------------------------------------
+// Clasificación Ejecutiva de 4 Fases y Etiquetas Humanas (Reporte VP)
+// ---------------------------------------------------------------------------
+export type VpPipelinePhase = 1 | 2 | 3 | 'observaciones';
+
+export function getVpPipelinePhase(etapa: string): VpPipelinePhase {
+  const norm = (etapa || '').trim().toLowerCase();
+  // Fase 1: Por estimar, Por aprobar estimación, Por reestimar
+  if (
+    norm === 'por_estimar' ||
+    norm === 'por_aprobar_estimacion' ||
+    norm === 'por_reestimar'
+  ) {
+    return 1;
+  }
+  // Fase 2: Por planificar, Por aprobar planificación, Habilitar presupuesto
+  if (
+    norm === 'por_planificar' ||
+    norm === 'aprobar_planificacion' ||
+    norm === 'por_aprobar_planificacion' ||
+    norm === 'por_habilitar_presupuesto'
+  ) {
+    return 2;
+  }
+  // Con observaciones: Registro incompleto y Eliminadas
+  if (
+    norm === 'registro_incompleto' ||
+    norm === 'eliminadas' ||
+    norm === 'eliminada'
+  ) {
+    return 'observaciones';
+  }
+  // Fase 3: Planificadas, Implementadas y etapas de ejecución activa
+  return 3;
+}
+
+export function getEtapaHumanLabel(etapa: string): string {
+  const norm = (etapa || '').trim().toLowerCase();
+  switch (norm) {
+    case 'por_estimar':
+      return 'Por estimar';
+    case 'por_aprobar_estimacion':
+      return 'Por aprobar estimación';
+    case 'por_reestimar':
+      return 'Por reestimar';
+    case 'por_planificar':
+      return 'Por planificar';
+    case 'aprobar_planificacion':
+    case 'por_aprobar_planificacion':
+      return 'Por aprobar planificación';
+    case 'por_habilitar_presupuesto':
+      return 'Habilitar presupuesto';
+    case 'planificadas':
+    case 'planificada':
+      return 'Planificadas';
+    case 'implementadas':
+    case 'implementada':
+      return 'Implementadas';
+    case 'por_iniciar':
+      return 'Por iniciar';
+    case 'en_ejecucion':
+      return 'En ejecución';
+    case 'terminado':
+      return 'Terminado';
+    case 'detenido':
+      return 'Detenido';
+    case 'registro_incompleto':
+      return 'Registro incompleto';
+    case 'eliminadas':
+    case 'eliminada':
+      return 'Eliminadas';
+    default: {
+      const fromMap =
+        ETAPAS_MAP.get(norm as EtapaPipeline)?.label ||
+        ETAPAS_PLANIFICADAS_MAP.get(norm as EtapaPipeline)?.label;
+      if (fromMap) return fromMap;
+      return norm.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase());
+    }
+  }
+}
+
+export function normalizeEcosistemaName(rawName: string): string {
+  const trimmed = (rawName || '').trim();
+  if (!trimmed) return 'General / Otros';
+  return trimmed
+    .toLowerCase()
+    .split(/\s+/)
+    .map(word => {
+      if (word.length <= 2 && !['ti', 'am', 'vp', 'sn'].includes(word)) return word;
+      if (word === 'ti' || word === 'am' || word === 'vp' || word === 'sn') return word.toUpperCase();
+      return word.charAt(0).toUpperCase() + word.slice(1);
+    })
+    .join(' ');
 }
 
 interface TimelineRowItem {
@@ -3073,6 +3262,28 @@ function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
     });
   }
 
+  // 5. Eliminadas (v86 - Muestra la fecha de eliminación en el Timeline)
+  const fechaElim = parseTimelineDate(i.fecha_eliminacion);
+  if (fechaElim) {
+    const parts: string[] = [];
+    parts.push(`Eliminada: ${fmtDateShort(i.fecha_eliminacion)}`);
+    if (i.solicitado_por) parts.push(`Solicitado por: ${i.solicitado_por}`);
+    if (i.motivo_eliminacion) parts.push(`Motivo: ${i.motivo_eliminacion}`);
+    segs.push({
+      id: `${i.id}-elim`,
+      stageKey: 'eliminada',
+      stageName: 'Eliminada',
+      start: fechaElim,
+      end: fechaElim,
+      isSingleDay: true,
+      color: '#ef4444',
+      gradient: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+      borderColor: '#991b1b',
+      textColor: '#ffffff',
+      details: parts.join(' | '),
+    });
+  }
+
   return segs;
 }
 
@@ -3081,9 +3292,13 @@ const DEFAULT_TIMELINE_PAGE_SIZE = 40;
 function TimelineIniciativasVP({
   iniciativas,
   onOpenDetailModal,
+  phaseFilter,
+  onClearPhaseFilter,
 }: {
   iniciativas: Iniciativa[];
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
+  phaseFilter?: VpPipelinePhase | null;
+  onClearPhaseFilter?: () => void;
 }) {
   const [isReady, setIsReady] = useState<boolean>(false);
   const [selectedVP, setSelectedVP] = useState<string>('TODAS');
@@ -3144,13 +3359,22 @@ function TimelineIniciativasVP({
         ['planificadas', 'implementadas', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) ||
         Boolean(i.fecha_inicio_planificada || i.fecha_fin_planificada || i.fecha_inicio_real || i.fecha_fin_real);
 
-      const startDate = isPlan
-        ? parseTimelineDate(i.fecha_inicio_planificada || i.fecha_inicio_real) || earliestDate
-        : parseTimelineDate(i.fecha_inicio_estimacion) || earliestDate;
+      const isElim = (i.etapa_actual as string) === 'eliminadas' || (i.etapa_actual as string) === 'eliminada';
+      const fechaElim = parseTimelineDate(i.fecha_eliminacion);
 
-      const endDate = isPlan
-        ? parseTimelineDate(i.fecha_fin_planificada || i.fecha_fin_real) || latestDate
-        : parseTimelineDate(i.fecha_fin_estimacion) || latestDate;
+      let startDate: Date | null = null;
+      let endDate: Date | null = null;
+
+      if (isElim && fechaElim) {
+        startDate = fechaElim;
+        endDate = fechaElim;
+      } else if (isPlan) {
+        startDate = parseTimelineDate(i.fecha_inicio_planificada || i.fecha_inicio_real) || earliestDate;
+        endDate = parseTimelineDate(i.fecha_fin_planificada || i.fecha_fin_real) || latestDate;
+      } else {
+        startDate = parseTimelineDate(i.fecha_inicio_estimacion) || earliestDate;
+        endDate = parseTimelineDate(i.fecha_fin_estimacion) || latestDate;
+      }
 
       const grupoAM = classifyAM(i);
 
@@ -3171,6 +3395,13 @@ function TimelineIniciativasVP({
   // Filtrar iniciativas
   const filteredRows = useMemo(() => {
     return allRows.filter(row => {
+      // Filtro dinámico por Fase seleccionada desde el Dashboard Estadístico
+      if (phaseFilter) {
+        if (getVpPipelinePhase(row.iniciativa.etapa_actual) !== phaseFilter) {
+          return false;
+        }
+      }
+
       if (selectedVP !== 'TODAS') {
         const vp = normalize(row.iniciativa.vp_solicitante);
         if (vp !== selectedVP) return false;
@@ -3191,7 +3422,7 @@ function TimelineIniciativasVP({
 
       return true;
     });
-  }, [allRows, selectedVP, filterAM, onlyWithDates, searchTerm]);
+  }, [allRows, phaseFilter, selectedVP, filterAM, onlyWithDates, searchTerm]);
 
   // Ordenar iniciativas
   const sortedRows = useMemo(() => {
@@ -3330,6 +3561,7 @@ function TimelineIniciativasVP({
 
   return (
     <div
+      id="cronograma-timeline-section"
       style={{
         marginTop: 24,
         background: '#ffffff',
@@ -3441,6 +3673,97 @@ function TimelineIniciativasVP({
           </span>
         </div>
       </div>
+
+      {/* Banner de Filtro Dinámico por Fase (sincronizado con Dashboard Estadístico) */}
+      {phaseFilter && (
+        <div
+          style={{
+            padding: '9px 20px',
+            background: 'linear-gradient(90deg, #eff6ff 0%, #f0fdf4 100%)',
+            borderBottom: '1px solid #bfdbfe',
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 12,
+          }}
+        >
+          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8 }}>
+            <span
+              style={{
+                fontSize: 10,
+                fontWeight: 800,
+                textTransform: 'uppercase',
+                letterSpacing: '0.06em',
+                padding: '3px 8px',
+                borderRadius: 4,
+                background:
+                  phaseFilter === 1
+                    ? '#fef3c7'
+                    : phaseFilter === 2
+                    ? '#dbeafe'
+                    : phaseFilter === 3
+                    ? '#d1fae5'
+                    : '#fee2e2',
+                color:
+                  phaseFilter === 1
+                    ? '#b45309'
+                    : phaseFilter === 2
+                    ? '#1d4ed8'
+                    : phaseFilter === 3
+                    ? '#047857'
+                    : '#991b1b',
+              }}
+            >
+              Filtro Activo
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
+              Mostrando iniciativas de:{' '}
+              <strong style={{ color: '#0284c7' }}>
+                {phaseFilter === 1 && 'Fase 1 (Estimación y Aprobación)'}
+                {phaseFilter === 2 && 'Fase 2 (Planificación y Presupuesto)'}
+                {phaseFilter === 3 && 'Fase 3 (Planificadas e Implementadas)'}
+                {phaseFilter === 'observaciones' && 'Con Observaciones (Registro Incompleto y Eliminadas)'}
+              </strong>
+            </span>
+            <span style={{ fontSize: 11, color: '#64748b' }}>
+              ({filteredRows.length} iniciativas en el cronograma)
+            </span>
+          </div>
+
+          {onClearPhaseFilter && (
+            <button
+              onClick={onClearPhaseFilter}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 5,
+                padding: '4px 11px',
+                borderRadius: 6,
+                background: '#ffffff',
+                border: '1px solid #cbd5e1',
+                color: '#334155',
+                fontSize: 11,
+                fontWeight: 700,
+                cursor: 'pointer',
+                boxShadow: '0 1px 2px rgba(0,0,0,0.05)',
+                transition: 'all 0.15s ease',
+              }}
+              onMouseEnter={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = '#94a3b8';
+                (e.currentTarget as HTMLElement).style.color = '#0f172a';
+              }}
+              onMouseLeave={e => {
+                (e.currentTarget as HTMLElement).style.borderColor = '#cbd5e1';
+                (e.currentTarget as HTMLElement).style.color = '#334155';
+              }}
+            >
+              <X size={12} />
+              <span>Ver todas las fases</span>
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Barra de Filtros y Controles del Timeline */}
       <div
@@ -3993,22 +4316,51 @@ function TimelineIniciativasVP({
                                         {row.iniciativa.id} ·
                                       </span>
 
-                                      <span
-                                        onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
-                                        title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${etapaCfg?.label || row.iniciativa.etapa_actual}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
-                                        style={{
-                                          fontSize: 11,
-                                          fontWeight: 600,
-                                          color: '#1e293b',
-                                          cursor: 'pointer',
-                                          whiteSpace: 'normal',
-                                          wordBreak: 'break-word',
-                                          lineHeight: 1.35,
-                                          flex: 1,
-                                        }}
-                                      >
-                                        {row.iniciativa.titulo}
-                                      </span>
+                                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                        <span
+                                          onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                          title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${getEtapaHumanLabel(row.iniciativa.etapa_actual)}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
+                                          style={{
+                                            fontSize: 11,
+                                            fontWeight: 600,
+                                            color: '#1e293b',
+                                            cursor: 'pointer',
+                                            whiteSpace: 'normal',
+                                            wordBreak: 'break-word',
+                                            lineHeight: 1.35,
+                                          }}
+                                        >
+                                          {row.iniciativa.titulo}
+                                        </span>
+
+                                        {/* Badge para iniciativas eliminadas: Muestra fecha de eliminación y motivo */}
+                                        {(row.iniciativa.etapa_actual === 'eliminadas' || row.iniciativa.etapa_actual === 'eliminada') && (
+                                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                            <span
+                                              style={{
+                                                fontSize: 9.5,
+                                                fontWeight: 700,
+                                                padding: '1px 6px',
+                                                borderRadius: 4,
+                                                background: '#fee2e2',
+                                                color: '#991b1b',
+                                                border: '1px solid #fca5a5',
+                                                display: 'inline-flex',
+                                                alignItems: 'center',
+                                                gap: 3,
+                                              }}
+                                              title={row.iniciativa.motivo_eliminacion || undefined}
+                                            >
+                                              ✕ Eliminada: {row.iniciativa.fecha_eliminacion ? fmtDateShort(row.iniciativa.fecha_eliminacion) : 'Sin fecha'}
+                                            </span>
+                                            {row.iniciativa.solicitado_por && (
+                                              <span style={{ fontSize: 9, color: '#7f1d1d', fontWeight: 600 }}>
+                                                Sol: {row.iniciativa.solicitado_por}
+                                              </span>
+                                            )}
+                                          </div>
+                                        )}
+                                      </div>
                                     </div>
 
                                     {/* Columna 2: F. Inicio (85px) */}
@@ -4078,6 +4430,7 @@ function TimelineIniciativasVP({
                                       ) : (
                                         /* Segmentos de Tiempo con ID impreso dentro de la barra */
                                         row.segments.map((seg, sIdx) => {
+                                          const isElimSeg = seg.stageKey === 'eliminada';
                                           const leftPct = Math.max(
                                             0,
                                             ((seg.start.getTime() - minDate.getTime()) / totalDuration) * 100
@@ -4102,16 +4455,16 @@ function TimelineIniciativasVP({
                                                 transform: 'translateY(-50%)',
                                                 height: 18,
                                                 borderRadius: 4,
-                                                background: grp.barGradient,
-                                                border: `1px solid ${grp.barBorder}`,
-                                                boxShadow: '0 1px 2px rgba(0,0,0,0.12)',
+                                                background: seg.gradient || grp.barGradient,
+                                                border: `1px solid ${seg.borderColor || grp.barBorder}`,
+                                                boxShadow: isElimSeg ? '0 1px 3px rgba(239, 68, 68, 0.45)' : '0 1px 2px rgba(0,0,0,0.12)',
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
                                                 justifyContent: 'center',
                                                 padding: '0 4px',
                                                 boxSizing: 'border-box',
-                                                zIndex: seg.isSingleDay ? 8 : 4 + sIdx,
+                                                zIndex: isElimSeg ? 9 : seg.isSingleDay ? 8 : 4 + sIdx,
                                                 transition: 'transform 0.1s ease, filter 0.1s ease, z-index 0.1s ease',
                                               }}
                                               onMouseEnter={e => {
@@ -4131,7 +4484,7 @@ function TimelineIniciativasVP({
                                                 const target = e.currentTarget as HTMLElement;
                                                 target.style.transform = 'translateY(-50%)';
                                                 target.style.filter = 'none';
-                                                target.style.zIndex = String(seg.isSingleDay ? 8 : 4 + sIdx);
+                                                target.style.zIndex = String(isElimSeg ? 9 : seg.isSingleDay ? 8 : 4 + sIdx);
                                                 setTooltipData(null);
                                               }}
                                               onClick={() =>
@@ -4147,8 +4500,12 @@ function TimelineIniciativasVP({
                                                   overflow: 'hidden',
                                                   textOverflow: 'ellipsis',
                                                   textShadow: '0 1px 2px rgba(0,0,0,0.4)',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: 2,
                                                 }}
                                               >
+                                                {isElimSeg && '✕ '}
                                                 {row.iniciativa.id}
                                               </span>
                                             </div>
@@ -4320,40 +4677,60 @@ function TimelineIniciativasVP({
 
           {/* Fechas */}
           <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10 }}>
-            <div>
-              <span style={{ color: '#94a3b8' }}>Inicio:</span>{' '}
-              <strong style={{ color: '#ffffff' }}>
-                {format(tooltipData.seg.start, 'dd/MM/yyyy')}
-              </strong>{' '}
-              <span style={{ color: '#94a3b8' }}>➔ Fin:</span>{' '}
-              <strong style={{ color: '#ffffff' }}>
-                {format(tooltipData.seg.end, 'dd/MM/yyyy')}
-              </strong>
-            </div>
+            {tooltipData.seg.stageKey === 'eliminada' ? (
+              <div style={{ padding: '6px 8px', background: 'rgba(239, 68, 68, 0.25)', border: '1px solid #ef4444', borderRadius: 6, display: 'flex', flexDirection: 'column', gap: 2 }}>
+                <div style={{ color: '#fca5a5', fontWeight: 800 }}>
+                  ✕ Iniciativa Eliminada el {format(tooltipData.seg.start, 'dd/MM/yyyy')}
+                </div>
+                {tooltipData.iniciativa.solicitado_por && (
+                  <div style={{ color: '#ffffff' }}>
+                    Solicitado por: <strong>{tooltipData.iniciativa.solicitado_por}</strong>
+                  </div>
+                )}
+                {tooltipData.iniciativa.motivo_eliminacion && (
+                  <div style={{ color: '#fecdd3', fontStyle: 'italic' }}>
+                    Motivo: {tooltipData.iniciativa.motivo_eliminacion}
+                  </div>
+                )}
+              </div>
+            ) : (
+              <>
+                <div>
+                  <span style={{ color: '#94a3b8' }}>Inicio:</span>{' '}
+                  <strong style={{ color: '#ffffff' }}>
+                    {format(tooltipData.seg.start, 'dd/MM/yyyy')}
+                  </strong>{' '}
+                  <span style={{ color: '#94a3b8' }}>➔ Fin:</span>{' '}
+                  <strong style={{ color: '#ffffff' }}>
+                    {format(tooltipData.seg.end, 'dd/MM/yyyy')}
+                  </strong>
+                </div>
 
-            <div>
-              <span style={{ color: '#94a3b8' }}>Duración:</span>{' '}
-              <span style={{ color: '#38bdf8', fontWeight: 600 }}>
-                {Math.max(1, differenceInCalendarDays(tooltipData.seg.end, tooltipData.seg.start) + 1)} días calendario
-              </span>
-            </div>
+                <div>
+                  <span style={{ color: '#94a3b8' }}>Duración:</span>{' '}
+                  <span style={{ color: '#38bdf8', fontWeight: 600 }}>
+                    {Math.max(1, differenceInCalendarDays(tooltipData.seg.end, tooltipData.seg.start) + 1)} días calendario
+                  </span>
+                </div>
 
-            {/* Relación con HOY */}
-            <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid #334155' }}>
-              {tooltipData.seg.end < today ? (
-                <span style={{ color: '#94a3b8' }}>
-                  ✓ Concluida ({differenceInCalendarDays(today, tooltipData.seg.end)} días atrás vs HOY)
-                </span>
-              ) : tooltipData.seg.start <= today && tooltipData.seg.end >= today ? (
-                <span style={{ color: '#facc15', fontWeight: 700 }}>
-                  ⚡ En curso respecto a HOY (quedan {differenceInCalendarDays(tooltipData.seg.end, today)} días)
-                </span>
-              ) : (
-                <span style={{ color: '#60a5fa' }}>
-                  ⏳ Futura (inicia en {differenceInCalendarDays(tooltipData.seg.start, today)} días vs HOY)
-                </span>
-              )}
-            </div>
+                {/* Relación con HOY */}
+                <div style={{ marginTop: 2, paddingTop: 4, borderTop: '1px solid #334155' }}>
+                  {tooltipData.seg.end < today ? (
+                    <span style={{ color: '#94a3b8' }}>
+                      ✓ Concluida ({differenceInCalendarDays(today, tooltipData.seg.end)} días atrás vs HOY)
+                    </span>
+                  ) : tooltipData.seg.start <= today && tooltipData.seg.end >= today ? (
+                    <span style={{ color: '#facc15', fontWeight: 700 }}>
+                      ⚡ En curso respecto a HOY (quedan {differenceInCalendarDays(tooltipData.seg.end, today)} días)
+                    </span>
+                  ) : (
+                    <span style={{ color: '#60a5fa' }}>
+                      ⏳ Futura (inicia en {differenceInCalendarDays(tooltipData.seg.start, today)} días vs HOY)
+                    </span>
+                  )}
+                </div>
+              </>
+            )}
 
             {tooltipData.seg.details && (
               <div style={{ color: '#e2e8f0', marginTop: 4, fontStyle: 'italic' }}>
@@ -4378,39 +4755,32 @@ function TimelineIniciativasVP({
 // ---------------------------------------------------------------------------
 // Helpers para Dashboard Estadístico y Pipeline de 4 Fases
 // ---------------------------------------------------------------------------
-function getInitiativePhase(etapa: EtapaPipeline): 1 | 2 | 3 | 4 {
-  if (etapa === 'implementadas' || etapa === 'terminado') return 4;
-  if (
-    etapa === 'planificadas' ||
-    etapa === 'por_iniciar' ||
-    etapa === 'en_ejecucion' ||
-    etapa === 'detenido'
-  ) return 3;
-  if (
-    etapa === 'por_estimar' ||
-    etapa === 'por_reestimar' ||
-    etapa === 'por_aprobar_estimacion' ||
-    etapa === 'por_habilitar_presupuesto' ||
-    etapa === 'por_planificar' ||
-    etapa === 'aprobar_planificacion'
-  ) return 2;
-  return 1; // registro_incompleto y etapas preliminares
+function getInitiativePhase(etapa: EtapaPipeline | string): 1 | 2 | 3 | 4 {
+  const p = getVpPipelinePhase(etapa);
+  if (p === 1) return 1;
+  if (p === 2) return 2;
+  if (p === 3) return 3;
+  return 4; // 'observaciones'
 }
 
 function getInitiativeActionOwner(i: Iniciativa): 'IT' | 'Negocio' | 'None' {
+  const norm = (i.etapa_actual || '').toLowerCase();
   if (
-    i.etapa_actual === 'implementadas' ||
-    i.etapa_actual === 'terminado' ||
-    i.etapa_actual === 'eliminadas'
+    norm === 'implementadas' ||
+    norm === 'implementada' ||
+    norm === 'terminado' ||
+    norm === 'eliminadas' ||
+    norm === 'eliminada'
   ) {
     return 'None';
   }
   if (
-    i.etapa_actual === 'registro_incompleto' ||
-    i.etapa_actual === 'por_aprobar_estimacion' ||
-    i.etapa_actual === 'por_habilitar_presupuesto' ||
-    i.etapa_actual === 'aprobar_planificacion' ||
-    i.etapa_actual === 'detenido'
+    norm === 'registro_incompleto' ||
+    norm === 'por_aprobar_estimacion' ||
+    norm === 'por_habilitar_presupuesto' ||
+    norm === 'aprobar_planificacion' ||
+    norm === 'por_aprobar_planificacion' ||
+    norm === 'detenido'
   ) {
     return 'Negocio';
   }
@@ -4419,28 +4789,31 @@ function getInitiativeActionOwner(i: Iniciativa): 'IT' | 'Negocio' | 'None' {
 }
 
 function getEcosistema(i: Iniciativa): string {
-  if (i.frente && i.frente.trim()) return i.frente.trim();
-  const raw = i.raw_fields;
-  if (raw) {
-    const rawEco = (raw['Ecosistema'] || raw['ecosistema'] || raw['Dominio'] || raw['dominio']) as string | undefined;
-    if (rawEco && typeof rawEco === 'string' && rawEco.trim()) return rawEco.trim();
+  let rawName = '';
+  if (i.frente && i.frente.trim()) rawName = i.frente.trim();
+  else if (i.raw_fields) {
+    const rawEco = (i.raw_fields['Ecosistema'] || i.raw_fields['ecosistema'] || i.raw_fields['Dominio'] || i.raw_fields['dominio']) as string | undefined;
+    if (rawEco && typeof rawEco === 'string' && rawEco.trim()) rawName = rawEco.trim();
   }
-  if (i.pilar_estrategico && i.pilar_estrategico.trim()) return i.pilar_estrategico.trim();
-  if (i.lider_dominio && i.lider_dominio.trim()) return i.lider_dominio.trim();
-  if (i.institucion && i.institucion.trim()) return i.institucion.trim();
-  return 'General / Otros';
+  if (!rawName && i.pilar_estrategico && i.pilar_estrategico.trim()) rawName = i.pilar_estrategico.trim();
+  if (!rawName && i.lider_dominio && i.lider_dominio.trim()) rawName = i.lider_dominio.trim();
+  if (!rawName && i.institucion && i.institucion.trim()) rawName = i.institucion.trim();
+  return normalizeEcosistemaName(rawName || 'General / Otros');
 }
 
 function getInitiativeMilestoneDate(i: Iniciativa): string | null {
-  const phase = getInitiativePhase(i.etapa_actual);
+  const phase = getVpPipelinePhase(i.etapa_actual);
   if (phase === 3) {
     return i.fecha_fin_planificada || i.fecha_fin_real || i.fecha_inicio_planificada || i.fecha_entrega_requerida || null;
   }
   if (phase === 2) {
-    return i.fecha_fin_estimacion || i.fecha_fin_reestimacion || i.fecha_inicio_estimacion || i.fecha_entrega_requerida || null;
+    return i.fecha_fin_planificada || i.fecha_inicio_planificada || i.fecha_entrega_requerida || null;
   }
   if (phase === 1) {
-    return i.fecha_entrega_requerida || i.fecha_registro || null;
+    return i.fecha_fin_estimacion || i.fecha_fin_reestimacion || i.fecha_inicio_estimacion || i.fecha_entrega_requerida || null;
+  }
+  if (phase === 'observaciones') {
+    return i.fecha_eliminacion || i.fecha_entrega_requerida || null;
   }
   return i.fecha_fin_planificada || i.fecha_pase_produccion || i.fecha_entrega_requerida || null;
 }
@@ -4465,10 +4838,10 @@ function exportReportToHTML(
   const fechaGeneracion = format(now, 'dd/MM/yyyy HH:mm:ss');
   const fileDate = format(now, 'yyyyMMdd_HHmm');
 
-  const fase1 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 1);
-  const fase2 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 2);
-  const fase3 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 3);
-  const fase4 = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) === 4);
+  const fase1 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 1);
+  const fase2 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 2);
+  const fase3 = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 3);
+  const faseObs = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) === 'observaciones');
 
   const total = iniciativas.length;
   const itCount = iniciativas.filter(i => getInitiativeActionOwner(i) === 'IT').length;
@@ -4585,10 +4958,10 @@ function exportReportToHTML(
       font-weight: 600;
       white-space: nowrap;
     }
-    .badge-fase1 { background: #f1f5f9; color: #475569; }
-    .badge-fase2 { background: #fffbeb; color: #d97706; }
-    .badge-fase3 { background: #eff6ff; color: #1d4ed8; }
-    .badge-fase4 { background: #ecfdf5; color: #059669; }
+    .badge-fase1 { background: #fef3c7; color: #b45309; }
+    .badge-fase2 { background: #eff6ff; color: #1d4ed8; }
+    .badge-fase3 { background: #ecfdf5; color: #047857; }
+    .badge-faseobs { background: #fff1f2; color: #991b1b; }
 
     .badge-it { background: #eff6ff; color: #2563eb; font-weight: 700; }
     .badge-negocio { background: #fffbeb; color: #d97706; font-weight: 700; }
@@ -4618,25 +4991,25 @@ function exportReportToHTML(
   </div>
 
   <div class="kpi-grid">
-    <div class="kpi-card" style="--accent: #64748b;">
-      <div class="kpi-title">Fase 1: En Definición</div>
+    <div class="kpi-card" style="--accent: #f59e0b;">
+      <div class="kpi-title">Fase 1: Estimación y Aprobación</div>
       <div class="kpi-value">${fase1.length}</div>
       <div class="kpi-sub">${total > 0 ? Math.round((fase1.length / total) * 100) : 0}% del total</div>
     </div>
-    <div class="kpi-card" style="--accent: #f59e0b;">
-      <div class="kpi-title">Fase 2: Estimación y Aprobación</div>
+    <div class="kpi-card" style="--accent: #2563eb;">
+      <div class="kpi-title">Fase 2: Planificación y Presupuesto</div>
       <div class="kpi-value">${fase2.length}</div>
       <div class="kpi-sub">${total > 0 ? Math.round((fase2.length / total) * 100) : 0}% del total</div>
     </div>
-    <div class="kpi-card" style="--accent: #2563eb;">
-      <div class="kpi-title">Fase 3: Planificada / En Ejecución</div>
+    <div class="kpi-card" style="--accent: #059669;">
+      <div class="kpi-title">Fase 3: Planificadas e Implementadas</div>
       <div class="kpi-value">${fase3.length}</div>
       <div class="kpi-sub">${total > 0 ? Math.round((fase3.length / total) * 100) : 0}% del total</div>
     </div>
-    <div class="kpi-card" style="--accent: #10b981;">
-      <div class="kpi-title">Fase 4: Implementada</div>
-      <div class="kpi-value">${fase4.length}</div>
-      <div class="kpi-sub">${total > 0 ? Math.round((fase4.length / total) * 100) : 0}% del total</div>
+    <div class="kpi-card" style="--accent: #e11d48;">
+      <div class="kpi-title">Con Observaciones (Incompleto / Eliminadas)</div>
+      <div class="kpi-value">${faseObs.length}</div>
+      <div class="kpi-sub">${total > 0 ? Math.round((faseObs.length / total) * 100) : 0}% del total</div>
     </div>
     <div class="kpi-card" style="--accent: #3b82f6;">
       <div class="kpi-title">Acción Pendiente IT</div>
@@ -4668,9 +5041,10 @@ function exportReportToHTML(
       </thead>
       <tbody>
         ${iniciativas.map(i => {
-          const phase = getInitiativePhase(i.etapa_actual);
+          const phase = getVpPipelinePhase(i.etapa_actual);
           const owner = getInitiativeActionOwner(i);
-          const phaseBadgeClass = `badge-fase${phase}`;
+          const phaseBadgeClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
+          const phaseLabel = phase === 1 ? 'Fase 1: Estimación' : phase === 2 ? 'Fase 2: Planificación' : phase === 3 ? 'Fase 3: Planif./Impl.' : 'Con Observaciones';
           const ownerBadgeClass = owner === 'IT' ? 'badge-it' : owner === 'Negocio' ? 'badge-negocio' : '';
           const milestoneDt = getInitiativeMilestoneDate(i);
           const dtFormatted = milestoneDt ? fmtDateShort(milestoneDt) : '—';
@@ -4679,8 +5053,8 @@ function exportReportToHTML(
             <td style="font-weight: 600; color: #0f172a; max-width: 320px;">${escapeHtml(i.titulo || 'Sin Título')}</td>
             <td>${escapeHtml(i.vp_solicitante || '—')}</td>
             <td>${escapeHtml(i.institucion || '—')}</td>
-            <td><span class="badge" style="background: #f1f5f9; color: #334155;">${escapeHtml(ETAPAS_MAP[i.etapa_actual]?.label || ETAPAS_PLANIFICADAS_MAP[i.etapa_actual]?.label || i.etapa_actual)}</span></td>
-            <td><span class="badge ${phaseBadgeClass}">Fase ${phase}</span></td>
+            <td><span class="badge" style="background: #f1f5f9; color: #334155;">${escapeHtml(getEtapaHumanLabel(i.etapa_actual))}</span></td>
+            <td><span class="badge ${phaseBadgeClass}">${escapeHtml(phaseLabel)}</span></td>
             <td>${owner !== 'None' ? `<span class="badge ${ownerBadgeClass}">${owner}</span>` : '<span style="color: #94a3b8; font-size: 11px;">Completado</span>'}</td>
             <td style="font-family: monospace; font-size: 11px;">${escapeHtml(dtFormatted)}</td>
             <td style="text-align: right; font-family: monospace;">${i.costo_usd ? `$${i.costo_usd.toLocaleString('en-US')}` : '—'}</td>
@@ -4713,58 +5087,82 @@ function exportReportToHTML(
 interface DashboardEstadisticoVPProps {
   iniciativas: Iniciativa[];
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
+  selectedPhase?: VpPipelinePhase | null;
+  onSelectPhase?: (phase: VpPipelinePhase) => void;
 }
 
-function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEstadisticoVPProps) {
+function DashboardEstadisticoVP({
+  iniciativas,
+  onOpenDetailModal,
+  selectedPhase,
+  onSelectPhase,
+}: DashboardEstadisticoVPProps) {
   const total = iniciativas.length || 1;
 
-  // Clasificación por fase
-  const { fase1, fase2, fase3, fase4 } = useMemo(() => {
+  // 1. Clasificación por las 4 Fases Ejecutivas solicitadas
+  const { fase1, fase2, fase3, faseObs } = useMemo(() => {
     const f1: Iniciativa[] = [];
     const f2: Iniciativa[] = [];
     const f3: Iniciativa[] = [];
-    const f4: Iniciativa[] = [];
+    const fObs: Iniciativa[] = [];
 
     iniciativas.forEach(i => {
-      const p = getInitiativePhase(i.etapa_actual);
+      const p = getVpPipelinePhase(i.etapa_actual);
       if (p === 1) f1.push(i);
       else if (p === 2) f2.push(i);
       else if (p === 3) f3.push(i);
-      else if (p === 4) f4.push(i);
+      else if (p === 'observaciones') fObs.push(i);
     });
 
-    return { fase1: f1, fase2: f2, fase3: f3, fase4: f4 };
+    return { fase1: f1, fase2: f2, fase3: f3, faseObs: fObs };
   }, [iniciativas]);
 
-  // Card 1: ¿Quién tiene la siguiente acción? (Fases 1, 2 y 3)
+  // Card 1: Responsabilidad IT vs Negocio (Iniciativas en curso)
   const actionStats = useMemo(() => {
-    const active = iniciativas.filter(i => getInitiativePhase(i.etapa_actual) < 4 && i.etapa_actual !== 'eliminadas');
+    const active = iniciativas.filter(i => getVpPipelinePhase(i.etapa_actual) !== 'observaciones');
     const itIniciativas = active.filter(i => getInitiativeActionOwner(i) === 'IT');
     const negocioIniciativas = active.filter(i => getInitiativeActionOwner(i) === 'Negocio');
     const actTotal = active.length || 1;
     const itPct = Math.round((itIniciativas.length / actTotal) * 100);
     const negPct = 100 - itPct;
+
+    // Breakdown IT
+    const itEstimando = itIniciativas.filter(i => i.etapa_actual === 'por_estimar' || i.etapa_actual === 'por_reestimar').length;
+    const itPlanificando = itIniciativas.filter(i => i.etapa_actual === 'por_planificar').length;
+    const itEjecutando = itIniciativas.filter(i => ['planificadas', 'planificada', 'en_ejecucion', 'por_iniciar'].includes(i.etapa_actual)).length;
+
+    // Breakdown Negocio
+    const negAprobarEstim = negocioIniciativas.filter(i => i.etapa_actual === 'por_aprobar_estimacion').length;
+    const negPresupuesto = negocioIniciativas.filter(i => i.etapa_actual === 'por_habilitar_presupuesto').length;
+    const negAprobarPlan = negocioIniciativas.filter(i => (i.etapa_actual as string) === 'aprobar_planificacion' || (i.etapa_actual as string) === 'por_aprobar_planificacion').length;
+
     return {
       activeCount: active.length,
       itCount: itIniciativas.length,
       negocioCount: negocioIniciativas.length,
       itPct,
       negPct,
+      itEstimando,
+      itPlanificando,
+      itEjecutando,
+      negAprobarEstim,
+      negPresupuesto,
+      negAprobarPlan,
     };
   }, [iniciativas]);
 
-  // Card 2: Ecosistemas
+  // Card 2: Distribución por Frente / Ecosistema (Sin textos cortados, normalizado)
   const ecosistemas = useMemo(() => {
-    const map: Record<string, { total: number; f1: number; f2: number; f3: number; f4: number }> = {};
+    const map: Record<string, { total: number; f1: number; f2: number; f3: number; fObs: number }> = {};
     iniciativas.forEach(i => {
       const eco = getEcosistema(i);
-      if (!map[eco]) map[eco] = { total: 0, f1: 0, f2: 0, f3: 0, f4: 0 };
+      if (!map[eco]) map[eco] = { total: 0, f1: 0, f2: 0, f3: 0, fObs: 0 };
       map[eco].total++;
-      const p = getInitiativePhase(i.etapa_actual);
+      const p = getVpPipelinePhase(i.etapa_actual);
       if (p === 1) map[eco].f1++;
       else if (p === 2) map[eco].f2++;
       else if (p === 3) map[eco].f3++;
-      else if (p === 4) map[eco].f4++;
+      else if (p === 'observaciones') map[eco].fObs++;
     });
 
     return Object.entries(map)
@@ -4773,7 +5171,7 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
       .slice(0, 6);
   }, [iniciativas]);
 
-  // Card 3: Fechas registradas frente al corte
+  // Card 3: Salud de Fechas y Próximos Hitos Críticos (Sin textos cortados)
   const dateMilestones = useMemo(() => {
     const now = startOfDay(new Date());
     let vencidas = 0;
@@ -4783,9 +5181,8 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
 
     const listWithDates: { iniciativa: Iniciativa; date: Date; dateStr: string; status: 'overdue' | 'soon' | 'future' }[] = [];
 
-    // Evaluamos iniciativas en curso (fases 1, 2 y 3)
     iniciativas
-      .filter(i => getInitiativePhase(i.etapa_actual) < 4 && i.etapa_actual !== 'eliminadas')
+      .filter(i => (i.etapa_actual as string) !== 'eliminadas' && (i.etapa_actual as string) !== 'eliminada')
       .forEach(i => {
         const rawDate = getInitiativeMilestoneDate(i);
         if (!rawDate) {
@@ -4825,18 +5222,20 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
     };
   }, [iniciativas]);
 
-  // Sub-etapas helper
+  // Sub-etapas helper con nombres legibles en español (sin variables snake_case)
   const getSubEtapas = (list: Iniciativa[]) => {
     const counts: Record<string, number> = {};
     list.forEach(i => {
-      counts[i.etapa_actual] = (counts[i.etapa_actual] || 0) + 1;
+      const key = (i.etapa_actual || '').toLowerCase();
+      counts[key] = (counts[key] || 0) + 1;
     });
     return Object.entries(counts)
       .filter(([, c]) => c > 0)
-      .map(([etapa, count]) => {
-        const cfg = ETAPAS_MAP[etapa as EtapaPipeline] || ETAPAS_PLANIFICADAS_MAP[etapa as EtapaPipeline];
-        return { etapa, label: cfg?.label || etapa, count };
-      })
+      .map(([etapa, count]) => ({
+        etapa,
+        label: getEtapaHumanLabel(etapa),
+        count,
+      }))
       .sort((a, b) => b.count - a.count);
   };
 
@@ -4852,11 +5251,12 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
   const f1Action = getActionBreakdown(fase1);
   const f2Action = getActionBreakdown(fase2);
   const f3Action = getActionBreakdown(fase3);
+  const fObsAction = getActionBreakdown(faseObs);
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
       {/* ------------------------------------------------------------- */}
-      {/* SECCIÓN SUPERIOR: 4 TARJETAS DEL PIPELINE (FASES 1 A 4) */}
+      {/* SECCIÓN SUPERIOR: 4 TARJETAS DINÁMICAS DEL PIPELINE */}
       {/* ------------------------------------------------------------- */}
       <div
         style={{
@@ -4865,259 +5265,437 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
           gap: 14,
         }}
       >
-        {/* FASE 1: En definición */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #e2e8f0',
-            borderTop: '4px solid #64748b',
-            borderRadius: 12,
-            padding: '14px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: 4 }}>
-                FASE 1
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>
-                {Math.round((fase1.length / total) * 100)}%
-              </span>
-            </div>
-            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
-              En definición
-            </h4>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
-              {fase1.length}
-            </div>
+        {/* FASE 1: Estimación y Aprobación */}
+        {(() => {
+          const isSelected = selectedPhase === 1;
+          return (
+            <div
+              onClick={() => onSelectPhase && onSelectPhase(1)}
+              style={{
+                background: '#ffffff',
+                border: isSelected ? '2px solid #f59e0b' : '1px solid #fde68a',
+                borderTop: '4px solid #f59e0b',
+                borderRadius: 12,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                boxShadow: isSelected
+                  ? '0 0 0 3px rgba(245, 158, 11, 0.35), 0 8px 18px rgba(0,0,0,0.06)'
+                  : '0 1px 3px rgba(0,0,0,0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+              }}
+              title="Haz clic para filtrar el cronograma inferior por Fase 1"
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: '#b45309',
+                      background: '#fef3c7',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    FASE 1
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706' }}>
+                    {Math.round((fase1.length / total) * 100)}%
+                  </span>
+                </div>
 
-            {/* Sub-etapas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
-              {getSubEtapas(fase1).length > 0 ? (
-                getSubEtapas(fase1).map(s => (
-                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8' }} />
-                      {s.label}
-                    </span>
-                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
-                  </div>
-                ))
-              ) : (
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
-              )}
-            </div>
-          </div>
+                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', margin: '0 0 2px 0' }}>
+                  Estimación y Aprobación
+                </h4>
+                <p style={{ fontSize: 10.5, color: '#64748b', margin: '0 0 8px 0' }}>
+                  Por estimar, aprobar estimación y reestimar
+                </p>
 
-          {/* Siguiente acción footer */}
-          <div style={{ paddingTop: 10, borderTop: '1px solid #f1f5f9' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
-              <span>Siguiente acción</span>
-              <span>{f1Action.neg > 0 ? `Negocio (${f1Action.neg})` : f1Action.it > 0 ? `IT (${f1Action.it})` : 'Al día'}</span>
-            </div>
-            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-              <div style={{ width: `${f1Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f1Action.it}`} />
-              <div style={{ width: `${f1Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f1Action.neg}`} />
-            </div>
-          </div>
-        </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 10, lineHeight: 1 }}>
+                  {fase1.length}
+                </div>
 
-        {/* FASE 2: Estimación y aprobación */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #fde68a',
-            borderTop: '4px solid #f59e0b',
-            borderRadius: 12,
-            padding: '14px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#b45309', background: '#fef3c7', padding: '2px 8px', borderRadius: 4 }}>
-                FASE 2
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706' }}>
-                {Math.round((fase2.length / total) * 100)}%
-              </span>
-            </div>
-            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
-              Estimación y aprobación
-            </h4>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
-              {fase2.length}
-            </div>
+                {/* Sub-etapas con nombres de campos legibles */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+                  {getSubEtapas(fase1).length > 0 ? (
+                    getSubEtapas(fase1).map(s => (
+                      <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
+                          {s.label}
+                        </span>
+                        <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas en esta fase</span>
+                  )}
+                </div>
+              </div>
 
-            {/* Sub-etapas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
-              {getSubEtapas(fase2).length > 0 ? (
-                getSubEtapas(fase2).slice(0, 4).map(s => (
-                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={s.label}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b', flexShrink: 0 }} />
-                      {s.label}
-                    </span>
-                    <strong style={{ color: '#0f172a', marginLeft: 6 }}>{s.count}</strong>
-                  </div>
-                ))
-              ) : (
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
-              )}
+              {/* Siguiente acción footer + indicador interactivo */}
+              <div style={{ paddingTop: 10, borderTop: '1px solid #fef3c7' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+                  <span>Siguiente acción</span>
+                  <span>IT: {f1Action.it} · Neg: {f1Action.neg}</span>
+                </div>
+                <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                  <div style={{ width: `${f1Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f1Action.it}`} />
+                  <div style={{ width: `${f1Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f1Action.neg}`} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: isSelected ? '#f59e0b' : '#fffbeb',
+                      color: isSelected ? '#ffffff' : '#b45309',
+                      display: 'inline-block',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                  </span>
+                </div>
+              </div>
             </div>
-          </div>
+          );
+        })()}
 
-          {/* Siguiente acción footer */}
-          <div style={{ paddingTop: 10, borderTop: '1px solid #fef3c7' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
-              <span>Siguiente acción</span>
-              <span>IT: {f2Action.it} · Neg: {f2Action.neg}</span>
-            </div>
-            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-              <div style={{ width: `${f2Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f2Action.it} (${f2Action.itPct}%)`} />
-              <div style={{ width: `${f2Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f2Action.neg} (${f2Action.negPct}%)`} />
-            </div>
-          </div>
-        </div>
+        {/* FASE 2: Planificación y Presupuesto */}
+        {(() => {
+          const isSelected = selectedPhase === 2;
+          return (
+            <div
+              onClick={() => onSelectPhase && onSelectPhase(2)}
+              style={{
+                background: '#ffffff',
+                border: isSelected ? '2px solid #2563eb' : '1px solid #bfdbfe',
+                borderTop: '4px solid #2563eb',
+                borderRadius: 12,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                boxShadow: isSelected
+                  ? '0 0 0 3px rgba(37, 99, 235, 0.35), 0 8px 18px rgba(0,0,0,0.06)'
+                  : '0 1px 3px rgba(0,0,0,0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+              }}
+              title="Haz clic para filtrar el cronograma inferior por Fase 2"
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: '#1d4ed8',
+                      background: '#dbeafe',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    FASE 2
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
+                    {Math.round((fase2.length / total) * 100)}%
+                  </span>
+                </div>
 
-        {/* FASE 3: Planificada o en ejecución */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #bfdbfe',
-            borderTop: '4px solid #2563eb',
-            borderRadius: 12,
-            padding: '14px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#1d4ed8', background: '#dbeafe', padding: '2px 8px', borderRadius: 4 }}>
-                FASE 3
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#2563eb' }}>
-                {Math.round((fase3.length / total) * 100)}%
-              </span>
-            </div>
-            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
-              Planificada o en ejecución
-            </h4>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
-              {fase3.length}
-            </div>
+                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', margin: '0 0 2px 0' }}>
+                  Planificación y Presupuesto
+                </h4>
+                <p style={{ fontSize: 10.5, color: '#64748b', margin: '0 0 8px 0' }}>
+                  Por planificar, aprobar plan y habilitar presupuesto
+                </p>
 
-            {/* Sub-etapas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
-              {getSubEtapas(fase3).length > 0 ? (
-                getSubEtapas(fase3).map(s => (
-                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} />
-                      {s.label}
-                    </span>
-                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
-                  </div>
-                ))
-              ) : (
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
-              )}
-            </div>
-          </div>
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 10, lineHeight: 1 }}>
+                  {fase2.length}
+                </div>
 
-          {/* Siguiente acción footer */}
-          <div style={{ paddingTop: 10, borderTop: '1px solid #dbeafe' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
-              <span>Siguiente acción</span>
-              <span>IT: {f3Action.it} · Neg: {f3Action.neg}</span>
-            </div>
-            <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-              <div style={{ width: `${f3Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f3Action.it} (${f3Action.itPct}%)`} />
-              <div style={{ width: `${f3Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f3Action.neg} (${f3Action.negPct}%)`} />
-            </div>
-          </div>
-        </div>
+                {/* Sub-etapas con nombres de campos legibles */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+                  {getSubEtapas(fase2).length > 0 ? (
+                    getSubEtapas(fase2).map(s => (
+                      <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb', flexShrink: 0 }} />
+                          {s.label}
+                        </span>
+                        <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas en esta fase</span>
+                  )}
+                </div>
+              </div>
 
-        {/* FASE 4: Implementada */}
-        <div
-          style={{
-            background: '#ffffff',
-            border: '1px solid #a7f3d0',
-            borderTop: '4px solid #059669',
-            borderRadius: 12,
-            padding: '14px 16px',
-            display: 'flex',
-            flexDirection: 'column',
-            justifyContent: 'space-between',
-            boxShadow: '0 1px 3px rgba(0,0,0,0.04)',
-          }}
-        >
-          <div>
-            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
-              <span style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '0.06em', color: '#047857', background: '#d1fae5', padding: '2px 8px', borderRadius: 4 }}>
-                FASE 4
-              </span>
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
-                {Math.round((fase4.length / total) * 100)}%
-              </span>
+              {/* Siguiente acción footer + indicador interactivo */}
+              <div style={{ paddingTop: 10, borderTop: '1px solid #dbeafe' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+                  <span>Siguiente acción</span>
+                  <span>IT: {f2Action.it} · Neg: {f2Action.neg}</span>
+                </div>
+                <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                  <div style={{ width: `${f2Action.itPct}%`, background: '#3b82f6' }} title={`IT: ${f2Action.it}`} />
+                  <div style={{ width: `${f2Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f2Action.neg}`} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: isSelected ? '#2563eb' : '#eff6ff',
+                      color: isSelected ? '#ffffff' : '#1d4ed8',
+                      display: 'inline-block',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                  </span>
+                </div>
+              </div>
             </div>
-            <h4 style={{ fontSize: 14, fontWeight: 800, color: '#1e293b', margin: '0 0 8px 0' }}>
-              Implementada
-            </h4>
-            <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 12, lineHeight: 1 }}>
-              {fase4.length}
-            </div>
+          );
+        })()}
 
-            {/* Sub-etapas */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
-              {getSubEtapas(fase4).length > 0 ? (
-                getSubEtapas(fase4).map(s => (
-                  <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
-                      <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669' }} />
-                      {s.label}
-                    </span>
-                    <strong style={{ color: '#0f172a' }}>{s.count}</strong>
-                  </div>
-                ))
-              ) : (
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas</span>
-              )}
-            </div>
-          </div>
+        {/* FASE 3: Planificadas e Implementadas */}
+        {(() => {
+          const isSelected = selectedPhase === 3;
+          return (
+            <div
+              onClick={() => onSelectPhase && onSelectPhase(3)}
+              style={{
+                background: '#ffffff',
+                border: isSelected ? '2px solid #059669' : '1px solid #a7f3d0',
+                borderTop: '4px solid #059669',
+                borderRadius: 12,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                boxShadow: isSelected
+                  ? '0 0 0 3px rgba(5, 150, 105, 0.35), 0 8px 18px rgba(0,0,0,0.06)'
+                  : '0 1px 3px rgba(0,0,0,0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+              }}
+              title="Haz clic para filtrar el cronograma inferior por Fase 3"
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: '#047857',
+                      background: '#d1fae5',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    FASE 3
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#059669' }}>
+                    {Math.round((fase3.length / total) * 100)}%
+                  </span>
+                </div>
 
-          {/* Siguiente acción footer */}
-          <div style={{ paddingTop: 10, borderTop: '1px solid #d1fae5' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#059669', marginBottom: 5 }}>
-              <span>Sin acción pendiente</span>
-              <span>100% Completado</span>
+                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', margin: '0 0 2px 0' }}>
+                  Planificadas e Implementadas
+                </h4>
+                <p style={{ fontSize: 10.5, color: '#64748b', margin: '0 0 8px 0' }}>
+                  Iniciativas en ejecución, planificadas e implementadas
+                </p>
+
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 10, lineHeight: 1 }}>
+                  {fase3.length}
+                </div>
+
+                {/* Sub-etapas con nombres de campos legibles */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+                  {getSubEtapas(fase3).length > 0 ? (
+                    getSubEtapas(fase3).map(s => (
+                      <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#059669', flexShrink: 0 }} />
+                          {s.label}
+                        </span>
+                        <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas en esta fase</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Siguiente acción footer + indicador interactivo */}
+              <div style={{ paddingTop: 10, borderTop: '1px solid #d1fae5' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+                  <span>Siguiente acción</span>
+                  <span>IT: {f3Action.it} · Neg: {f3Action.neg}</span>
+                </div>
+                <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                  <div style={{ width: `${f3Action.itPct}%`, background: '#10b981' }} title={`IT: ${f3Action.it}`} />
+                  <div style={{ width: `${f3Action.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${f3Action.neg}`} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: isSelected ? '#059669' : '#ecfdf5',
+                      color: isSelected ? '#ffffff' : '#047857',
+                      display: 'inline-block',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                  </span>
+                </div>
+              </div>
             </div>
-            <div style={{ height: 6, width: '100%', background: '#10b981', borderRadius: 4 }} />
-          </div>
-        </div>
+          );
+        })()}
+
+        {/* CON OBSERVACIONES: Registro Incompleto y Eliminadas */}
+        {(() => {
+          const isSelected = selectedPhase === 'observaciones';
+          return (
+            <div
+              onClick={() => onSelectPhase && onSelectPhase('observaciones')}
+              style={{
+                background: '#ffffff',
+                border: isSelected ? '2px solid #e11d48' : '1px solid #fecdd3',
+                borderTop: '4px solid #e11d48',
+                borderRadius: 12,
+                padding: '14px 16px',
+                display: 'flex',
+                flexDirection: 'column',
+                justifyContent: 'space-between',
+                boxShadow: isSelected
+                  ? '0 0 0 3px rgba(225, 29, 72, 0.35), 0 8px 18px rgba(0,0,0,0.06)'
+                  : '0 1px 3px rgba(0,0,0,0.04)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+                position: 'relative',
+              }}
+              title="Haz clic para filtrar el cronograma inferior por iniciativas Con Observaciones"
+            >
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 800,
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.06em',
+                      color: '#9f1239',
+                      background: '#ffe4e6',
+                      padding: '2px 8px',
+                      borderRadius: 4,
+                    }}
+                  >
+                    CON OBSERVACIONES
+                  </span>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#e11d48' }}>
+                    {Math.round((faseObs.length / total) * 100)}%
+                  </span>
+                </div>
+
+                <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#1e293b', margin: '0 0 2px 0' }}>
+                  Con Observaciones
+                </h4>
+                <p style={{ fontSize: 10.5, color: '#64748b', margin: '0 0 8px 0' }}>
+                  Registros incompletos y registros eliminados
+                </p>
+
+                <div style={{ fontSize: 28, fontWeight: 900, color: '#0f172a', marginBottom: 10, lineHeight: 1 }}>
+                  {faseObs.length}
+                </div>
+
+                {/* Sub-etapas con nombres de campos legibles */}
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 4, minHeight: 48, marginBottom: 12 }}>
+                  {getSubEtapas(faseObs).length > 0 ? (
+                    getSubEtapas(faseObs).map(s => (
+                      <div key={s.etapa} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#475569' }}>
+                        <span style={{ display: 'flex', alignItems: 'center', gap: 5 }}>
+                          <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#e11d48', flexShrink: 0 }} />
+                          {s.label}
+                        </span>
+                        <strong style={{ color: '#0f172a' }}>{s.count}</strong>
+                      </div>
+                    ))
+                  ) : (
+                    <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin iniciativas observadas</span>
+                  )}
+                </div>
+              </div>
+
+              {/* Siguiente acción footer + indicador interactivo */}
+              <div style={{ paddingTop: 10, borderTop: '1px solid #ffe4e6' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, fontWeight: 700, color: '#64748b', marginBottom: 5 }}>
+                  <span>Siguiente acción</span>
+                  <span>{fObsAction.neg > 0 ? `Por regularizar (${fObsAction.neg})` : 'Revisión'}</span>
+                </div>
+                <div style={{ height: 6, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
+                  <div style={{ width: '100%', background: '#e11d48' }} title={`Observadas: ${faseObs.length}`} />
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <span
+                    style={{
+                      fontSize: 10,
+                      fontWeight: 700,
+                      padding: '2px 8px',
+                      borderRadius: 12,
+                      background: isSelected ? '#e11d48' : '#fff1f2',
+                      color: isSelected ? '#ffffff' : '#be123c',
+                      display: 'inline-block',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                  </span>
+                </div>
+              </div>
+            </div>
+          );
+        })()}
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECCIÓN INFERIOR: 3 TARJETAS ANALÍTICAS (ACCIÓN, ECOSISTEMA, FECHAS) */}
+      {/* SECCIÓN INFERIOR: 3 TARJETAS ESTRATÉGICAS (REFORMULADAS, SIN CORTAR TEXTOS) */}
       {/* ------------------------------------------------------------- */}
       <div
         style={{
           display: 'grid',
-          gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
+          gridTemplateColumns: 'repeat(auto-fit, minmax(290px, 1fr))',
           gap: 14,
         }}
       >
-        {/* CARD 1: ¿Quién tiene la siguiente acción? */}
+        {/* CARD 1: Responsabilidad: ¿Quién tiene la siguiente acción? */}
         <div
           style={{
             background: '#ffffff',
@@ -5131,53 +5709,71 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
           }}
         >
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
-              ¿Quién tiene la siguiente acción?
+            <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: '0 0 3px 0' }}>
+              Responsabilidad: ¿Quién tiene la siguiente acción?
             </h4>
-            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px 0' }}>
-              Iniciativas activas en curso (Fases 1, 2 y 3)
+            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 12px 0' }}>
+              Balance operativo entre Sistemas (IT) y Áreas Solicitantes (Negocio)
             </p>
 
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 14 }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginBottom: 12 }}>
+              {/* IT Box */}
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#1d4ed8', textTransform: 'uppercase' }}>
-                  IT
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#1d4ed8', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  IT / Sistemas
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#1e40af', margin: '2px 0' }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#1e40af', margin: '3px 0 2px 0' }}>
                   {actionStats.itCount}
                 </div>
-                <div style={{ fontSize: 10, color: '#3b82f6', fontWeight: 600 }}>
+                <div style={{ fontSize: 10, color: '#3b82f6', fontWeight: 700, marginBottom: 6 }}>
                   {actionStats.itPct}% del trabajo activo
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10, color: '#1e3a8a', borderTop: '1px solid #dbeafe', paddingTop: 6 }}>
+                  <div>• Estimación técnica: <strong>{actionStats.itEstimando}</strong></div>
+                  <div>• Planificación técnica: <strong>{actionStats.itPlanificando}</strong></div>
+                  <div>• En ejecución técnica: <strong>{actionStats.itEjecutando}</strong></div>
                 </div>
               </div>
 
+              {/* Negocio Box */}
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 8, padding: '10px 12px' }}>
-                <div style={{ fontSize: 10, fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>
-                  NEGOCIO
+                <div style={{ fontSize: 10, fontWeight: 800, color: '#b45309', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+                  Negocio / Solicitante
                 </div>
-                <div style={{ fontSize: 24, fontWeight: 800, color: '#d97706', margin: '2px 0' }}>
+                <div style={{ fontSize: 24, fontWeight: 900, color: '#d97706', margin: '3px 0 2px 0' }}>
                   {actionStats.negocioCount}
                 </div>
-                <div style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>
+                <div style={{ fontSize: 10, color: '#d97706', fontWeight: 700, marginBottom: 6 }}>
                   {actionStats.negPct}% del trabajo activo
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 2, fontSize: 10, color: '#78350f', borderTop: '1px solid #fef3c7', paddingTop: 6 }}>
+                  <div>• Por aprobar estimación: <strong>{actionStats.negAprobarEstim}</strong></div>
+                  <div>• Por habilitar presupuesto: <strong>{actionStats.negPresupuesto}</strong></div>
+                  <div>• Por aprobar planificación: <strong>{actionStats.negAprobarPlan}</strong></div>
                 </div>
               </div>
             </div>
 
-            {/* Barra horizontal acumulada */}
-            <div style={{ height: 8, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 10 }}>
+            {/* Barra acumulada */}
+            <div style={{ height: 8, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex', marginBottom: 8 }}>
               <div style={{ width: `${actionStats.itPct}%`, background: '#2563eb' }} title={`IT: ${actionStats.itPct}%`} />
               <div style={{ width: `${actionStats.negPct}%`, background: '#f59e0b' }} title={`Negocio: ${actionStats.negPct}%`} />
             </div>
           </div>
 
-          <div style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Total activas: <strong>{actionStats.activeCount}</strong></span>
-            <span>IT lidera estimación y planificación</span>
+          <div style={{ fontSize: 10.5, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, display: 'flex', justifyContent: 'space-between', flexWrap: 'wrap', gap: 4 }}>
+            <span>Total en cartera activa: <strong>{actionStats.activeCount} iniciativas</strong></span>
+            {actionStats.negocioCount > 0 ? (
+              <span style={{ color: '#b45309', fontWeight: 700 }}>
+                ⚠️ Negocio tiene {actionStats.negocioCount} aprobaciones pendientes
+              </span>
+            ) : (
+              <span style={{ color: '#059669', fontWeight: 700 }}>✓ Negocio al día con aprobaciones</span>
+            )}
           </div>
         </div>
 
-        {/* CARD 2: Iniciativas por ecosistema */}
+        {/* CARD 2: Distribución Estratégica por Frente / Ecosistema */}
         <div
           style={{
             background: '#ffffff',
@@ -5191,73 +5787,84 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
           }}
         >
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
-              Iniciativas por ecosistema
+            <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: '0 0 3px 0' }}>
+              Distribución Estratégica por Frente / Ecosistema
             </h4>
-            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 14px 0' }}>
-              Distribución por frente / dominio según fase
+            <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 12px 0' }}>
+              Avance del pipeline por dominio tecnológico (textos completos)
             </p>
 
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 7, marginBottom: 12 }}>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginBottom: 12 }}>
               {ecosistemas.length > 0 ? (
                 ecosistemas.map(eco => {
                   const ecoTotal = eco.total || 1;
                   const f1Pct = (eco.f1 / ecoTotal) * 100;
                   const f2Pct = (eco.f2 / ecoTotal) * 100;
                   const f3Pct = (eco.f3 / ecoTotal) * 100;
-                  const f4Pct = (eco.f4 / ecoTotal) * 100;
+                  const fObsPct = (eco.fObs / ecoTotal) * 100;
 
                   return (
-                    <div key={eco.name} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 11 }}>
-                      <span
-                        style={{
-                          width: 85,
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          color: '#334155',
-                          fontWeight: 600,
-                        }}
-                        title={eco.name}
-                      >
-                        {eco.name}
-                      </span>
-                      <div style={{ flex: 1, height: 7, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
-                        {f1Pct > 0 && <div style={{ width: `${f1Pct}%`, background: '#94a3b8' }} title={`F1: ${eco.f1}`} />}
-                        {f2Pct > 0 && <div style={{ width: `${f2Pct}%`, background: '#f59e0b' }} title={`F2: ${eco.f2}`} />}
-                        {f3Pct > 0 && <div style={{ width: `${f3Pct}%`, background: '#2563eb' }} title={`F3: ${eco.f3}`} />}
-                        {f4Pct > 0 && <div style={{ width: `${f4Pct}%`, background: '#10b981' }} title={`F4: ${eco.f4}`} />}
+                    <div key={eco.name} style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 8 }}>
+                        <span
+                          style={{
+                            fontSize: 11.5,
+                            fontWeight: 700,
+                            color: '#1e293b',
+                            whiteSpace: 'normal',
+                            wordBreak: 'break-word',
+                            lineHeight: 1.3,
+                          }}
+                        >
+                          {eco.name}
+                        </span>
+                        <span
+                          style={{
+                            fontSize: 10.5,
+                            fontWeight: 800,
+                            color: '#0f172a',
+                            background: '#f1f5f9',
+                            padding: '1px 7px',
+                            borderRadius: 10,
+                            flexShrink: 0,
+                          }}
+                        >
+                          {eco.total} ini. ({Math.round((eco.total / total) * 100)}%)
+                        </span>
                       </div>
-                      <span style={{ fontSize: 11, fontWeight: 800, color: '#0f172a', width: 22, textAlign: 'right' }}>
-                        {eco.total}
-                      </span>
+                      <div style={{ height: 8, width: '100%', background: '#f1f5f9', borderRadius: 4, overflow: 'hidden', display: 'flex' }}>
+                        {f1Pct > 0 && <div style={{ width: `${f1Pct}%`, background: '#f59e0b' }} title={`Fase 1: ${eco.f1}`} />}
+                        {f2Pct > 0 && <div style={{ width: `${f2Pct}%`, background: '#2563eb' }} title={`Fase 2: ${eco.f2}`} />}
+                        {f3Pct > 0 && <div style={{ width: `${f3Pct}%`, background: '#059669' }} title={`Fase 3: ${eco.f3}`} />}
+                        {fObsPct > 0 && <div style={{ width: `${fObsPct}%`, background: '#e11d48' }} title={`Con Observaciones: ${eco.fObs}`} />}
+                      </div>
                     </div>
                   );
                 })
               ) : (
-                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin datos disponibles</span>
+                <span style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>Sin datos de frente disponibles</span>
               )}
             </div>
           </div>
 
-          {/* Leyenda miniatura */}
-          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, flexWrap: 'wrap', gap: 4 }}>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#94a3b8' }} /> F1 Def.
+          {/* Leyenda completa con nombres claros */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, flexWrap: 'wrap', gap: 6 }}>
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#f59e0b' }} /> F1: Estimación
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#f59e0b' }} /> F2 Estim.
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#2563eb' }} /> F2: Planificación
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#2563eb' }} /> F3 Planif.
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#059669' }} /> F3: Implementadas
             </span>
-            <span style={{ display: 'flex', alignItems: 'center', gap: 3 }}>
-              <span style={{ width: 6, height: 6, borderRadius: '50%', background: '#10b981' }} /> F4 Impl.
+            <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+              <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#e11d48' }} /> Observadas
             </span>
           </div>
         </div>
 
-        {/* CARD 3: Fechas registradas frente al corte */}
+        {/* CARD 3: Salud de Fechas y Próximos Hitos Críticos */}
         <div
           style={{
             background: '#ffffff',
@@ -5271,39 +5878,40 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
           }}
         >
           <div>
-            <h4 style={{ fontSize: 13, fontWeight: 800, color: '#0f172a', margin: '0 0 2px 0' }}>
-              Fechas registradas frente al corte
+            <h4 style={{ fontSize: 13.5, fontWeight: 800, color: '#0f172a', margin: '0 0 3px 0' }}>
+              Salud de Fechas y Próximos Hitos Críticos
             </h4>
             <p style={{ fontSize: 11, color: '#64748b', margin: '0 0 10px 0' }}>
-              Hitos comprometidos vs fecha de hoy
+              Hitos comprometidos vs fecha de hoy (títulos completos legibles)
             </p>
 
-            {/* 4 mini métricas */}
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 12 }}>
+            {/* 4 métricas de salud */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 6, marginBottom: 10 }}>
               <div style={{ background: '#fff1f2', border: '1px solid #fecdd3', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#be123c', lineHeight: 1 }}>{dateMilestones.vencidas}</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#be123c', lineHeight: 1 }}>{dateMilestones.vencidas}</div>
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#9f1239', marginTop: 3 }}>Superada</div>
               </div>
               <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#b45309', lineHeight: 1 }}>{dateMilestones.vencePronto}</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#b45309', lineHeight: 1 }}>{dateMilestones.vencePronto}</div>
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#78350f', marginTop: 3 }}>≤ 15 días</div>
               </div>
               <div style={{ background: '#eff6ff', border: '1px solid #bfdbfe', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#1d4ed8', lineHeight: 1 }}>{dateMilestones.proximas}</div>
-                <div style={{ fontSize: 9, fontWeight: 700, color: '#1e3a8a', marginTop: 3 }}>Próximas</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#1d4ed8', lineHeight: 1 }}>{dateMilestones.proximas}</div>
+                <div style={{ fontSize: 9, fontWeight: 700, color: '#1e3a8a', marginTop: 3 }}>En fecha</div>
               </div>
               <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 6, padding: '6px 4px', textAlign: 'center' }}>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#64748b', lineHeight: 1 }}>{dateMilestones.sinFecha}</div>
+                <div style={{ fontSize: 16, fontWeight: 900, color: '#64748b', lineHeight: 1 }}>{dateMilestones.sinFecha}</div>
                 <div style={{ fontSize: 9, fontWeight: 700, color: '#475569', marginTop: 3 }}>Sin fecha</div>
               </div>
             </div>
 
-            {/* Lista de próximos hitos */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+            {/* Lista de próximos hitos con títulos COMPLETOS sin cortar */}
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
               {dateMilestones.upcoming.length > 0 ? (
                 dateMilestones.upcoming.map(({ iniciativa: i, dateStr, status }) => {
                   const badgeBg = status === 'overdue' ? '#fee2e2' : status === 'soon' ? '#fef3c7' : '#dbeafe';
                   const badgeColor = status === 'overdue' ? '#b91c1c' : status === 'soon' ? '#b45309' : '#1d4ed8';
+                  const statusLabel = status === 'overdue' ? 'Superada' : status === 'soon' ? 'Vence pronto' : 'En fecha';
 
                   return (
                     <div
@@ -5311,54 +5919,65 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
                       onClick={() => onOpenDetailModal && onOpenDetailModal(i)}
                       style={{
                         display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 8,
-                        padding: '4px 6px',
-                        borderRadius: 6,
+                        flexDirection: 'column',
+                        gap: 3,
+                        padding: '6px 8px',
+                        borderRadius: 7,
                         background: '#f8fafc',
+                        border: '1px solid #e2e8f0',
                         cursor: onOpenDetailModal ? 'pointer' : 'default',
-                        transition: 'background 0.15s',
+                        transition: 'all 0.15s ease',
                       }}
-                      onMouseEnter={e => (e.currentTarget.style.background = '#f1f5f9')}
-                      onMouseLeave={e => (e.currentTarget.style.background = '#f8fafc')}
-                      title={`Clic para ver detalle de: #${i.id} - ${i.titulo}`}
+                      onMouseEnter={e => {
+                        (e.currentTarget as HTMLElement).style.background = '#f1f5f9';
+                        (e.currentTarget as HTMLElement).style.borderColor = '#cbd5e1';
+                      }}
+                      onMouseLeave={e => {
+                        (e.currentTarget as HTMLElement).style.background = '#f8fafc';
+                        (e.currentTarget as HTMLElement).style.borderColor = '#e2e8f0';
+                      }}
+                      title="Haz clic para ver el detalle completo de la iniciativa"
                     >
-                      <span
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontSize: 10, fontWeight: 800, color: '#2563eb' }}>
+                            #{i.id}
+                          </span>
+                          <span
+                            style={{
+                              fontSize: 9.5,
+                              fontWeight: 700,
+                              padding: '1px 5px',
+                              borderRadius: 4,
+                              background: badgeBg,
+                              color: badgeColor,
+                              fontFamily: 'monospace',
+                            }}
+                          >
+                            {statusLabel} ({fmtDateShort(dateStr)})
+                          </span>
+                        </div>
+                        <span style={{ fontSize: 9.5, color: '#64748b', fontWeight: 600 }}>
+                          {getEtapaHumanLabel(i.etapa_actual)}
+                        </span>
+                      </div>
+                      <div
                         style={{
-                          fontSize: 10,
-                          fontWeight: 700,
-                          padding: '1px 6px',
-                          borderRadius: 4,
-                          background: badgeBg,
-                          color: badgeColor,
-                          whiteSpace: 'nowrap',
-                          fontFamily: 'monospace',
-                        }}
-                      >
-                        {fmtDateShort(dateStr)}
-                      </span>
-                      <span
-                        style={{
-                          flex: 1,
                           fontSize: 11,
                           fontWeight: 600,
                           color: '#1e293b',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
+                          lineHeight: 1.35,
+                          whiteSpace: 'normal',
+                          wordBreak: 'break-word',
                         }}
                       >
                         {i.titulo || 'Sin título'}
-                      </span>
-                      <span style={{ fontSize: 10, color: '#64748b', flexShrink: 0 }}>
-                        #{i.id}
-                      </span>
+                      </div>
                     </div>
                   );
                 })
               ) : (
-                <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '4px 0' }}>
+                <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic', padding: '6px 0' }}>
                   Sin fechas de hitos comprometidos registradas
                 </div>
               )}
@@ -5366,7 +5985,7 @@ function DashboardEstadisticoVP({ iniciativas, onOpenDetailModal }: DashboardEst
           </div>
 
           <div style={{ fontSize: 10, color: '#64748b', borderTop: '1px solid #f1f5f9', paddingTop: 8, textAlign: 'right' }}>
-            Hitos en estimación, re-estimación y fin planificado
+            Hitos evaluados según fechas de estimación y planificación
           </div>
         </div>
       </div>
@@ -5455,68 +6074,92 @@ function SectionHeaderToggle({ title, badge, isOpen, onToggle, actions }: Sectio
 // REPORTE 1 — Por VP del Área Solicitante
 // ---------------------------------------------------------------------------
 function ReporteVP({
-  iniciativas, onNavigate, macro, onOpenDetailModal,
+  iniciativas, onNavigate, macro, onOpenDetailModal, onOpenVPSelector,
 }: {
   iniciativas: Iniciativa[];
   onNavigate: NavigateFn;
   macro: MacroFilters;
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
+  onOpenVPSelector?: () => void;
 }) {
-  const [sortField, setSortField] = useState<'total' | 'vp'>('total');
-  const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
-
   // Estados plegables (toggles) para cada sección
   const [isPipelineStatsOpen, setIsPipelineStatsOpen] = useState(true);
-  const [isVpTableOpen, setIsVpTableOpen] = useState(true);
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
 
-  // Datos para la tabla resumen agrupada por VP
-  const data = useMemo(() => {
-    const byVP: Record<string, { total: number; byEtapa: Record<EtapaPipeline, number> }> = {};
-    iniciativas.forEach(i => {
-      const vp = normalize(i.vp_solicitante);
-      if (!byVP[vp]) byVP[vp] = { total: 0, byEtapa: {} as Record<EtapaPipeline, number> };
-      byVP[vp].total++;
-      byVP[vp].byEtapa[i.etapa_actual] = (byVP[vp].byEtapa[i.etapa_actual] || 0) + 1;
-    });
-    const total = iniciativas.length || 1;
-    return Object.entries(byVP).map(([vp, s]) => ({
-      vp,
-      total: s.total,
-      pct: Math.round((s.total / total) * 100),
-      byEtapa: s.byEtapa,
-    }));
-  }, [iniciativas]);
+  // Filtro interactivo de Fase (sincroniza Dashboard Estadístico con el Cronograma Timeline)
+  const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<VpPipelinePhase | null>(null);
 
-  const sorted = useMemo(() => {
-    return [...data].sort((a, b) => {
-      const cmp = sortField === 'total'
-        ? a.total - b.total
-        : optLabel(a.vp).localeCompare(optLabel(b.vp), 'es');
-      return sortDir === 'asc' ? cmp : -cmp;
-    });
-  }, [data, sortField, sortDir]);
-
-  const toggleSort = (f: typeof sortField) => {
-    if (sortField === f) setSortDir(d => d === 'asc' ? 'desc' : 'asc');
-    else { setSortField(f); setSortDir('desc'); }
+  const handleSelectPhase = (phase: VpPipelinePhase) => {
+    if (selectedPhaseFilter === phase) {
+      setSelectedPhaseFilter(null);
+    } else {
+      setSelectedPhaseFilter(phase);
+      setIsTimelineOpen(true);
+      setTimeout(() => {
+        const el = document.getElementById('cronograma-timeline-section');
+        if (el) {
+          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+        }
+      }, 60);
+    }
   };
 
-  const SortIcon = ({ field }: { field: typeof sortField }) =>
-    sortField !== field
-      ? <ChevronRight size={12} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
-      : sortDir === 'asc' ? <ChevronUp size={12} /> : <ChevronDown size={12} />;
-
   if (iniciativas.length === 0) {
+    const isNoVpSelected = macro.vp_solicitantes.length === 0;
     return (
-      <div style={{ textAlign: 'center', padding: '48px 24px', background: '#ffffff', borderRadius: 12, border: '1px dashed #cbd5e1' }}>
-        <Building2 size={36} style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
-        <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
-          No se encontraron iniciativas
-        </h4>
-        <p style={{ fontSize: 13, color: '#64748b', maxWidth: 450, margin: '0 auto' }}>
-          No hay iniciativas que coincidan con los filtros seleccionados en la cabecera. Intenta ajustar o limpiar los filtros.
-        </p>
+      <div style={{ textAlign: 'center', padding: '56px 24px', background: '#ffffff', borderRadius: 14, border: '1.5px dashed #cbd5e1', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
+        {isNoVpSelected ? (
+          <>
+            <Users size={42} style={{ color: '#3b82f6', margin: '0 auto 14px' }} />
+            <h4 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', marginBottom: 6 }}>
+              Ninguna Vicepresidencia seleccionada
+            </h4>
+            <p style={{ fontSize: 13, color: '#64748b', maxWidth: 480, margin: '0 auto 16px', lineHeight: 1.5 }}>
+              Para una mejor experiencia y evitar abrumar la pantalla, selecciona una o más Vicepresidencias en el combo selector superior <strong>"VP Solicitante"</strong> (puedes marcar varias a la vez).
+            </p>
+            {onOpenVPSelector && (
+              <button
+                type="button"
+                onMouseDown={e => e.stopPropagation()}
+                onClick={e => {
+                  e.stopPropagation();
+                  onOpenVPSelector();
+                }}
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 8,
+                  padding: '9px 20px',
+                  backgroundColor: '#2563eb',
+                  color: '#ffffff',
+                  borderRadius: 8,
+                  border: 'none',
+                  fontSize: 12.5,
+                  fontWeight: 700,
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(37, 99, 235, 0.3)',
+                  marginTop: 6,
+                  transition: 'all 0.15s ease',
+                }}
+                onMouseOver={e => (e.currentTarget.style.backgroundColor = '#1d4ed8')}
+                onMouseOut={e => (e.currentTarget.style.backgroundColor = '#2563eb')}
+              >
+                <ChevronDown size={14} />
+                <span>selecciona alguna VP</span>
+              </button>
+            )}
+          </>
+        ) : (
+          <>
+            <Building2 size={36} style={{ color: '#94a3b8', margin: '0 auto 12px' }} />
+            <h4 style={{ fontSize: 15, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>
+              No se encontraron iniciativas
+            </h4>
+            <p style={{ fontSize: 13, color: '#64748b', maxWidth: 450, margin: '0 auto' }}>
+              No hay iniciativas que coincidan con los filtros seleccionados en la cabecera. Intenta ajustar o limpiar los filtros.
+            </p>
+          </>
+        )}
       </div>
     );
   }
@@ -5550,86 +6193,15 @@ function ReporteVP({
             <DashboardEstadisticoVP
               iniciativas={iniciativas}
               onOpenDetailModal={onOpenDetailModal}
+              selectedPhase={selectedPhaseFilter}
+              onSelectPhase={handleSelectPhase}
             />
           </div>
         )}
       </div>
 
       {/* ------------------------------------------------------------- */}
-      {/* SECCIÓN 2: TABLA DE DISTRIBUCIÓN POR VP (PLEGABLE) */}
-      {/* ------------------------------------------------------------- */}
-      <div
-        style={{
-          background: '#ffffff',
-          border: '1px solid #e2e8f0',
-          borderRadius: 12,
-          overflow: 'hidden',
-          boxShadow: '0 1px 3px rgba(0,0,0,0.02)',
-        }}
-      >
-        <SectionHeaderToggle
-          title="Distribución por VP del Área Solicitante"
-          badge={
-            <span style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
-              {sorted.length} vicepresidencia{sorted.length === 1 ? '' : 's'}
-            </span>
-          }
-          isOpen={isVpTableOpen}
-          onToggle={() => setIsVpTableOpen(prev => !prev)}
-        />
-        {isVpTableOpen && (
-          <div style={{ overflowX: 'auto' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-              <thead>
-                <tr style={{ background: '#f8fafc' }}>
-                  <th onClick={() => toggleSort('vp')} style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>VP del Área Solicitante <SortIcon field="vp" /></span>
-                  </th>
-                  <th onClick={() => toggleSort('total')} style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total <SortIcon field="total" /></span>
-                  </th>
-                  <th style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>% Relativo</th>
-                  <th style={{ padding: '9px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', whiteSpace: 'nowrap' }}>Distribución por Etapa</th>
-                </tr>
-              </thead>
-              <tbody>
-                {sorted.map((row, idx) => {
-                  const base = buildNavFilters(macro, { vp_solicitantes: [row.vp] });
-                  return (
-                    <tr key={row.vp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                      <td style={{ padding: '9px 12px' }}>
-                        <ClickableCell label={optLabel(row.vp)} onClick={() => onNavigate(base)} title={`Ver iniciativas de: ${optLabel(row.vp)}`} />
-                      </td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>{row.total}</td>
-                      <td style={{ padding: '9px 12px', textAlign: 'right' }}>
-                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '1px 8px', borderRadius: 20 }}>{row.pct}%</span>
-                      </td>
-                      <td style={{ padding: '9px 12px' }}>
-                        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
-                          {[...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG].filter(e => (row.byEtapa[e.id] || 0) > 0).map(e => (
-                            <EtapaBadge key={e.id} etapaId={e.id} count={row.byEtapa[e.id] || 0} navFilters={base} onNavigate={onNavigate} />
-                          ))}
-                        </div>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-              <tfoot>
-                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
-                  <td style={{ padding: '9px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
-                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#0f172a' }}>{iniciativas.length}</td>
-                  <td style={{ padding: '9px 12px', textAlign: 'right', fontWeight: 700, color: '#0284c7' }}>100%</td>
-                  <td />
-                </tr>
-              </tfoot>
-            </table>
-          </div>
-        )}
-      </div>
-
-      {/* ------------------------------------------------------------- */}
-      {/* SECCIÓN 3: CRONOGRAMA DE INICIATIVAS (TIMELINE GANTT PLEGABLE) */}
+      {/* SECCIÓN 2: CRONOGRAMA DE INICIATIVAS (TIMELINE GANTT PLEGABLE) */}
       {/* ------------------------------------------------------------- */}
       <div
         style={{
@@ -5654,6 +6226,8 @@ function ReporteVP({
           <TimelineIniciativasVP
             iniciativas={iniciativas}
             onOpenDetailModal={onOpenDetailModal}
+            phaseFilter={selectedPhaseFilter}
+            onClearPhaseFilter={() => setSelectedPhaseFilter(null)}
           />
         )}
       </div>
@@ -7145,6 +7719,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [macroLideres,       setMacroLideres]       = useState<string[]>([]);
   const [macroMotivos,       setMacroMotivos]       = useState<string[]>([]);
   const [isFilterPanelOpen,  setIsFilterPanelOpen]  = useState<boolean>(true);
+  const [isVpDropdownOpen,   setIsVpDropdownOpen]   = useState<boolean>(false);
 
   // ---- Estado del popup de iniciativas standard ----
   const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
@@ -7520,12 +8095,32 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     motivos:       allMotivosOptions,
   }), [iniciativas, allMotivosOptions]);
 
+  // VP principal (con mayor volumen de iniciativas registradas)
+  const primaryVp = useMemo(() => {
+    if (opts.vps.length === 0) return null;
+    const counts: Record<string, number> = {};
+    iniciativas.forEach(i => {
+      const v = i.vp_solicitante ? String(i.vp_solicitante).trim() : null;
+      if (v && isMeaningfulValue(v)) counts[v] = (counts[v] || 0) + 1;
+    });
+    const validVps = opts.vps.filter(v => v !== EMPTY_SENTINEL);
+    if (validVps.length === 0) return opts.vps[0] || null;
+    return validVps.reduce(
+      (prev, curr) => ((counts[curr] || 0) > (counts[prev] || 0) ? curr : prev),
+      validVps[0]
+    );
+  }, [opts.vps, iniciativas]);
+
   // ---- Label para etapas en el dropdown ----
   const etapaLabel = (v: string) => ETAPAS_MAP.get(v as EtapaPipeline)?.label || ETAPAS_PLANIFICADAS_MAP.get(v as EtapaPipeline)?.label || v;
 
   // ---- Aplicar filtros macro ----
   const filtered = useMemo(() => {
     const ref = new Date();
+    // En el reporte de VP, si macroVPs está vacío, no mostrar todo para evitar abrumar la vista
+    if (selectedReport === 'vp' && macroVPs.length === 0) {
+      return [];
+    }
     return iniciativas.filter(i => {
       if (macroInstituciones.length && !macroInstituciones.includes(normalize(i.institucion))) return false;
       if (macroSPO.length           && !macroSPO.includes(normalize(i.proyecto_spo)))          return false;
@@ -7547,7 +8142,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       }
       return true;
     });
-  }, [iniciativas, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos]);
+  }, [iniciativas, selectedReport, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos]);
 
   // ---- Métricas para las tarjetas del catálogo ----
   const fueraFechaMetrics = useMemo(() => {
@@ -7795,7 +8390,12 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                   <button
                     key={opt.id}
                     type="button"
-                    onClick={() => startTransition(() => setSelectedReport(opt.id))}
+                    onClick={() => {
+                      if (opt.id === 'vp') {
+                        setMacroVPs([]);
+                      }
+                      startTransition(() => setSelectedReport(opt.id));
+                    }}
                     style={{
                       display: 'inline-flex',
                       alignItems: 'center',
@@ -7995,6 +8595,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                   selected={macroVPs}
                   onChange={setMacroVPs}
                   icon={<UserCheck size={10} />}
+                  placeholder={selectedReport === 'vp' ? 'Selecciona VP...' : 'Todos'}
+                  isOpen={isVpDropdownOpen}
+                  onOpenChange={setIsVpDropdownOpen}
                 />
 
                 {/* Estado (Etapa) */}
@@ -8063,7 +8666,12 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             {reportCatalog.map(opt => (
               <div
                 key={opt.id}
-                onClick={() => startTransition(() => setSelectedReport(opt.id))}
+                onClick={() => {
+                  if (opt.id === 'vp') {
+                    setMacroVPs([]);
+                  }
+                  startTransition(() => setSelectedReport(opt.id));
+                }}
                 style={{
                   backgroundColor: '#ffffff',
                   border: `1px solid ${opt.borderColor}`,
@@ -8249,6 +8857,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             onNavigate={setPopupFilters}
             macro={macro}
             onOpenDetailModal={setDetailModalIniciativa}
+            onOpenVPSelector={() => {
+              setIsFilterPanelOpen(true);
+              setIsVpDropdownOpen(true);
+              window.scrollTo({ top: 0, behavior: 'smooth' });
+            }}
           />
         </ReportCard>
       )}

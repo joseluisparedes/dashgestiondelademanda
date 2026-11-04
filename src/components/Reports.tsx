@@ -3156,6 +3156,32 @@ interface TimelineRowItem {
 function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
   const segs: TimelineSegment[] = [];
 
+  // Regla para eliminadas: Si está eliminada, SOLO mostrar su hito/segmento de eliminación
+  const isEliminada = (i.etapa_actual as string) === 'eliminadas' || (i.etapa_actual as string) === 'eliminada';
+  if (isEliminada) {
+    const fechaElim = parseTimelineDate(i.fecha_eliminacion);
+    if (fechaElim) {
+      const parts: string[] = [];
+      parts.push(`Eliminada: ${fmtDateShort(i.fecha_eliminacion)}`);
+      if (i.solicitado_por) parts.push(`Solicitado por: ${i.solicitado_por}`);
+      if (i.motivo_eliminacion) parts.push(`Motivo: ${i.motivo_eliminacion}`);
+      segs.push({
+        id: `${i.id}-elim`,
+        stageKey: 'eliminada',
+        stageName: 'Eliminada',
+        start: fechaElim,
+        end: fechaElim,
+        isSingleDay: true,
+        color: '#ef4444',
+        gradient: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
+        borderColor: '#991b1b',
+        textColor: '#ffffff',
+        details: parts.join(' | '),
+      });
+    }
+    return segs;
+  }
+
   // Regla 1: Si la iniciativa ya está planificada, NO mostrar su línea de estimación
   const isPlanificada =
     ['planificadas', 'implementadas', 'en_ejecucion', 'terminado'].includes(i.etapa_actual) ||

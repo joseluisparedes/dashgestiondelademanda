@@ -1,4 +1,4 @@
-/**
+﻿/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -4019,7 +4019,7 @@ function TimelineIniciativasVP({
           </p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto', position: 'relative' }}>
+        <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
           <div style={{ minWidth: 1240, display: 'flex', flexDirection: 'column' }}>
             {/* Header del Gantt: Columnas a la izquierda (530px) | Meses y HOY a la derecha */}
             <div
@@ -4028,6 +4028,7 @@ function TimelineIniciativasVP({
                 background: '#f8fafc',
                 borderBottom: '2px solid #e2e8f0',
                 position: 'relative',
+                paddingTop: 12,
               }}
             >
               {/* Columnas Izquierdas Header (530px en total: 360px + 85px + 85px) */}
@@ -4136,7 +4137,7 @@ function TimelineIniciativasVP({
                   style={{
                     position: 'absolute',
                     left: `${todayPct}%`,
-                    top: -6,
+                    top: 2,
                     transform: 'translateX(-50%)',
                     zIndex: 30,
                     display: 'inline-flex',
@@ -5524,7 +5525,7 @@ function exportReportToHTML(
         <img alt="Laureate Perú" src="data:image/png;base64,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" style="height:38px;width:auto;display:block;"/>
       </div>
       <div style="text-align:center;">
-        <div style="font-size:18px;font-weight:800;color:#fff;font-family:'Montserrat',sans-serif;">Consolidado <span style="color:rgba(235,154,70,1)">${escapeHtml(vpFiltrosTexto)}</span></div>
+        <div style="font-size:18px;font-weight:800;color:#fff;font-family:'Montserrat',sans-serif;">Reporte de <span style="color:rgba(235,154,70,1)">Gestión de la Demanda TI</span></div>
         <div style="font-size:10px;color:rgba(255,255,255,.7);font-weight:500;letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Reporte de Proyectos y Demanda de Tecnología</div>
       </div>
       <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
@@ -5652,8 +5653,8 @@ function exportReportToHTML(
               <th style="width: 140px;">Fase / Etapa</th>
               <th style="width: 80px;">Inicio</th>
               <th style="width: 80px;">Fin</th>
-              <th style="padding: 0; min-width: 480px; position: relative; height: 38px;">
-                <div id="gantt-month-headers" style="position: relative; width: 100%; height: 100%;"></div>
+              <th style="padding: 0; min-width: 480px; position: relative; height: 50px; overflow: visible;">
+                <div id="gantt-month-headers" style="position: relative; width: 100%; height: 100%; margin-top: 10px;"></div>
               </th>
             </tr>
           </thead>
@@ -6677,7 +6678,7 @@ function exportReportToHTML(
             \`).join('')}
 
             <!-- Badge flotante de HOY -->
-            <div style="position: absolute; left: \${todayLeftPct}%; top: -6px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
+            <div style="position: absolute; left: \${todayLeftPct}%; top: 2px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
               <span>📍 HOY</span>
               <span style="font-weight: 600; opacity: 0.9;">(\${fmtDate(now)})</span>
             </div>

@@ -5781,7 +5781,7 @@ function exportReportToHTML(
             <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: #475569;">
               <span>Institución: <strong>\${ini.institucion || '—'}</strong></span>
               <span>Solicitante: <strong>\${ini.solicitado_por || ini.usuario_negocio || '—'}</strong></span>
-              <span>IT BP: <strong>\${ini.it_business_partner || '—'}</strong></span>
+              <span>IT BP: <strong>\${ini.it_bp || ini.it_business_partner || '—'}</strong></span>
               <span>Líder de Dominio: <strong>\${ini.lider_dominio || '—'}</strong></span>
               <span>VP: <strong>\${ini.vp_solicitante || '—'}</strong></span>
             </div>
@@ -5915,7 +5915,8 @@ function exportReportToHTML(
       RAW_DATA.forEach(i => {
         if (i.vp_solicitante) vps.add(i.vp_solicitante.trim());
         if (i.institucion) insts.add(i.institucion.trim());
-        if (i.it_business_partner) bps.add(i.it_business_partner.trim());
+        if (i.it_bp) bps.add(i.it_bp.trim());
+        else if (i.it_business_partner) bps.add(i.it_business_partner.trim());
         if (i.etapa_actual) estados.add(i.etapa_actual.trim());
         if (i.lider_dominio) lideres.add(i.lider_dominio.trim());
       });
@@ -6028,7 +6029,7 @@ function exportReportToHTML(
         const inst = (i.institucion || '').trim();
         if (selectedInstituciones.size > 0 && !selectedInstituciones.has(inst)) return false;
 
-        const bp = (i.it_business_partner || '').trim();
+        const bp = (i.it_bp || i.it_business_partner || '').trim();
         if (selectedITBPs.size > 0 && !selectedITBPs.has(bp)) return false;
 
         const est = (i.etapa_actual || '').trim();

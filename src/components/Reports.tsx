@@ -4879,6 +4879,8 @@ function exportReportToHTML(
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Montserrat:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <title>${escapeHtml(reportTitle)} - ${escapeHtml(vpFiltrosTexto)}</title>
   <style>
     :root {
@@ -4891,12 +4893,48 @@ function exportReportToHTML(
       --text-muted: #64748b;
     }
     * { box-sizing: border-box; margin: 0; padding: 0; }
+    :root {
+      --orange: #EB5F46;
+      --navy: #0D436C;
+      --blue-mid: #007FB1;
+      --teal: #00B8B2;
+    }
     body {
-      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-      background: var(--bg);
+      font-family: 'Montserrat', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: #f7f8fc;
       color: var(--text);
       line-height: 1.5;
-      padding: 20px;
+      padding: 0;
+    }
+    .sticky-header {
+      position: sticky; top: 0; z-index: 100;
+      background: linear-gradient(135deg, var(--orange) 0%, var(--navy) 100%);
+      box-shadow: 0 4px 20px rgba(13,67,108,.25);
+    }
+    .header-inner { display: flex; align-items: center; justify-content: space-between; padding: 16px 36px; }
+    .h-divider { height: 4px; background: linear-gradient(90deg, var(--orange) 0%, var(--blue-mid) 50%, var(--teal) 100%); }
+    .page-footer {
+      margin-top: 36px; padding: 18px 24px; background: #fff;
+      border: 1px solid #D7D9E8; border-radius: 12px;
+      display: flex; justify-content: space-between; align-items: center;
+      gap: 16px; flex-wrap: wrap; box-shadow: 0 2px 16px rgba(13,67,108,.10);
+    }
+    .footer-text { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
+    .footer-mail { font-size: 11px; font-weight: 700; color: var(--navy); }
+    .main-content { padding: 12px 24px 32px; max-width: 1400px; margin: 0 auto; }
+    .group-section-header {
+      background: #f0fdfa;
+      cursor: pointer;
+      user-select: none;
+      transition: background 0.15s ease;
+    }
+    .group-section-header:hover {
+      filter: brightness(0.97);
+    }
+    .group-section-header td {
+      padding: 8px 14px !important;
+      border-top: 1px solid #ccfbf1;
+      border-bottom: 1px solid #ccfbf1;
     }
 
     /* Barra Superior de Filtros idéntica a la app */
@@ -5479,6 +5517,25 @@ function exportReportToHTML(
 <body>
   <div id="tooltip"></div>
 
+  <!-- HEADER LAUREATE OFICIAL -->
+  <div class="sticky-header">
+    <div class="header-inner">
+      <div style="display:flex;align-items:center;">
+        <img alt="Laureate Perú" src="data:image/png;base64,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" style="height:38px;width:auto;display:block;"/>
+      </div>
+      <div style="text-align:center;">
+        <div style="font-size:18px;font-weight:800;color:#fff;font-family:'Montserrat',sans-serif;">Consolidado <span style="color:rgba(235,154,70,1)">${escapeHtml(vpFiltrosTexto)}</span></div>
+        <div style="font-size:10px;color:rgba(255,255,255,.7);font-weight:500;letter-spacing:1px;text-transform:uppercase;margin-top:2px;">Reporte de Proyectos y Demanda de Tecnología</div>
+      </div>
+      <div style="text-align:right;display:flex;flex-direction:column;align-items:flex-end;gap:2px;">
+        <span style="font-size:9px;font-weight:600;color:rgba(255,255,255,.55);text-transform:uppercase;letter-spacing:1px;">Generado</span>
+        <span style="font-size:13px;font-weight:800;color:rgba(255,255,255,.95);letter-spacing:.3px;">${escapeHtml(fechaGeneracion)}</span>
+      </div>
+    </div>
+  </div>
+  <div class="h-divider"></div>
+
+  <div class="main-content">
   <!-- Barra Superior de Filtros (Fija al estilo de la app, interactiva con multiselectores) -->
   <div class="top-filter-bar">
     <div class="top-filter-header">
@@ -5633,9 +5690,21 @@ function exportReportToHTML(
     </div>
   </div>
 
-  <div style="text-align: right; font-size: 11px; color: #94a3b8; margin-top: 14px;">
-    Documento interactivo generado automáticamente por Dashboard de Gestión de la Demanda TI.
-  </div>
+  <!-- PIE DE PÁGINA LAUREATE OFICIAL -->
+  <footer class="page-footer">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <svg aria-hidden="true" fill="none" height="20" viewbox="0 0 22 28" width="16">
+        <path d="M11 0 C11 0 0 6 0 16 C0 22.6 4.8 27.4 11 28 C11 28 11 15.5 20.5 9 C20.5 9 17.5 0 11 0Z" fill="#EB5F46"></path>
+        <path d="M11 28 C11 28 11 15 3.5 10" opacity="0.5" stroke="#EB5F46" stroke-linecap="round" stroke-width="1.4"></path>
+      </svg>
+      <div class="footer-text">Para consultas o escalar algún pendiente, contacte al equipo de Business Partner.<br/><strong>Dirección de Proyectos VP TTD</strong></div>
+    </div>
+    <div style="display:flex;gap:16px;align-items:center;">
+      <button onclick="window.print()" style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.5px;">🖨️ Imprimir / Guardar PDF</button>
+      <div class="footer-mail">IniciativasTTD@Laureate.pe</div>
+    </div>
+  </footer>
+  </div><!-- .main-content -->
 
   <!-- Runtime JS Interactivo -->
   <script>
@@ -5652,6 +5721,59 @@ function exportReportToHTML(
 
     // Meses en español
     const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
+
+    // Clasificación de iniciativas en secciones AM (Requerimientos No BAU / Proyectos / Vacíos)
+    function classifyGroupAM(i) {
+      const rawVal = i.proyecto_o_req || (i.raw_fields && (
+        i.raw_fields['Indicar si es Proyecto o Requerimiento No BAU'] ||
+        i.raw_fields['Proyecto o Requerimiento No BAU'] ||
+        i.raw_fields['Proyecto o Requerimiento'] ||
+        i.raw_fields['No BAU']
+      ));
+      if (!rawVal) return 'vacio';
+      const s = String(rawVal).trim().toLowerCase();
+      if (!s || s === 'null' || s === 'undefined' || s === 'vacio' || s === '(sin asignar)' || s.startsWith('http://') || s.startsWith('https://')) {
+        return 'vacio';
+      }
+      if (s.includes('requerimiento') || s.includes('no bau') || s.includes('req')) {
+        return 'requerimiento';
+      }
+      if (s.includes('proyecto')) {
+        return 'proyecto';
+      }
+      return 'vacio';
+    }
+
+    const GROUPS_AM_CONFIG = {
+      requerimiento: {
+        key: 'requerimiento',
+        title: 'Requerimientos (No BAU)',
+        headerBg: '#ecfeff',
+        headerBorder: '#a5f3fc',
+        headerText: '#0e7490'
+      },
+      proyecto: {
+        key: 'proyecto',
+        title: 'Proyectos',
+        headerBg: '#eff6ff',
+        headerBorder: '#bfdbfe',
+        headerText: '#1d4ed8'
+      },
+      vacio: {
+        key: 'vacio',
+        title: 'Sin Regularizar / Vacíos (Columna AM pendiente)',
+        headerBg: '#fffbeb',
+        headerBorder: '#fde68a',
+        headerText: '#b45309'
+      }
+    };
+
+    let collapsedGroups = {};
+
+    function toggleGroupCollapse(key) {
+      collapsedGroups[key] = !collapsedGroups[key];
+      renderTimeline();
+    }
 
     function getPhase(etapa) {
       if (!etapa) return 1;
@@ -6566,14 +6688,28 @@ function exportReportToHTML(
         \`;
       }
 
-      // 2. Renderizar Filas de iniciativas
+      // 2. Renderizar Filas de iniciativas agrupadas en Secciones AM
       const tbody = document.getElementById('timeline-tbody');
       if (filtered.length === 0) {
         tbody.innerHTML = '<tr><td colspan="6" style="text-align: center; padding: 24px; color: #94a3b8;">No hay iniciativas que coincidan con los filtros seleccionados.</td></tr>';
         return;
       }
 
-      tbody.innerHTML = filtered.map(i => {
+      const groups = [
+        { key: 'requerimiento', ...GROUPS_AM_CONFIG.requerimiento, items: [] },
+        { key: 'proyecto', ...GROUPS_AM_CONFIG.proyecto, items: [] },
+        { key: 'vacio', ...GROUPS_AM_CONFIG.vacio, items: [] }
+      ];
+
+      filtered.forEach(i => {
+        const grpKey = classifyGroupAM(i);
+        const grp = groups.find(g => g.key === grpKey) || groups[2];
+        grp.items.push(i);
+      });
+
+      const activeGroups = groups.filter(g => g.items.length > 0);
+
+      const renderInitiativeRow = i => {
         const isElim = ['eliminadas', 'eliminada'].includes(i.etapa_actual);
         const phase = getPhase(i.etapa_actual);
         const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
@@ -6683,6 +6819,27 @@ function exportReportToHTML(
             </td>
           </tr>
         \`;
+      };
+
+      tbody.innerHTML = activeGroups.map(grp => {
+        const isCol = Boolean(collapsedGroups[grp.key]);
+        const headerRow = \`
+          <tr class="group-section-header" onclick="toggleGroupCollapse('\${grp.key}')" style="background: \${grp.headerBg};">
+            <td colspan="6" style="padding: 8px 14px; border-top: 1px solid \${grp.headerBorder}; border-bottom: 1px solid \${grp.headerBorder}; cursor: pointer;">
+              <div style="display: flex; align-items: center; justify-content: space-between;">
+                <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 12px; color: \${grp.headerText};">
+                  <span>\${isCol ? '▶' : '▼'}</span>
+                  <span>\${grp.title} · \${grp.items.length} iniciativa\${grp.items.length === 1 ? '' : 's'}</span>
+                </div>
+                <div style="font-size: 10.5px; font-weight: 600; color: \${grp.headerText}; opacity: 0.85;">
+                  \${isCol ? 'Desplegar' : 'Plegar'}
+                </div>
+              </div>
+            </td>
+          </tr>
+        \`;
+        if (isCol) return headerRow;
+        return headerRow + grp.items.map(renderInitiativeRow).join('');
       }).join('');
     }
 

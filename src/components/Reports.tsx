@@ -4136,7 +4136,7 @@ function TimelineIniciativasVP({
                   style={{
                     position: 'absolute',
                     left: `${todayPct}%`,
-                    top: 5,
+                    top: -6,
                     transform: 'translateX(-50%)',
                     zIndex: 30,
                     display: 'inline-flex',
@@ -4487,8 +4487,8 @@ function TimelineIniciativasVP({
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                justifyContent: 'center',
-                                                padding: '0 4px',
+                                                justifyContent: 'flex-start',
+                                                padding: '0 6px',
                                                 boxSizing: 'border-box',
                                                 zIndex: isElimSeg ? 9 : seg.isSingleDay ? 8 : 4 + sIdx,
                                                 transition: 'transform 0.1s ease, filter 0.1s ease, z-index 0.1s ease',
@@ -5473,7 +5473,7 @@ function exportReportToHTML(
       border-radius: 5px;
       display: flex;
       align-items: center;
-      justify-content: center;
+      justify-content: flex-start;
       color: #ffffff;
       font-size: 9.5px;
       font-weight: 800;
@@ -5547,9 +5547,6 @@ function exportReportToHTML(
       </div>
       <div style="display: flex; align-items: center; gap: 8px;">
         <span style="font-size: 11px; color: #64748b;">Generado: <strong>${escapeHtml(fechaGeneracion)}</strong></span>
-        <button class="no-print" onclick="window.print()" style="padding: 5px 12px; background: #0284c7; color: white; border: none; border-radius: 6px; font-size: 11px; font-weight: 700; cursor: pointer;">
-          🖨️ Imprimir / Guardar PDF
-        </button>
       </div>
     </div>
     <div class="filter-inputs-grid">
@@ -5700,7 +5697,7 @@ function exportReportToHTML(
       <div class="footer-text">Para consultas o escalar algún pendiente, contacte al equipo de Business Partner.<br/><strong>Dirección de Proyectos VP TTD</strong></div>
     </div>
     <div style="display:flex;gap:16px;align-items:center;">
-      <button onclick="window.print()" style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.5px;">🖨️ Imprimir / Guardar PDF</button>
+      <button onclick="exportarExcel()" style="padding:8px 16px;background:var(--orange);color:#fff;border:none;border-radius:8px;font-family:'Montserrat',sans-serif;font-size:11px;font-weight:700;cursor:pointer;letter-spacing:.5px;">⬇ Exportar a Excel</button>
       <div class="footer-mail">IniciativasTTD@Laureate.pe</div>
     </div>
   </footer>
@@ -6680,7 +6677,7 @@ function exportReportToHTML(
             \`).join('')}
 
             <!-- Badge flotante de HOY -->
-            <div style="position: absolute; left: \${todayLeftPct}%; top: 5px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
+            <div style="position: absolute; left: \${todayLeftPct}%; top: -6px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
               <span>📍 HOY</span>
               <span style="font-weight: 600; opacity: 0.9;">(\${fmtDate(now)})</span>
             </div>
@@ -6857,6 +6854,56 @@ function exportReportToHTML(
     }
     function hideTooltip() {
       tip.style.display = 'none';
+    }
+
+        function exportarExcel() {
+      const dataset = getActiveDataset();
+      const columnas = [
+        { key: 'id', label: 'ID' },
+        { key: 'titulo', label: 'Título' },
+        { key: 'vp_solicitante', label: 'VP Solicitante' },
+        { key: 'institucion', label: 'Institución' },
+        { key: 'it_bp', label: 'IT BP' },
+        { key: 'lider_dominio', label: 'Líder de Dominio' },
+        { key: 'etapa_actual', label: 'Estado / Etapa' },
+        { key: 'usuario_negocio', label: 'Solicitante' },
+        { key: 'fecha_inicio_estimacion', label: 'Inicio Estimación' },
+        { key: 'fecha_fin_estimacion', label: 'Fin Estimación' },
+        { key: 'fecha_inicio_planificada', label: 'Inicio Planificado' },
+        { key: 'fecha_fin_planificada', label: 'Fin Planificado' },
+        { key: 'fecha_eliminacion', label: 'Fecha Eliminación' },
+        { key: 'costo_usd', label: 'Costo USD' },
+        { key: 'costo_soles', label: 'Costo Soles' }
+      ];
+
+      let html = '<html xmlns:o="urn:schemas-microsoft-com:office:office" xmlns:x="urn:schemas-microsoft-com:office:excel" xmlns="http://www.w3.org/TR/REC-html40"><head><meta charset="UTF-8"></head><body>';
+      html += '<table border="1"><thead><tr>';
+      columnas.forEach(c => {
+        html += '<th style="background:#0D436C;color:#fff;font-weight:bold;padding:8px 12px;text-align:left;">' + c.label + '</th>';
+      });
+      html += '</tr></thead><tbody>';
+
+      dataset.forEach(i => {
+        html += '<tr>';
+        columnas.forEach(c => {
+          let v = i[c.key];
+          if (c.key === 'etapa_actual') v = getEtapaLabel(v);
+          if (c.key === 'it_bp') v = i.it_bp || i.it_business_partner || '';
+          html += '<td style="padding:6px 10px;">' + (v === null || v === undefined ? '' : String(v).replace(/</g, '&lt;').replace(/>/g, '&gt;')) + '</td>';
+        });
+        html += '</tr>';
+      });
+
+      html += '</tbody></table></body></html>';
+      const blob = new Blob(['\uFEFF', html], { type: 'application/vnd.ms-excel;charset=utf-8;' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = "Iniciativas_Demanda_TI.xls";
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
     }
 
     document.getElementById('filter-search').addEventListener('input', e => {

@@ -2955,7 +2955,7 @@ interface TimelineSegment {
   lane?: number;
 }
 
-type GrupoAMKey = 'requerimiento' | 'proyecto' | 'vacio';
+type GrupoAMKey = string;
 
 interface GrupoAMConfig {
   key: GrupoAMKey;
@@ -2971,11 +2971,8 @@ interface GrupoAMConfig {
   barBorder: string;
 }
 
-const GRUPOS_AM_CONFIG: Record<GrupoAMKey, GrupoAMConfig> = {
-  requerimiento: {
-    key: 'requerimiento',
-    title: 'Requerimientos (No BAU)',
-    tag: 'Requerimiento',
+const AM_PALETTES = [
+  {
     headerBg: '#ecfeff',
     headerBorder: '#a5f3fc',
     headerText: '#0e7490',
@@ -2985,10 +2982,7 @@ const GRUPOS_AM_CONFIG: Record<GrupoAMKey, GrupoAMConfig> = {
     barGradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
     barBorder: '#0e7490',
   },
-  proyecto: {
-    key: 'proyecto',
-    title: 'Proyectos',
-    tag: 'Proyecto',
+  {
     headerBg: '#eff6ff',
     headerBorder: '#bfdbfe',
     headerText: '#1d4ed8',
@@ -2998,52 +2992,127 @@ const GRUPOS_AM_CONFIG: Record<GrupoAMKey, GrupoAMConfig> = {
     barGradient: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
     barBorder: '#1d4ed8',
   },
-  vacio: {
-    key: 'vacio',
-    title: 'Sin Regularizar / Vacíos (Columna AM pendiente)',
-    tag: '⚠️ Por regularizar',
-    headerBg: '#fffbeb',
-    headerBorder: '#fde68a',
-    headerText: '#b45309',
-    badgeBg: '#fef3c7',
-    badgeText: '#d97706',
-    barColor: '#f59e0b',
-    barGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
-    barBorder: '#b45309',
+  {
+    headerBg: '#f0fdf4',
+    headerBorder: '#bbf7d0',
+    headerText: '#15803d',
+    badgeBg: '#dcfce7',
+    badgeText: '#16a34a',
+    barColor: '#16a34a',
+    barGradient: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
+    barBorder: '#15803d',
   },
+  {
+    headerBg: '#faf5ff',
+    headerBorder: '#e9d5ff',
+    headerText: '#7e22ce',
+    badgeBg: '#f3e8ff',
+    badgeText: '#9333ea',
+    barColor: '#9333ea',
+    barGradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
+    barBorder: '#7e22ce',
+  },
+  {
+    headerBg: '#fff7ed',
+    headerBorder: '#fed7aa',
+    headerText: '#c2410c',
+    badgeBg: '#ffedd5',
+    badgeText: '#ea580c',
+    barColor: '#ea580c',
+    barGradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
+    barBorder: '#c2410c',
+  },
+  {
+    headerBg: '#fdf4ff',
+    headerBorder: '#f5d0fe',
+    headerText: '#a21caf',
+    badgeBg: '#fae8ff',
+    badgeText: '#c026d3',
+    barColor: '#c026d3',
+    barGradient: 'linear-gradient(135deg, #d946ef 0%, #c026d3 100%)',
+    barBorder: '#a21caf',
+  },
+  {
+    headerBg: '#f0fdfa',
+    headerBorder: '#99f6e4',
+    headerText: '#0f766e',
+    badgeBg: '#ccfbf1',
+    badgeText: '#0d9488',
+    barColor: '#0d9488',
+    barGradient: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
+    barBorder: '#0f766e',
+  },
+  {
+    headerBg: '#f8fafc',
+    headerBorder: '#cbd5e1',
+    headerText: '#475569',
+    badgeBg: '#f1f5f9',
+    badgeText: '#64748b',
+    barColor: '#64748b',
+    barGradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
+    barBorder: '#334155',
+  },
+];
+
+const PALETTE_SIN_CLASIFICAR = {
+  headerBg: '#fffbeb',
+  headerBorder: '#fde68a',
+  headerText: '#b45309',
+  badgeBg: '#fef3c7',
+  badgeText: '#d97706',
+  barColor: '#f59e0b',
+  barGradient: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
+  barBorder: '#b45309',
 };
 
-function classifyAM(i: Iniciativa): GrupoAMKey {
+function getGrupoAMConfig(key: string, index = 0): GrupoAMConfig {
+  if (key === 'Sin Clasificar') {
+    return {
+      key: 'Sin Clasificar',
+      title: 'Sin Clasificar',
+      tag: '⚠️ Sin Clasificar',
+      ...PALETTE_SIN_CLASIFICAR,
+    };
+  }
+  const palette = AM_PALETTES[index % AM_PALETTES.length];
+  return {
+    key,
+    title: key,
+    tag: key,
+    ...palette,
+  };
+}
+
+function classifyAM(i: Iniciativa): string {
   const rawVal = i.proyecto_o_req || (i.raw_fields && (
     i.raw_fields['Indicar si es Proyecto o Requerimiento No BAU'] ||
     i.raw_fields['Proyecto o Requerimiento No BAU'] ||
     i.raw_fields['Proyecto o Requerimiento'] ||
+    i.raw_fields['Indicar si es Proyecto o Requerimiento no catalogado'] ||
+    i.raw_fields['Proyecto o Req. No catalogado'] ||
+    i.raw_fields['Proyecto o Req. no catalogado'] ||
+    i.raw_fields['Proyecto o Req'] ||
     i.raw_fields['No BAU']
   )) as string | undefined;
 
-  if (!rawVal) return 'vacio';
-  const s = String(rawVal).trim().toLowerCase();
+  if (!rawVal) return 'Sin Clasificar';
+  const s = String(rawVal).trim();
+  const lower = s.toLowerCase();
   if (
     !s ||
-    s === 'null' ||
-    s === 'undefined' ||
-    s === EMPTY_SENTINEL.toLowerCase() ||
-    s === '(sin asignar)' ||
-    s.startsWith('http://') ||
-    s.startsWith('https://')
+    lower === 'null' ||
+    lower === 'undefined' ||
+    lower === EMPTY_SENTINEL.toLowerCase() ||
+    lower === '(sin asignar)' ||
+    lower === 'vacio' ||
+    lower === '(vacio)' ||
+    lower.startsWith('http://') ||
+    lower.startsWith('https://')
   ) {
-    return 'vacio';
+    return 'Sin Clasificar';
   }
 
-  if (s.includes('requerimiento') || s.includes('no bau') || s.includes('req')) {
-    return 'requerimiento';
-  }
-
-  if (s.includes('proyecto')) {
-    return 'proyecto';
-  }
-
-  return 'vacio';
+  return s;
 }
 
 // ---------------------------------------------------------------------------
@@ -3327,15 +3396,11 @@ function TimelineIniciativasVP({
   const [isReady, setIsReady] = useState<boolean>(false);
   const [selectedVP, setSelectedVP] = useState<string>('TODAS');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [filterAM, setFilterAM] = useState<'TODOS' | GrupoAMKey>('TODOS');
+  const [filterAM, setFilterAM] = useState<string>('TODOS');
   const [onlyWithDates, setOnlyWithDates] = useState<boolean>(true);
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
-  const [displayLimits, setDisplayLimits] = useState<Record<string, number>>({
-    requerimiento: DEFAULT_TIMELINE_PAGE_SIZE,
-    proyecto: DEFAULT_TIMELINE_PAGE_SIZE,
-    vacio: DEFAULT_TIMELINE_PAGE_SIZE,
-  });
+  const [displayLimits, setDisplayLimits] = useState<Record<string, number>>({});
   const [showAllRows, setShowAllRows] = useState<boolean>(false);
 
   // Tooltip flotante
@@ -3475,13 +3540,25 @@ function TimelineIniciativasVP({
     return list;
   }, [filteredRows, sortOrder]);
 
-  // Agrupación por Columna AM (omitiendo grupos con 0 iniciativas)
+  // Agrupación dinámica y fiel por Columna AM (respetando texto exacto del campo y orden por frecuencia)
   const groupedData = useMemo(() => {
-    const order: GrupoAMKey[] = ['requerimiento', 'proyecto', 'vacio'];
-    return order
+    // 1. Obtener todos los valores distintos presentes en las filas filtradas
+    const countsMap = new Map<string, number>();
+    sortedRows.forEach(r => {
+      countsMap.set(r.grupoAM, (countsMap.get(r.grupoAM) || 0) + 1);
+    });
+
+    // 2. Ordenar grupos: por cantidad descendente, y 'Sin Clasificar' siempre al final
+    const distinctKeys = Array.from(countsMap.keys()).sort((a, b) => {
+      if (a === 'Sin Clasificar') return 1;
+      if (b === 'Sin Clasificar') return -1;
+      return (countsMap.get(b) || 0) - (countsMap.get(a) || 0);
+    });
+
+    return distinctKeys
       .filter(k => filterAM === 'TODOS' || filterAM === k)
-      .map(key => {
-        const cfg = GRUPOS_AM_CONFIG[key];
+      .map((key, idx) => {
+        const cfg = getGrupoAMConfig(key, idx);
         const rows = sortedRows.filter(r => r.grupoAM === key);
         return {
           ...cfg,
@@ -3491,17 +3568,29 @@ function TimelineIniciativasVP({
       .filter(grp => grp.rows.length > 0);
   }, [sortedRows, filterAM]);
 
-  // Contadores por grupo para badges
-  const reqTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'requerimiento').length, [allRows]);
-  const proyTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'proyecto').length, [allRows]);
-  const vacioTotalCount = useMemo(() => allRows.filter(r => r.grupoAM === 'vacio').length, [allRows]);
+  // Contadores dinámicos por grupo sobre allRows para selector y badges
+  const groupCountsAll = useMemo(() => {
+    const map = new Map<string, number>();
+    allRows.forEach(r => {
+      map.set(r.grupoAM, (map.get(r.grupoAM) || 0) + 1);
+    });
+    return Array.from(map.entries()).sort((a, b) => {
+      if (a[0] === 'Sin Clasificar') return 1;
+      if (b[0] === 'Sin Clasificar') return -1;
+      return b[1] - a[1];
+    });
+  }, [allRows]);
 
   const toggleGroup = (key: string) => {
     setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
   const expandAll = () => setCollapsedGroups({});
-  const collapseAll = () => setCollapsedGroups({ requerimiento: true, proyecto: true, vacio: true });
+  const collapseAll = () => {
+    const allCol: Record<string, boolean> = {};
+    groupCountsAll.forEach(([k]) => { allCol[k] = true; });
+    setCollapsedGroups(allCol);
+  };
 
   // Dominio temporal global (incorporando siempre HOY)
   const { minDate, maxDate, totalDuration, todayPct } = useMemo(() => {
@@ -3634,49 +3723,30 @@ function TimelineIniciativasVP({
           </div>
         </div>
 
-        {/* Badges de Grupos y HOY (solo mostrar si > 0) */}
-        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 8, fontSize: 11 }}>
-          {reqTotalCount > 0 && (
-            <span
-              style={{
-                padding: '3px 8px',
-                borderRadius: 16,
-                background: '#ecfeff',
-                color: '#0e7490',
-                fontWeight: 600,
-                border: '1px solid #a5f3fc',
-              }}
-            >
-              Requerimientos: {reqTotalCount}
-            </span>
-          )}
-          {proyTotalCount > 0 && (
-            <span
-              style={{
-                padding: '3px 8px',
-                borderRadius: 16,
-                background: '#eff6ff',
-                color: '#1d4ed8',
-                fontWeight: 600,
-                border: '1px solid #bfdbfe',
-              }}
-            >
-              Proyectos: {proyTotalCount}
-            </span>
-          )}
-          {vacioTotalCount > 0 && (
-            <span
-              style={{
-                padding: '3px 8px',
-                borderRadius: 16,
-                background: '#fffbeb',
-                color: '#b45309',
-                fontWeight: 700,
-                border: '1px solid #fde68a',
-              }}
-              title="Iniciativas con la columna AM en blanco o pendiente de clasificación"
-            >
-              ⚠️ Vacíos: {vacioTotalCount}
+        {/* Badges dinámicos de Grupos de Columna AM y HOY */}
+        <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 6, fontSize: 11 }}>
+          {groupCountsAll.slice(0, 6).map(([grpName, count], idx) => {
+            const cfg = getGrupoAMConfig(grpName, idx);
+            return (
+              <span
+                key={grpName}
+                style={{
+                  padding: '3px 8px',
+                  borderRadius: 16,
+                  background: cfg.headerBg,
+                  color: cfg.headerText,
+                  fontWeight: 600,
+                  border: `1px solid ${cfg.headerBorder}`,
+                }}
+                title={grpName === 'Sin Clasificar' ? 'Iniciativas con celda vacía en la columna AM (pendientes de regularizar)' : `Iniciativas en "${grpName}"`}
+              >
+                {grpName === 'Sin Clasificar' ? '⚠️ Sin Clasificar' : grpName}: {count}
+              </span>
+            );
+          })}
+          {groupCountsAll.length > 6 && (
+            <span style={{ fontSize: 10, color: '#64748b', fontStyle: 'italic' }}>
+              +{groupCountsAll.length - 6} más...
             </span>
           )}
           <span
@@ -3852,12 +3922,12 @@ function TimelineIniciativasVP({
             )}
           </div>
 
-          {/* Filtro por Columna AM */}
+          {/* Filtro por Columna AM dinámico */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
             <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Columna AM:</span>
             <select
               value={filterAM}
-              onChange={e => setFilterAM(e.target.value as any)}
+              onChange={e => setFilterAM(e.target.value)}
               style={{
                 padding: '4px 8px',
                 fontSize: 11,
@@ -3865,18 +3935,15 @@ function TimelineIniciativasVP({
                 border: '1px solid #cbd5e1',
                 backgroundColor: '#ffffff',
                 color: '#1e293b',
+                maxWidth: 220,
               }}
             >
               <option value="TODOS">Todos los grupos ({allRows.length})</option>
-              {reqTotalCount > 0 && (
-                <option value="requerimiento">Requerimientos ({reqTotalCount})</option>
-              )}
-              {proyTotalCount > 0 && (
-                <option value="proyecto">Proyectos ({proyTotalCount})</option>
-              )}
-              {vacioTotalCount > 0 && (
-                <option value="vacio">⚠️ Vacíos / Por regularizar ({vacioTotalCount})</option>
-              )}
+              {groupCountsAll.map(([grpName, count]) => (
+                <option key={grpName} value={grpName}>
+                  {grpName === 'Sin Clasificar' ? '⚠️ Sin Clasificar (Vacíos)' : grpName} ({count})
+                </option>
+              ))}
             </select>
           </div>
 
@@ -4243,7 +4310,7 @@ function TimelineIniciativasVP({
                       </div>
 
                       <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                        {grp.key === 'vacio' && grp.rows.length > 0 && (
+                        {grp.key === 'Sin Clasificar' && grp.rows.length > 0 && (
                           <span style={{ fontSize: 10, color: '#b45309', fontWeight: 600 }}>
                             (Registros con columna AM pendiente de regularizar)
                           </span>
@@ -4626,24 +4693,12 @@ function TimelineIniciativasVP({
       >
         <div>
           Total iniciativas visibles: <strong style={{ color: '#0f172a' }}>{sortedRows.length}</strong>
-          {sortedRows.filter(r => r.grupoAM === 'requerimiento').length > 0 && (
-            <>
+          {groupedData.map(grp => (
+            <span key={grp.key}>
               {' • '}
-              Requerimientos: <strong style={{ color: '#0891b2' }}>{sortedRows.filter(r => r.grupoAM === 'requerimiento').length}</strong>
-            </>
-          )}
-          {sortedRows.filter(r => r.grupoAM === 'proyecto').length > 0 && (
-            <>
-              {' • '}
-              Proyectos: <strong style={{ color: '#2563eb' }}>{sortedRows.filter(r => r.grupoAM === 'proyecto').length}</strong>
-            </>
-          )}
-          {sortedRows.filter(r => r.grupoAM === 'vacio').length > 0 && (
-            <>
-              {' • '}
-              Por regularizar: <strong style={{ color: '#b45309' }}>{sortedRows.filter(r => r.grupoAM === 'vacio').length}</strong>
-            </>
-          )}
+              <span style={{ color: grp.headerText, fontWeight: 600 }}>{grp.title}</span>: <strong>{grp.rows.length}</strong>
+            </span>
+          ))}
           {selectedVP !== 'TODAS' && ` (filtradas por VP: ${optLabel(selectedVP)})`}
         </div>
 
@@ -5708,51 +5763,53 @@ function exportReportToHTML(
     // Meses en español
     const MONTH_NAMES = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Set', 'Oct', 'Nov', 'Dic'];
 
-    // Clasificación de iniciativas en secciones AM (Requerimientos No BAU / Proyectos / Vacíos)
+    // Clasificación fiel y exacta por texto de la Columna AM
     function classifyGroupAM(i) {
       const rawVal = i.proyecto_o_req || (i.raw_fields && (
         i.raw_fields['Indicar si es Proyecto o Requerimiento No BAU'] ||
         i.raw_fields['Proyecto o Requerimiento No BAU'] ||
         i.raw_fields['Proyecto o Requerimiento'] ||
+        i.raw_fields['Indicar si es Proyecto o Requerimiento no catalogado'] ||
+        i.raw_fields['Proyecto o Req. No catalogado'] ||
+        i.raw_fields['Proyecto o Req. no catalogado'] ||
+        i.raw_fields['Proyecto o Req'] ||
         i.raw_fields['No BAU']
       ));
-      if (!rawVal) return 'vacio';
-      const s = String(rawVal).trim().toLowerCase();
-      if (!s || s === 'null' || s === 'undefined' || s === 'vacio' || s === '(sin asignar)' || s.startsWith('http://') || s.startsWith('https://')) {
-        return 'vacio';
+      if (!rawVal) return 'Sin Clasificar';
+      const s = String(rawVal).trim();
+      const lower = s.toLowerCase();
+      if (!s || lower === 'null' || lower === 'undefined' || lower === 'vacio' || lower === '(vacio)' || lower === '(sin asignar)' || lower.startsWith('http://') || lower.startsWith('https://')) {
+        return 'Sin Clasificar';
       }
-      if (s.includes('requerimiento') || s.includes('no bau') || s.includes('req')) {
-        return 'requerimiento';
-      }
-      if (s.includes('proyecto')) {
-        return 'proyecto';
-      }
-      return 'vacio';
+      return s;
     }
 
-    const GROUPS_AM_CONFIG = {
-      requerimiento: {
-        key: 'requerimiento',
-        title: 'Requerimientos (No BAU)',
-        headerBg: '#ecfeff',
-        headerBorder: '#a5f3fc',
-        headerText: '#0e7490'
-      },
-      proyecto: {
-        key: 'proyecto',
-        title: 'Proyectos',
-        headerBg: '#eff6ff',
-        headerBorder: '#bfdbfe',
-        headerText: '#1d4ed8'
-      },
-      vacio: {
-        key: 'vacio',
-        title: 'Sin Regularizar / Vacíos (Columna AM pendiente)',
-        headerBg: '#fffbeb',
-        headerBorder: '#fde68a',
-        headerText: '#b45309'
+    const AM_PALETTES = [
+      { headerBg: '#ecfeff', headerBorder: '#a5f3fc', headerText: '#0e7490' },
+      { headerBg: '#eff6ff', headerBorder: '#bfdbfe', headerText: '#1d4ed8' },
+      { headerBg: '#f0fdf4', headerBorder: '#bbf7d0', headerText: '#15803d' },
+      { headerBg: '#faf5ff', headerBorder: '#e9d5ff', headerText: '#7e22ce' },
+      { headerBg: '#fff7ed', headerBorder: '#fed7aa', headerText: '#c2410c' },
+      { headerBg: '#fdf4ff', headerBorder: '#f5d0fe', headerText: '#a21caf' },
+      { headerBg: '#f0fdfa', headerBorder: '#99f6e4', headerText: '#0f766e' },
+      { headerBg: '#f8fafc', headerBorder: '#cbd5e1', headerText: '#475569' }
+    ];
+
+    function getGroupAMStyle(key, idx) {
+      if (key === 'Sin Clasificar') {
+        return {
+          title: 'Sin Clasificar',
+          headerBg: '#fffbeb',
+          headerBorder: '#fde68a',
+          headerText: '#b45309'
+        };
       }
-    };
+      const p = AM_PALETTES[idx % AM_PALETTES.length];
+      return {
+        title: key,
+        ...p
+      };
+    }
 
     let collapsedGroups = {};
 
@@ -6492,19 +6549,28 @@ function exportReportToHTML(
         return;
       }
 
-      const groups = [
-        { key: 'requerimiento', ...GROUPS_AM_CONFIG.requerimiento, items: [] },
-        { key: 'proyecto', ...GROUPS_AM_CONFIG.proyecto, items: [] },
-        { key: 'vacio', ...GROUPS_AM_CONFIG.vacio, items: [] }
-      ];
-
+      // Agrupar dinámicamente por el texto exacto de la Columna AM
+      const groupMap = new Map();
       filtered.forEach(i => {
-        const grpKey = classifyGroupAM(i);
-        const grp = groups.find(g => g.key === grpKey) || groups[2];
-        grp.items.push(i);
+        const key = classifyGroupAM(i);
+        if (!groupMap.has(key)) groupMap.set(key, []);
+        groupMap.get(key).push(i);
       });
 
-      const activeGroups = groups.filter(g => g.items.length > 0);
+      const sortedGroupKeys = Array.from(groupMap.keys()).sort((a, b) => {
+        if (a === 'Sin Clasificar') return 1;
+        if (b === 'Sin Clasificar') return -1;
+        return groupMap.get(b).length - groupMap.get(a).length;
+      });
+
+      const activeGroups = sortedGroupKeys.map((key, idx) => {
+        const style = getGroupAMStyle(key, idx);
+        return {
+          key,
+          ...style,
+          items: groupMap.get(key)
+        };
+      });
 
       const renderInitiativeRow = i => {
         const isElim = ['eliminadas', 'eliminada'].includes(i.etapa_actual);

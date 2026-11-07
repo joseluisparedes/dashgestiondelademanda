@@ -448,6 +448,7 @@ export async function parseExcelFile(
                   'Indicar si es Proyecto o Requerimiento no catalogado',
                   'Proyecto o Requerimiento no catalogado',
                   'Proyecto o Req. No catalogado',
+                  'Proyecto o Req. no catalogado',
                   'Proyecto o Req',
                   'No BAU',
                   'No catalogado'

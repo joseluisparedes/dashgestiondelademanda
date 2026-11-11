@@ -65,6 +65,7 @@ export function generateMockData(): DashboardData {
       objetivo: `Mejorar la capacidad de ${pick(['atención', 'procesamiento', 'integración', 'monitoreo'])} del área solicitante mediante solución tecnológica.`,
       institucion: pick(instituciones),
       vp_solicitante: `VP Área ${Math.floor(Math.random() * 5) + 1}`,
+      direccion_solicitante: null,
       usuario_negocio: `Gerente Negocio ${Math.floor(Math.random() * 10) + 1}`,
       it_bp: pick(it_bps),
       fecha_entrega_requerida: entrega.toISOString(),

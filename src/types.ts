@@ -90,6 +90,9 @@ export interface Iniciativa {
   persona_conformidad?: string | null;
   fecha_conformidad?: string | null;
 
+  // Campo añadido en v90 (Col AB: Dirección del área solicitante en todas las hojas operativas)
+  direccion_solicitante?: string | null;
+
   /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
   raw_fields?: Record<string, unknown>;
 

@@ -1,4 +1,4 @@
-﻿/**
+/**
  * @license
  * SPDX-License-Identifier: Apache-2.0
  */
@@ -4904,7 +4904,8 @@ function exportReportToHTML(
   iniciativas: Iniciativa[],
   selectedVPs: string[],
   macro: MacroFilters,
-  reportTitle: string = 'Reporte de Gestión de la Demanda TI'
+  reportTitle: string = 'Reporte de Gestión de la Demanda TI',
+  allAvailableVPs: string[] = []
 ) {
   const now = new Date();
   const fechaGeneracion = format(now, 'dd/MM/yyyy HH:mm:ss');
@@ -4916,6 +4917,12 @@ function exportReportToHTML(
   const vpFiltrosTexto = selectedVPs.length > 0
     ? selectedVPs.map(v => optLabel(v)).join(', ')
     : 'Todas las Vicepresidencias';
+
+  // Pasar la lista completa de VPs seleccionadas (o disponibles) para asegurar que incluso VPs sin iniciativas se incluyan
+  const serializedAllVPs = JSON.stringify(
+    (selectedVPs.length > 0 ? selectedVPs : (allAvailableVPs.length > 0 ? allAvailableVPs : Array.from(new Set(iniciativas.map(i => i.vp_solicitante).filter(Boolean)))))
+      .map(v => optLabel(v))
+  ).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
   // Serializar datos limpios para el runtime JS interactivo del HTML exportado
   const serializedIniciativas = JSON.stringify(dataFiltered).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
@@ -5750,6 +5757,7 @@ function exportReportToHTML(
   <!-- Runtime JS Interactivo -->
   <script>
     const RAW_DATA = ${serializedIniciativas};
+    const ALL_VPS = ${serializedAllVPs};
     let activePhaseFilter = null;
     let searchQuery = '';
 
@@ -6071,7 +6079,7 @@ function exportReportToHTML(
 
     // Poblar las opciones de los multiselectores
     function initFilterOptions() {
-      const vps = new Set();
+      const vps = new Set(Array.isArray(ALL_VPS) && ALL_VPS.length > 0 ? ALL_VPS : []);
       const insts = new Set();
       const bps = new Set();
       const estados = new Set();
@@ -6780,7 +6788,7 @@ function exportReportToHTML(
     // Inicialización completa
     initFilterOptions();
     renderPhaseCards();
-    renderStrategicCards();
+    if (typeof renderStrategicCards === 'function') renderStrategicCards();
     renderTimeline();
   </script>
 </body>
@@ -9392,15 +9400,71 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       .map(([r]) => r);
   }, [iniciativas]);
 
-  // ---- Opciones (de todo el dataset) ----
-  const opts = useMemo(() => ({
-    instituciones: buildMacroOptions(iniciativas, i => i.institucion),
-    itBPs:         buildMacroOptions(iniciativas, i => i.it_bp),
-    vps:           buildMacroOptions(iniciativas, i => i.vp_solicitante),
-    etapas:        Array.from(new Set(iniciativas.map(i => i.etapa_actual))),
-    lideres:       buildMacroOptions(iniciativas, i => i.lider_dominio),
-    motivos:       allMotivosOptions,
-  }), [iniciativas, allMotivosOptions]);
+  // ---- Helper para evaluar correspondencia de filtros macro excluyendo un campo específico ----
+  const matchesMacroExcept = (
+    i: Iniciativa,
+    excludeField?: 'institucion' | 'it_bp' | 'vp' | 'etapa' | 'lider' | 'motivo' | 'spo',
+    refDate: Date = new Date()
+  ) => {
+    if (excludeField !== 'institucion' && macroInstituciones.length && !macroInstituciones.includes(normalize(i.institucion))) return false;
+    if (excludeField !== 'spo' && macroSPO.length && !macroSPO.includes(normalize(i.proyecto_spo))) return false;
+    if (excludeField !== 'it_bp' && macroITBPs.length && !macroITBPs.includes(normalize(i.it_bp))) return false;
+    if (excludeField !== 'vp' && macroVPs.length && !macroVPs.includes(normalize(i.vp_solicitante))) return false;
+    if (excludeField !== 'etapa' && macroEtapas.length && !macroEtapas.includes(i.etapa_actual)) return false;
+    if (excludeField !== 'lider' && macroLideres.length && !macroLideres.includes(normalize(i.lider_dominio))) return false;
+    if (excludeField !== 'motivo' && macroMotivos.length) {
+      const resEst = checkFueraFechaEstimacion(i, refDate);
+      const resReest = checkFueraFechaReestimacion(i, refDate);
+      const resPlan = checkFueraFechaPlanificacion(i, refDate);
+      const reasons = [
+        resEst.isOutOfDate ? resEst.reason : null,
+        resReest.isOutOfDate ? resReest.reason : null,
+        resPlan.isOutOfDate ? resPlan.reason : null,
+      ].filter(Boolean) as string[];
+      const hasMatch = reasons.some(r => macroMotivos.includes(r));
+      if (!hasMatch) return false;
+    }
+    return true;
+  };
+
+  // ---- Opciones FACETADAS (solo muestran valores con iniciativas según los demás filtros) ----
+  const opts = useMemo(() => {
+    const ref = new Date();
+    const from = (field: 'institucion' | 'it_bp' | 'vp' | 'etapa' | 'lider' | 'motivo' | 'spo') =>
+      iniciativas.filter(i => matchesMacroExcept(i, field, ref));
+
+    const fromMotivo = from('motivo');
+    const motivoMap = new Map<string, number>();
+    fromMotivo.forEach(i => {
+      const resEst = checkFueraFechaEstimacion(i, ref);
+      if (resEst.isOutOfDate && resEst.reason) motivoMap.set(resEst.reason, (motivoMap.get(resEst.reason) || 0) + 1);
+      const resReest = checkFueraFechaReestimacion(i, ref);
+      if (resReest.isOutOfDate && resReest.reason) motivoMap.set(resReest.reason, (motivoMap.get(resReest.reason) || 0) + 1);
+      const resPlan = checkFueraFechaPlanificacion(i, ref);
+      if (resPlan.isOutOfDate && resPlan.reason) motivoMap.set(resPlan.reason, (motivoMap.get(resPlan.reason) || 0) + 1);
+    });
+    const motivosFacetados = Array.from(motivoMap.entries())
+      .sort((a, b) => b[1] - a[1])
+      .map(([r]) => r);
+
+    return {
+      instituciones: buildMacroOptions(from('institucion'), i => i.institucion),
+      itBPs:         buildMacroOptions(from('it_bp'), i => i.it_bp),
+      vps:           buildMacroOptions(from('vp'), i => i.vp_solicitante),
+      etapas:        Array.from(new Set(from('etapa').map(i => i.etapa_actual).filter(Boolean))),
+      lideres:       buildMacroOptions(from('lider'), i => i.lider_dominio),
+      motivos:       motivosFacetados,
+    };
+  }, [
+    iniciativas,
+    macroInstituciones,
+    macroSPO,
+    macroITBPs,
+    macroVPs,
+    macroEtapas,
+    macroLideres,
+    macroMotivos,
+  ]);
 
   // VP principal (con mayor volumen de iniciativas registradas)
   const primaryVp = useMemo(() => {
@@ -9623,7 +9687,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setMacroMotivos([]);
   };
 
-  const isExportDisabled = filtered.length === 0;
+  const isExportDisabled = selectedReport === 'vp'
+    ? macroVPs.length === 0
+    : filtered.length === 0;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
@@ -9818,7 +9884,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                         filtered,
                         macroVPs,
                         macro,
-                        `Reporte_Demanda_TI_${selectedReport || 'General'}`
+                        `Reporte_Demanda_TI_${selectedReport || 'General'}`,
+                        opts.vps
                       )}
                       disabled={isExportDisabled}
                       title={isExportDisabled ? 'Selecciona al menos una vicepresidencia para exportar' : 'Exportar resultado filtrado actual en un archivo HTML independiente'}

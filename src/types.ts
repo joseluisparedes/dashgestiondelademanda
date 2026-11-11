@@ -158,3 +158,10 @@ export interface FilterState {
   fecha_fin_planificada_desde?: string;
   fecha_fin_planificada_hasta?: string;
 }
+
+export interface DateFilterRule {
+  id: string;
+  field: string;
+  desde: string;
+  hasta: string;
+}

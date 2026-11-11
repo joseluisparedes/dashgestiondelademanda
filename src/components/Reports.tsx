@@ -4,7 +4,7 @@
  */
 
 import React, { useState, useMemo, useRef, useEffect, startTransition } from 'react';
-import { Iniciativa, EtapaPipeline, FilterState } from '../types';
+import { Iniciativa, EtapaPipeline, FilterState, DateFilterRule } from '../types';
 import { ETAPAS_CONFIG, ETAPAS_MAP, ETAPAS_PLANIFICADAS_CONFIG, ETAPAS_PLANIFICADAS_MAP, EMPTY_SENTINEL, EMPTY_LABEL } from '../constants';
 import { format, parseISO, differenceInCalendarDays, startOfDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
@@ -50,8 +50,27 @@ import {
   CheckCircle2,
   Download,
   Check,
+  Plus,
+  Trash2,
 } from 'lucide-react';
 import { IniciativaDetailModal } from './DataTable';
+
+export const DATE_FILTER_FIELDS: { key: string; label: string }[] = [
+  { key: 'fecha_inicio_planificada', label: 'Fecha Inicio Planificada' },
+  { key: 'fecha_fin_planificada', label: 'Fecha Fin Planificada' },
+  { key: 'fecha_pase_produccion', label: 'Fecha Pase a Producción' },
+  { key: 'fecha_conformidad', label: 'Fecha de Conformidad' },
+  { key: 'fecha_registro', label: 'Fecha de Registro' },
+  { key: 'fecha_entrega_requerida', label: 'Fecha Entrega Requerida' },
+  { key: 'fecha_asignacion', label: 'Fecha Asignación LD' },
+  { key: 'fecha_inicio_estimacion', label: 'Fecha Inicio Estimación' },
+  { key: 'fecha_fin_estimacion', label: 'Fecha Fin Estimación' },
+  { key: 'fecha_inicio_reestimacion', label: 'Fecha Inicio Re-estimación' },
+  { key: 'fecha_fin_reestimacion', label: 'Fecha Fin Re-estimación' },
+  { key: 'fecha_eliminacion', label: 'Fecha de Eliminación' },
+  { key: 'fecha_inicio_real', label: 'Fecha Inicio Real' },
+  { key: 'fecha_fin_real', label: 'Fecha Fin Real' },
+];
 
 // ---------------------------------------------------------------------------
 // Tipos
@@ -4905,7 +4924,8 @@ function exportReportToHTML(
   selectedVPs: string[],
   macro: MacroFilters,
   reportTitle: string = 'Reporte de Gestión de la Demanda TI',
-  allAvailableVPs: string[] = []
+  allAvailableVPs: string[] = [],
+  initialDateFilters: DateFilterRule[] = []
 ) {
   const now = new Date();
   const fechaGeneracion = format(now, 'dd/MM/yyyy HH:mm:ss');
@@ -4926,6 +4946,7 @@ function exportReportToHTML(
 
   // Serializar datos limpios para el runtime JS interactivo del HTML exportado
   const serializedIniciativas = JSON.stringify(dataFiltered).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
+  const serializedDateFilters = JSON.stringify(initialDateFilters).replace(/</g, '\\u003c').replace(/>/g, '\\u003e');
 
   const html = `<!DOCTYPE html>
 <html lang="es">
@@ -5035,6 +5056,159 @@ function exportReportToHTML(
       letter-spacing: 0.05em;
       color: #64748b;
       margin-bottom: 2px;
+    }
+    /* Filtros de Fecha interactivos (Reporte VP) */
+    .df-section {
+      margin-top: 12px;
+      padding-top: 12px;
+      border-top: 1px solid #f1f5f9;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+    .df-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+    .df-header-left {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .df-title {
+      font-size: 11.5px;
+      font-weight: 700;
+      color: #0f172a;
+    }
+    .df-badge {
+      font-size: 10px;
+      font-weight: 700;
+      color: #0284c7;
+      background: #e0f2fe;
+      padding: 1px 7px;
+      border-radius: 10px;
+      border: 1px solid #bae6fd;
+    }
+    .df-header-actions {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+    }
+    .df-btn-add {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #0284c7;
+      background: #f0f9ff;
+      border: 1px solid #bae6fd;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      transition: background 0.15s;
+    }
+    .df-btn-add:hover {
+      background: #e0f2fe;
+    }
+    .df-btn-clear {
+      display: inline-flex;
+      align-items: center;
+      gap: 4px;
+      padding: 4px 8px;
+      font-size: 11px;
+      font-weight: 500;
+      color: #64748b;
+      background: transparent;
+      border: none;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+    }
+    .df-btn-clear:hover {
+      color: #ef4444;
+    }
+    .df-rows-container {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .df-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      padding: 6px 10px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      flex-wrap: wrap;
+    }
+    .df-row-num {
+      font-size: 10px;
+      font-weight: 700;
+      color: #64748b;
+      width: 18px;
+    }
+    .df-field-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+      flex: 1 1 200px;
+      min-width: 180px;
+    }
+    .df-label {
+      font-size: 10px;
+      color: #64748b;
+      font-weight: 600;
+    }
+    .df-select, .df-input-date {
+      font-family: inherit;
+      font-size: 11px;
+      color: #0f172a;
+      padding: 3px 7px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      outline: none;
+    }
+    .df-select {
+      width: 100%;
+      font-weight: 600;
+      cursor: pointer;
+    }
+    .df-date-group {
+      display: flex;
+      align-items: center;
+      gap: 4px;
+    }
+    .df-btn-remove {
+      margin-left: auto;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      width: 24px;
+      height: 24px;
+      color: #94a3b8;
+      background: transparent;
+      border: none;
+      border-radius: 4px;
+      cursor: pointer;
+      font-size: 12px;
+      font-weight: bold;
+    }
+    .df-btn-remove:hover {
+      color: #ef4444;
+      background: #fee2e2;
+    }
+    .df-empty-hint {
+      font-size: 11px;
+      color: #94a3b8;
+      font-style: italic;
+      padding: 2px 0;
     }
     .filter-select {
       font-size: 11.5px;
@@ -5649,6 +5823,22 @@ function exportReportToHTML(
         <div class="ms-dropdown" id="ms-drop-lider"></div>
       </div>
     </div>
+
+    <!-- Sección de Filtros de Fecha interactivos -->
+    <div class="df-section" id="df-section">
+      <div class="df-header">
+        <div class="df-header-left">
+          <span style="font-size: 13px;">📅</span>
+          <span class="df-title">Filtros de Fecha</span>
+          <span id="df-count-badge" class="df-badge" style="display:none;">0 activos</span>
+        </div>
+        <div class="df-header-actions">
+          <button type="button" class="df-btn-add" onclick="addDateFilterRow()">+ Agregar filtro de fecha</button>
+          <button type="button" class="df-btn-clear" id="df-btn-clear" style="display:none;" onclick="clearAllDateFilters()">✕ Limpiar fechas</button>
+        </div>
+      </div>
+      <div id="df-rows-container" class="df-rows-container"></div>
+    </div>
   </div>
 
   <!-- Card Principal: Reporte por VP del Área Solicitante -->
@@ -5758,6 +5948,27 @@ function exportReportToHTML(
   <script>
     const RAW_DATA = ${serializedIniciativas};
     const ALL_VPS = ${serializedAllVPs};
+    let initialDateFilters = ${serializedDateFilters};
+    let dateFilters = Array.isArray(initialDateFilters) ? JSON.parse(JSON.stringify(initialDateFilters)) : [];
+    let dfIdCounter = Date.now();
+
+    const DATE_FILTER_FIELDS = [
+      { key: 'fecha_inicio_planificada', label: 'Fecha Inicio Planificada' },
+      { key: 'fecha_fin_planificada', label: 'Fecha Fin Planificada' },
+      { key: 'fecha_pase_produccion', label: 'Fecha Pase a Producción' },
+      { key: 'fecha_conformidad', label: 'Fecha de Conformidad' },
+      { key: 'fecha_registro', label: 'Fecha de Registro' },
+      { key: 'fecha_entrega_requerida', label: 'Fecha Entrega Requerida' },
+      { key: 'fecha_asignacion', label: 'Fecha Asignación LD' },
+      { key: 'fecha_inicio_estimacion', label: 'Fecha Inicio Estimación' },
+      { key: 'fecha_fin_estimacion', label: 'Fecha Fin Estimación' },
+      { key: 'fecha_inicio_reestimacion', label: 'Fecha Inicio Re-estimación' },
+      { key: 'fecha_fin_reestimacion', label: 'Fecha Fin Re-estimación' },
+      { key: 'fecha_eliminacion', label: 'Fecha de Eliminación' },
+      { key: 'fecha_inicio_real', label: 'Fecha Inicio Real' },
+      { key: 'fecha_fin_real', label: 'Fecha Fin Real' }
+    ];
+
     let activePhaseFilter = null;
     let searchQuery = '';
 
@@ -6193,7 +6404,113 @@ function exportReportToHTML(
       setLabel('lider', selectedLideres, countTotal('lider'));
     }
 
-    // Obtener data filtrada por los multiselectores
+    // Funciones del Filtro de Fechas interactivo
+    function renderDateFilterRows() {
+      const container = document.getElementById('df-rows-container');
+      const badge = document.getElementById('df-count-badge');
+      const clearBtn = document.getElementById('df-btn-clear');
+      if (!container) return;
+
+      const activeCount = dateFilters.filter(df => df.desde || df.hasta).length;
+      if (badge) {
+        if (activeCount > 0) {
+          badge.style.display = 'inline-block';
+          badge.innerText = activeCount + ' activo' + (activeCount === 1 ? '' : 's');
+        } else {
+          badge.style.display = 'none';
+        }
+      }
+      if (clearBtn) {
+        clearBtn.style.display = dateFilters.length > 0 ? 'inline-flex' : 'none';
+      }
+
+      if (dateFilters.length === 0) {
+        container.innerHTML = '<div class="df-empty-hint">No hay filtros de fecha aplicados. Haz clic en "+ Agregar filtro de fecha" para filtrar por inicio/fin planificado, registro, pase a producción, etc.</div>';
+        return;
+      }
+
+      let rowsHtml = '';
+      for (let idx = 0; idx < dateFilters.length; idx++) {
+        const df = dateFilters[idx];
+        let optionsHtml = '';
+        for (let j = 0; j < DATE_FILTER_FIELDS.length; j++) {
+          const f = DATE_FILTER_FIELDS[j];
+          optionsHtml += '<option value="' + f.key + '"' + (f.key === df.field ? ' selected' : '') + '>' + f.label + '</option>';
+        }
+
+        rowsHtml += '<div class="df-row" data-id="' + df.id + '">' +
+          '<span class="df-row-num">#' + (idx + 1) + '</span>' +
+          '<div class="df-field-group">' +
+            '<span class="df-label">Campo:</span>' +
+            '<select class="df-select" onchange="updateDateFilterField(\'' + df.id + '\', this.value)">' +
+              optionsHtml +
+            '</select>' +
+          '</div>' +
+          '<div class="df-date-group">' +
+            '<span class="df-label">Desde:</span>' +
+            '<input type="date" class="df-input-date" value="' + (df.desde || '') + '" onchange="updateDateFilterDesde(\'' + df.id + '\', this.value)" />' +
+          '</div>' +
+          '<div class="df-date-group">' +
+            '<span class="df-label">Hasta:</span>' +
+            '<input type="date" class="df-input-date" value="' + (df.hasta || '') + '" onchange="updateDateFilterHasta(\'' + df.id + '\', this.value)" />' +
+          '</div>' +
+          '<button type="button" class="df-btn-remove" title="Eliminar filtro" onclick="removeDateFilterRow(\'' + df.id + '\')">✕</button>' +
+        '</div>';
+      }
+      container.innerHTML = rowsHtml;
+    }
+
+    function addDateFilterRow() {
+      dfIdCounter++;
+      dateFilters.push({
+        id: 'df_' + dfIdCounter,
+        field: 'fecha_inicio_planificada',
+        desde: '',
+        hasta: ''
+      });
+      renderDateFilterRows();
+      onFilterChange();
+    }
+
+    function removeDateFilterRow(id) {
+      dateFilters = dateFilters.filter(df => df.id !== id);
+      renderDateFilterRows();
+      onFilterChange();
+    }
+
+    function updateDateFilterField(id, field) {
+      const df = dateFilters.find(d => d.id === id);
+      if (df) {
+        df.field = field;
+        onFilterChange();
+      }
+    }
+
+    function updateDateFilterDesde(id, val) {
+      const df = dateFilters.find(d => d.id === id);
+      if (df) {
+        df.desde = val;
+        renderDateFilterRows();
+        onFilterChange();
+      }
+    }
+
+    function updateDateFilterHasta(id, val) {
+      const df = dateFilters.find(d => d.id === id);
+      if (df) {
+        df.hasta = val;
+        renderDateFilterRows();
+        onFilterChange();
+      }
+    }
+
+    function clearAllDateFilters() {
+      dateFilters = [];
+      renderDateFilterRows();
+      onFilterChange();
+    }
+
+    // Obtener data filtrada por los multiselectores y filtros de fechas
     function getActiveDataset() {
       return RAW_DATA.filter(i => {
         const vp = (i.vp_solicitante || '').trim();
@@ -6211,6 +6528,18 @@ function exportReportToHTML(
         const lid = (i.lider_dominio || '').trim();
         if (selectedLideres.size > 0 && !selectedLideres.has(lid)) return false;
 
+        if (Array.isArray(dateFilters) && dateFilters.length > 0) {
+          for (let k = 0; k < dateFilters.length; k++) {
+            const df = dateFilters[k];
+            if (!df.desde && !df.hasta) continue;
+            const rawVal = i[df.field];
+            if (!rawVal) return false;
+            const d = String(rawVal).slice(0, 10);
+            if (df.desde && d < df.desde) return false;
+            if (df.hasta && d > df.hasta) return false;
+          }
+        }
+
         return true;
       });
     }
@@ -6218,7 +6547,10 @@ function exportReportToHTML(
     function onFilterChange() {
       const currentDataset = getActiveDataset();
       const badge = document.getElementById('top-counter-badge');
-      if (badge) badge.innerText = \`\${currentDataset.length} iniciativa\${currentDataset.length === 1 ? '' : 's'}\`;
+      if (badge) badge.innerText = currentDataset.length + ' iniciativa' + (currentDataset.length === 1 ? '' : 's');
+
+      const tlBadge = document.getElementById('timeline-count-badge');
+      if (tlBadge) tlBadge.innerText = currentDataset.length + ' iniciativa' + (currentDataset.length === 1 ? '' : 's');
 
       renderPhaseCards();
       renderTimeline();
@@ -6787,6 +7119,7 @@ function exportReportToHTML(
 
     // Inicialización completa
     initFilterOptions();
+    renderDateFilterRows();
     renderPhaseCards();
     if (typeof renderStrategicCards === 'function') renderStrategicCards();
     renderTimeline();
@@ -9033,8 +9366,33 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
   const [macroEtapas,        setMacroEtapas]        = useState<string[]>([]);
   const [macroLideres,       setMacroLideres]       = useState<string[]>([]);
   const [macroMotivos,       setMacroMotivos]       = useState<string[]>([]);
+  const [dateFilters,        setDateFilters]        = useState<DateFilterRule[]>([]);
   const [isFilterPanelOpen,  setIsFilterPanelOpen]  = useState<boolean>(true);
   const [isVpDropdownOpen,   setIsVpDropdownOpen]   = useState<boolean>(false);
+
+  const handleAddDateFilter = () => {
+    setDateFilters(prev => [
+      ...prev,
+      {
+        id: `df_${Date.now()}_${Math.random().toString(36).substring(2, 6)}`,
+        field: 'fecha_inicio_planificada',
+        desde: '',
+        hasta: '',
+      },
+    ]);
+  };
+
+  const handleUpdateDateFilter = (id: string, updates: Partial<DateFilterRule>) => {
+    setDateFilters(prev => prev.map(df => (df.id === id ? { ...df, ...updates } : df)));
+  };
+
+  const handleRemoveDateFilter = (id: string) => {
+    setDateFilters(prev => prev.filter(df => df.id !== id));
+  };
+
+  const handleClearDateFilters = () => {
+    setDateFilters([]);
+  };
 
   // ---- Estado del popup de iniciativas standard ----
   const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
@@ -9400,6 +9758,19 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       .map(([r]) => r);
   }, [iniciativas]);
 
+  const matchesDateFilters = (i: Iniciativa) => {
+    if (selectedReport !== 'vp' || dateFilters.length === 0) return true;
+    for (const df of dateFilters) {
+      if (!df.desde && !df.hasta) continue;
+      const rawVal = (i as any)[df.field];
+      if (!rawVal) return false;
+      const d = String(rawVal).slice(0, 10);
+      if (df.desde && d < df.desde) return false;
+      if (df.hasta && d > df.hasta) return false;
+    }
+    return true;
+  };
+
   // ---- Helper para evaluar correspondencia de filtros macro excluyendo un campo específico ----
   const matchesMacroExcept = (
     i: Iniciativa,
@@ -9424,6 +9795,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
       const hasMatch = reasons.some(r => macroMotivos.includes(r));
       if (!hasMatch) return false;
     }
+    if (!matchesDateFilters(i)) return false;
     return true;
   };
 
@@ -9464,6 +9836,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     macroEtapas,
     macroLideres,
     macroMotivos,
+    dateFilters,
   ]);
 
   // VP principal (con mayor volumen de iniciativas registradas)
@@ -9511,9 +9884,10 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
         const hasMatch = reasons.some(r => macroMotivos.includes(r));
         if (!hasMatch) return false;
       }
+      if (!matchesDateFilters(i)) return false;
       return true;
     });
-  }, [iniciativas, selectedReport, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos]);
+  }, [iniciativas, selectedReport, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos, dateFilters]);
 
   // ---- Métricas para las tarjetas del catálogo ----
   const fueraFechaMetrics = useMemo(() => {
@@ -9671,11 +10045,13 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     lideres_dominio: macroLideres,
   };
 
+  const activeDateFiltersCount = dateFilters.filter(df => df.desde || df.hasta).length;
   const totalActive =
     macroInstituciones.length + macroSPO.length +
     macroITBPs.length + macroVPs.length +
     macroEtapas.length + macroLideres.length +
-    macroMotivos.length;
+    macroMotivos.length +
+    (selectedReport === 'vp' ? activeDateFiltersCount : 0);
 
   const clearAll = () => {
     setMacroInstituciones([]);
@@ -9685,7 +10061,21 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setMacroEtapas([]);
     setMacroLideres([]);
     setMacroMotivos([]);
+    setDateFilters([]);
   };
+
+  const exportDataset = useMemo(() => {
+    if (selectedReport !== 'vp') return filtered;
+    return iniciativas.filter(i => {
+      if (macroInstituciones.length && !macroInstituciones.includes(normalize(i.institucion))) return false;
+      if (macroSPO.length           && !macroSPO.includes(normalize(i.proyecto_spo)))          return false;
+      if (macroITBPs.length         && !macroITBPs.includes(normalize(i.it_bp)))               return false;
+      if (macroVPs.length           && !macroVPs.includes(normalize(i.vp_solicitante)))         return false;
+      if (macroEtapas.length        && !macroEtapas.includes(i.etapa_actual))                  return false;
+      if (macroLideres.length       && !macroLideres.includes(normalize(i.lider_dominio)))      return false;
+      return true;
+    });
+  }, [iniciativas, selectedReport, filtered, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres]);
 
   const isExportDisabled = selectedReport === 'vp'
     ? macroVPs.length === 0
@@ -9881,11 +10271,12 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                     <button
                       type="button"
                       onClick={() => exportReportToHTML(
-                        filtered,
+                        exportDataset,
                         macroVPs,
                         macro,
                         `Reporte_Demanda_TI_${selectedReport || 'General'}`,
-                        opts.vps
+                        opts.vps,
+                        dateFilters
                       )}
                       disabled={isExportDisabled}
                       title={isExportDisabled ? 'Selecciona al menos una vicepresidencia para exportar' : 'Exportar resultado filtrado actual en un archivo HTML independiente'}
@@ -9936,14 +10327,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
 
             {/* Grid de filtros (plegable) */}
             {isFilterPanelOpen && (
-              <div
-                style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
-                  gap: '10px 14px',
-                  padding: '12px 18px 14px',
-                }}
-              >
+              <>
+                <div
+                  style={{
+                    display: 'grid',
+                    gridTemplateColumns: 'repeat(auto-fill, minmax(175px, 1fr))',
+                    gap: '10px 14px',
+                    padding: '12px 18px 14px',
+                  }}
+                >
                 {/* Institución */}
                 <MacroMultiSelect
                   label="Institución"
@@ -10008,7 +10400,209 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                 {/* Proyecto SPO */}
                 <SpoToggle selected={macroSPO} onChange={setMacroSPO} />
               </div>
-            )}
+
+              {/* Filtros de Fecha para el Reporte de VPs */}
+              {selectedReport === 'vp' && (
+                <div
+                  style={{
+                    borderTop: '1px solid #f1f5f9',
+                    padding: '12px 18px 14px',
+                    display: 'flex',
+                    flexDirection: 'column',
+                    gap: 10,
+                    background: '#fcfdff',
+                    borderRadius: '0 0 12px 12px',
+                  }}
+                >
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8 }}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Calendar size={14} style={{ color: '#0284c7' }} />
+                      <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a' }}>
+                        Filtros de Fecha
+                      </span>
+                      {activeDateFiltersCount > 0 && (
+                        <span style={{
+                          fontSize: 10.5,
+                          fontWeight: 700,
+                          color: '#0284c7',
+                          background: '#e0f2fe',
+                          padding: '1px 8px',
+                          borderRadius: 10,
+                          border: '1px solid #bae6fd',
+                        }}>
+                          {activeDateFiltersCount} activo{activeDateFiltersCount === 1 ? '' : 's'}
+                        </span>
+                      )}
+                    </div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <button
+                        type="button"
+                        onClick={handleAddDateFilter}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 5,
+                          padding: '5px 12px',
+                          fontSize: 11.5,
+                          fontWeight: 600,
+                          color: '#0284c7',
+                          background: '#f0f9ff',
+                          border: '1px solid #bae6fd',
+                          borderRadius: 7,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s',
+                        }}
+                        onMouseOver={e => e.currentTarget.style.background = '#e0f2fe'}
+                        onMouseOut={e => e.currentTarget.style.background = '#f0f9ff'}
+                      >
+                        <Plus size={13} />
+                        <span>Agregar filtro de fecha</span>
+                      </button>
+                      {dateFilters.length > 0 && (
+                        <button
+                          type="button"
+                          onClick={handleClearDateFilters}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 4,
+                            padding: '5px 10px',
+                            fontSize: 11.5,
+                            fontWeight: 500,
+                            color: '#64748b',
+                            background: 'transparent',
+                            border: 'none',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                          }}
+                          onMouseOver={e => e.currentTarget.style.color = '#ef4444'}
+                          onMouseOut={e => e.currentTarget.style.color = '#64748b'}
+                        >
+                          <X size={12} />
+                          <span>Limpiar fechas</span>
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {dateFilters.length > 0 ? (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                      {dateFilters.map((df, idx) => (
+                        <div
+                          key={df.id}
+                          style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: 10,
+                            padding: '8px 12px',
+                            background: '#ffffff',
+                            border: '1px solid #e2e8f0',
+                            borderRadius: 8,
+                            flexWrap: 'wrap',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.02)',
+                          }}
+                        >
+                          <span style={{ fontSize: 10.5, fontWeight: 700, color: '#64748b', minWidth: 20 }}>
+                            #{idx + 1}
+                          </span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6, flex: '1 1 220px', minWidth: 200 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Campo:</span>
+                            <select
+                              value={df.field}
+                              onChange={e => handleUpdateDateFilter(df.id, { field: e.target.value })}
+                              style={{
+                                width: '100%',
+                                fontSize: 11.5,
+                                fontWeight: 600,
+                                color: '#0f172a',
+                                padding: '4px 8px',
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                outline: 'none',
+                                cursor: 'pointer',
+                              }}
+                            >
+                              {DATE_FILTER_FIELDS.map(f => (
+                                <option key={f.key} value={f.key}>{f.label}</option>
+                              ))}
+                            </select>
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Desde:</span>
+                            <input
+                              type="date"
+                              value={df.desde}
+                              onChange={e => handleUpdateDateFilter(df.id, { desde: e.target.value })}
+                              style={{
+                                fontSize: 11.5,
+                                color: '#0f172a',
+                                padding: '4px 8px',
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                outline: 'none',
+                              }}
+                            />
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <span style={{ fontSize: 11, fontWeight: 600, color: '#475569' }}>Hasta:</span>
+                            <input
+                              type="date"
+                              value={df.hasta}
+                              onChange={e => handleUpdateDateFilter(df.id, { hasta: e.target.value })}
+                              style={{
+                                fontSize: 11.5,
+                                color: '#0f172a',
+                                padding: '4px 8px',
+                                background: '#ffffff',
+                                border: '1px solid #cbd5e1',
+                                borderRadius: 6,
+                                outline: 'none',
+                              }}
+                            />
+                          </div>
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveDateFilter(df.id)}
+                            title="Eliminar este filtro de fecha"
+                            style={{
+                              marginLeft: 'auto',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              width: 26,
+                              height: 26,
+                              color: '#94a3b8',
+                              background: 'transparent',
+                              border: 'none',
+                              borderRadius: 4,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s',
+                            }}
+                            onMouseOver={e => {
+                              e.currentTarget.style.color = '#ef4444';
+                              e.currentTarget.style.background = '#fee2e2';
+                            }}
+                            onMouseOut={e => {
+                              e.currentTarget.style.color = '#94a3b8';
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      ))}
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: 11, color: '#94a3b8', fontStyle: 'italic' }}>
+                      No hay filtros de fecha aplicados. Haz clic en "Agregar filtro de fecha" para filtrar por inicio/fin planificado, fecha de registro, pase a producción, etc.
+                    </div>
+                  )}
+                </div>
+              )}
+            </>
+          )}
           </div>
         </>
       ) : (

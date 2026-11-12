@@ -7098,24 +7098,24 @@ function exportReportToHTML(
           optionsHtml += '<option value="' + f.key + '"' + (f.key === df.field ? ' selected' : '') + '>' + f.label + '</option>';
         }
 
-        rowsHtml += '<div class="df-row" data-id="' + df.id + '">' +
-          '<span class="df-row-num">#' + (idx + 1) + '</span>' +
-          '<div class="df-field-group">' +
-            '<span class="df-label">Campo:</span>' +
-            '<select class="df-select" onchange="updateDateFilterField(\'' + df.id + '\', this.value)">' +
-              optionsHtml +
-            '</select>' +
-          '</div>' +
-          '<div class="df-date-group">' +
-            '<span class="df-label">Desde:</span>' +
-            '<input type="date" class="df-input-date" value="' + (df.desde || '') + '" onchange="updateDateFilterDesde(\'' + df.id + '\', this.value)" />' +
-          '</div>' +
-          '<div class="df-date-group">' +
-            '<span class="df-label">Hasta:</span>' +
-            '<input type="date" class="df-input-date" value="' + (df.hasta || '') + '" onchange="updateDateFilterHasta(\'' + df.id + '\', this.value)" />' +
-          '</div>' +
-          '<button type="button" class="df-btn-remove" title="Eliminar filtro" onclick="removeDateFilterRow(\'' + df.id + '\')">✕</button>' +
-        '</div>';
+        rowsHtml += \`<div class="df-row" data-id="\${df.id}">
+          <span class="df-row-num">#\${idx + 1}</span>
+          <div class="df-field-group">
+            <span class="df-label">Campo:</span>
+            <select class="df-select" onchange="updateDateFilterField('\${df.id}', this.value)">
+              \${optionsHtml}
+            </select>
+          </div>
+          <div class="df-date-group">
+            <span class="df-label">Desde:</span>
+            <input type="date" class="df-input-date" value="\${df.desde || ''}" onchange="updateDateFilterDesde('\${df.id}', this.value)" />
+          </div>
+          <div class="df-date-group">
+            <span class="df-label">Hasta:</span>
+            <input type="date" class="df-input-date" value="\${df.hasta || ''}" onchange="updateDateFilterHasta('\${df.id}', this.value)" />
+          </div>
+          <button type="button" class="df-btn-remove" title="Eliminar filtro" onclick="removeDateFilterRow('\${df.id}')">✕</button>
+        </div>\`;
       }
       container.innerHTML = rowsHtml;
     }

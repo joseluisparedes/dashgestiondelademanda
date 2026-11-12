@@ -3504,7 +3504,7 @@ function TimelineIniciativasVP({
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterAM, setFilterAM] = useState<string>('TODOS');
   const [periodFilter, setPeriodFilter] = useState<'all' | 'focused' | 'current_year' | 'next_year'>('all');
-  const [onlyWithDates, setOnlyWithDates] = useState<boolean>(true);
+  const [onlyWithDates, setOnlyWithDates] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
   const [displayLimits, setDisplayLimits] = useState<Record<string, number>>({});

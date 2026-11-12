@@ -647,78 +647,112 @@ function MacroMultiSelect({
         />
       </button>
 
-      {/* Chips de selección */}
+      {/* Chips de selección compactos / visualmente ordenados */}
       {hasSelection && (
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, marginTop: 5 }}>
-          {selected.map(v => {
-            if (isMotivoSelect) {
-              const conf = getMotivoStyle(v);
-              return (
-                <span
-                  key={v}
-                  style={{
-                    display: 'inline-flex',
-                    alignItems: 'center',
-                    gap: 4,
-                    fontSize: 9.5,
-                    padding: '2px 7px',
-                    borderRadius: 6,
-                    background: conf.bg,
-                    color: conf.color,
-                    fontWeight: 700,
-                    border: `1px solid ${conf.border}`,
-                    boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
-                  }}
-                >
+        <div style={{ marginTop: 5 }}>
+          {selected.length <= 3 ? (
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4 }}>
+              {selected.map(v => {
+                if (isMotivoSelect) {
+                  const conf = getMotivoStyle(v);
+                  return (
+                    <span
+                      key={v}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 4,
+                        fontSize: 9.5,
+                        padding: '2px 7px',
+                        borderRadius: 6,
+                        background: conf.bg,
+                        color: conf.color,
+                        fontWeight: 700,
+                        border: `1px solid ${conf.border}`,
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                      }}
+                    >
+                      <span
+                        style={{
+                          width: 5,
+                          height: 5,
+                          borderRadius: '50%',
+                          backgroundColor: conf.dotColor,
+                          flexShrink: 0,
+                        }}
+                      />
+                      <span style={{ maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                        {displayLabel(v)}
+                      </span>
+                      <button
+                        type="button"
+                        onClick={e => { e.stopPropagation(); toggle(v); }}
+                        style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: conf.color }}
+                      >
+                        <X size={10} />
+                      </button>
+                    </span>
+                  );
+                }
+                return (
                   <span
+                    key={v}
                     style={{
-                      width: 5,
-                      height: 5,
-                      borderRadius: '50%',
-                      backgroundColor: conf.dotColor,
-                      flexShrink: 0,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 4,
+                      fontSize: 9,
+                      padding: '2px 7px',
+                      borderRadius: 20,
+                      background: '#eff6ff',
+                      color: '#1d4ed8',
+                      fontWeight: 700,
+                      border: '1px solid #bfdbfe',
                     }}
-                  />
-                  <span style={{ maxWidth: 130, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                    {displayLabel(v)}
-                  </span>
-                  <button
-                    onClick={e => { e.stopPropagation(); toggle(v); }}
-                    style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: conf.color }}
                   >
-                    <X size={10} />
-                  </button>
-                </span>
-              );
-            }
-            return (
-              <span
-                key={v}
+                    <span style={{ maxWidth: 110, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                      {displayLabel(v)}
+                    </span>
+                    <button
+                      type="button"
+                      onClick={e => { e.stopPropagation(); toggle(v); }}
+                      style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#3b82f6' }}
+                    >
+                      <X size={9} />
+                    </button>
+                  </span>
+                );
+              })}
+            </div>
+          ) : (
+            /* Cuando hay más de 3 seleccionados, mostrar resumen limpio sin desbordar el grid */
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 6, padding: '3px 6px', background: '#f8fafc', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+              <span style={{ fontSize: 10, color: '#475569', fontWeight: 600 }}>
+                {selected.length === options.length
+                  ? `Todas (${options.length}) activas`
+                  : `${selected.length} de ${options.length} seleccionadas`}
+              </span>
+              <button
+                type="button"
+                onClick={e => { e.stopPropagation(); onChange([]); }}
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',
-                  gap: 4,
+                  gap: 3,
+                  background: '#fee2e2',
+                  border: '1px solid #fca5a5',
+                  color: '#991b1b',
                   fontSize: 9,
-                  padding: '2px 7px',
-                  borderRadius: 20,
-                  background: '#eff6ff',
-                  color: '#1d4ed8',
                   fontWeight: 700,
-                  border: '1px solid #bfdbfe',
+                  borderRadius: 4,
+                  padding: '1px 5px',
+                  cursor: 'pointer',
                 }}
               >
-                <span style={{ maxWidth: 95, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
-                  {displayLabel(v)}
-                </span>
-                <button
-                  onClick={e => { e.stopPropagation(); toggle(v); }}
-                  style={{ display: 'flex', alignItems: 'center', background: 'none', border: 'none', cursor: 'pointer', padding: 0, color: '#3b82f6' }}
-                >
-                  <X size={9} />
-                </button>
-              </span>
-            );
-          })}
+                <X size={8} /> Limpiar
+              </button>
+            </div>
+          )}
         </div>
       )}
 
@@ -727,20 +761,20 @@ function MacroMultiSelect({
         <div
           style={{
             position: 'absolute',
-            top: '100%',
+            top: 'calc(100% + 4px)',
             left: 0,
-            marginTop: 4,
             background: '#ffffff',
-            border: '1px solid #e2e8f0',
+            border: '1px solid #cbd5e1',
             borderRadius: 10,
-            boxShadow: '0 12px 28px -4px rgba(0,0,0,0.12), 0 4px 10px rgba(0,0,0,0.04)',
-            minWidth: isMotivoSelect ? 280 : 230,
-            maxWidth: isMotivoSelect ? 360 : 300,
-            maxHeight: 320,
+            boxShadow: '0 16px 36px -4px rgba(0,0,0,0.18), 0 6px 16px rgba(0,0,0,0.08)',
+            minWidth: 260,
+            width: 'max-content',
+            maxWidth: 340,
+            maxHeight: 340,
             display: 'flex',
             flexDirection: 'column',
             overflow: 'hidden',
-            zIndex: 99999,
+            zIndex: 999999,
           }}
         >
           {/* Cabecera de acciones rápidas */}

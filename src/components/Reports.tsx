@@ -167,19 +167,47 @@ function buildMacroOptions(
   return sorted;
 }
 
-function fmtDatePopup(d: string | null | undefined): string {
+function fmtDatePopup(d: string | Date | null | undefined): string {
   if (!d) return '—';
   try {
-    return format(parseISO(d), 'dd MMM yyyy', { locale: es });
+    if (d instanceof Date) {
+      if (isNaN(d.getTime())) return '—';
+      return format(d, 'dd MMM yyyy', { locale: es });
+    }
+    const str = String(d).trim();
+    if (!str || str === 'null' || str === 'undefined' || str === '—') return '—';
+    const ts = Date.parse(str);
+    if (!isNaN(ts)) {
+      return format(new Date(ts), 'dd MMM yyyy', { locale: es });
+    }
+    const parsed = parseISO(str);
+    if (!isNaN(parsed.getTime())) {
+      return format(parsed, 'dd MMM yyyy', { locale: es });
+    }
+    return '—';
   } catch {
     return '—';
   }
 }
 
-function fmtDateShort(d: string | null | undefined): string {
+function fmtDateShort(d: string | Date | null | undefined): string {
   if (!d) return '—';
   try {
-    return format(parseISO(d), 'dd/MM/yyyy');
+    if (d instanceof Date) {
+      if (isNaN(d.getTime())) return '—';
+      return format(d, 'dd/MM/yyyy');
+    }
+    const str = String(d).trim();
+    if (!str || str === 'null' || str === 'undefined' || str === '—') return '—';
+    const ts = Date.parse(str);
+    if (!isNaN(ts)) {
+      return format(new Date(ts), 'dd/MM/yyyy');
+    }
+    const parsed = parseISO(str);
+    if (!isNaN(parsed.getTime())) {
+      return format(parsed, 'dd/MM/yyyy');
+    }
+    return '—';
   } catch {
     return '—';
   }
@@ -3450,6 +3478,7 @@ function TimelineIniciativasVP({
   const [selectedVP, setSelectedVP] = useState<string>('TODAS');
   const [searchTerm, setSearchTerm] = useState<string>('');
   const [filterAM, setFilterAM] = useState<string>('TODOS');
+  const [periodFilter, setPeriodFilter] = useState<'all' | 'focused' | 'current_year' | 'next_year'>('all');
   const [onlyWithDates, setOnlyWithDates] = useState<boolean>(true);
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
@@ -3489,6 +3518,8 @@ function TimelineIniciativasVP({
   const allRows = useMemo<TimelineRowItem[]>(() => {
     return iniciativas.map(i => {
       const segments = buildTimelineSegments(i);
+      // Ordenar segmentos cronológicamente
+      segments.sort((a, b) => a.start.getTime() - b.start.getTime());
       const hasDates = segments.length > 0;
       let earliestDate: Date | null = null;
       let latestDate: Date | null = null;
@@ -3517,6 +3548,13 @@ function TimelineIniciativasVP({
         startDate = parseTimelineDate(i.fecha_inicio_estimacion) || earliestDate;
         endDate = parseTimelineDate(i.fecha_fin_estimacion) || latestDate;
       }
+
+      // Fallbacks seguros: garantizar que si la iniciativa tiene fechas o segmentos registrados,
+      // las columnas F. Inicio y F. Fin siempre muestren la fecha real en vez de quedar vacías ('—')
+      if (!startDate && earliestDate) startDate = earliestDate;
+      if (!endDate && latestDate) endDate = latestDate;
+      if (startDate && !endDate) endDate = startDate;
+      if (endDate && !startDate) startDate = endDate;
 
       const grupoAM = classifyAM(i);
 
@@ -3647,33 +3685,68 @@ function TimelineIniciativasVP({
 
   // Dominio temporal global (incorporando siempre HOY)
   const { minDate, maxDate, totalDuration, todayPct } = useMemo(() => {
-    const timestamps: number[] = [todayMs];
+    let timestamps: number[] = [todayMs];
     filteredRows.forEach(row => {
       row.segments.forEach(seg => {
         timestamps.push(seg.start.getTime(), seg.end.getTime());
       });
     });
 
-    const minTs = Math.min(...timestamps);
-    const maxTs = Math.max(...timestamps);
+    let minTs = Math.min(...timestamps);
+    let maxTs = Math.max(...timestamps);
 
+    if (periodFilter === 'focused') {
+      const focusedMin = new Date(today.getFullYear(), today.getMonth() - 5, 1).getTime();
+      const focusedMax = new Date(today.getFullYear(), today.getMonth() + 6, 0, 23, 59, 59).getTime();
+      minTs = Math.max(minTs, focusedMin);
+      maxTs = Math.min(maxTs, focusedMax);
+      if (minTs >= maxTs) {
+        minTs = focusedMin;
+        maxTs = focusedMax;
+      }
+    } else if (periodFilter === 'current_year') {
+      minTs = new Date(today.getFullYear(), 0, 1).getTime();
+      maxTs = new Date(today.getFullYear(), 11, 31, 23, 59, 59).getTime();
+    } else if (periodFilter === 'next_year') {
+      minTs = new Date(today.getFullYear() + 1, 0, 1).getTime();
+      maxTs = new Date(today.getFullYear() + 1, 11, 31, 23, 59, 59).getTime();
+    }
+
+    // Buffer de 10 días para asegurar que la primera barrita tenga espacio a su izquierda para su badge ID
     const padStart = new Date(minTs);
-    padStart.setDate(padStart.getDate() - 15);
+    padStart.setDate(padStart.getDate() - 10);
     const minD = new Date(padStart.getFullYear(), padStart.getMonth(), 1);
 
     const padEnd = new Date(maxTs);
-    padEnd.setDate(padEnd.getDate() + 20);
+    padEnd.setDate(padEnd.getDate() + 10);
     const maxD = new Date(padEnd.getFullYear(), padEnd.getMonth() + 1, 0, 23, 59, 59);
 
     const dur = Math.max(1, maxD.getTime() - minD.getTime());
     const tPct = Math.min(100, Math.max(0, ((todayMs - minD.getTime()) / dur) * 100));
 
     return { minDate: minD, maxDate: maxD, totalDuration: dur, todayPct: tPct };
-  }, [filteredRows, todayMs]);
+  }, [filteredRows, todayMs, periodFilter, today]);
 
-  // Columnas mensuales
-  const monthColumns = useMemo(() => {
-    const cols: { date: Date; label: string; leftPct: number; widthPct: number }[] = [];
+  // Estructura de lunes (hitos semanales) por mes
+  interface TimelineMondayTick {
+    date: Date;
+    dayNumber: number;
+    leftPct: number;
+    widthPct: number;
+  }
+
+  interface TimelineMonthCol {
+    date: Date;
+    monthName: string;
+    year: number;
+    leftPct: number;
+    widthPct: number;
+    mondays: TimelineMondayTick[];
+  }
+
+  // Columnas mensuales con sus lunes / fechas clave (exacto como en el ejemplo)
+  const monthColumns = useMemo<TimelineMonthCol[]>(() => {
+    const cols: TimelineMonthCol[] = [];
     let curr = new Date(minDate.getFullYear(), minDate.getMonth(), 1);
 
     while (curr <= maxDate) {
@@ -3683,17 +3756,83 @@ function TimelineIniciativasVP({
       const leftPct = ((startMs - minDate.getTime()) / totalDuration) * 100;
       const widthPct = ((endMs - startMs) / totalDuration) * 100;
 
+      // Calcular los lunes de este mes
+      const mondays: TimelineMondayTick[] = [];
+      const monthEnd = new Date(curr.getFullYear(), curr.getMonth() + 1, 0, 23, 59, 59);
+      let d = new Date(curr);
+      while (d.getDay() !== 1) {
+        d.setDate(d.getDate() + 1);
+      }
+      while (d <= monthEnd) {
+        const mDate = new Date(d);
+        const mStartMs = mDate.getTime();
+        const mEndMs = mStartMs + 7 * 24 * 60 * 60 * 1000;
+        const mLeftPct = ((mStartMs - minDate.getTime()) / totalDuration) * 100;
+        const mWidthPct = ((Math.min(mEndMs, maxDate.getTime()) - mStartMs) / totalDuration) * 100;
+        mondays.push({
+          date: mDate,
+          dayNumber: mDate.getDate(),
+          leftPct: mLeftPct,
+          widthPct: mWidthPct,
+        });
+        d.setDate(d.getDate() + 7);
+      }
+
       cols.push({
         date: new Date(curr),
-        label: format(curr, 'MMM yyyy', { locale: es }),
+        monthName: format(curr, 'MMMM', { locale: es }),
+        year: curr.getFullYear(),
         leftPct,
         widthPct,
+        mondays,
       });
 
       curr = nextMonth;
     }
     return cols;
   }, [minDate, maxDate, totalDuration]);
+
+  // Años agrupados para el Tier 1 de la cabecera
+  const yearColumns = useMemo(() => {
+    const map = new Map<number, { year: number; minMs: number; maxMs: number }>();
+    monthColumns.forEach(m => {
+      const yr = m.year;
+      const mStart = m.date.getTime();
+      const mEnd = new Date(m.date.getFullYear(), m.date.getMonth() + 1, 0, 23, 59, 59).getTime();
+      if (!map.has(yr)) {
+        map.set(yr, { year: yr, minMs: mStart, maxMs: mEnd });
+      } else {
+        const cur = map.get(yr)!;
+        cur.maxMs = Math.max(cur.maxMs, mEnd);
+      }
+    });
+
+    return Array.from(map.values()).map(y => {
+      const leftPct = ((Math.max(minDate.getTime(), y.minMs) - minDate.getTime()) / totalDuration) * 100;
+      const rightPct = ((Math.min(maxDate.getTime(), y.maxMs) - minDate.getTime()) / totalDuration) * 100;
+      return {
+        year: y.year,
+        leftPct,
+        widthPct: Math.max(0, rightPct - leftPct),
+      };
+    });
+  }, [monthColumns, minDate, maxDate, totalDuration]);
+
+  // Lista plana de todos los lunes para la cuadrícula vertical global
+  const allMondays = useMemo(() => {
+    const list: TimelineMondayTick[] = [];
+    monthColumns.forEach(m => {
+      m.mondays.forEach(tick => list.push(tick));
+    });
+    return list;
+  }, [monthColumns]);
+
+  // Ancho mínimo del track para que cada mes y día respire con holgura (mínimo 135px por mes)
+  const trackMinWidth = useMemo(() => {
+    return Math.max(850, monthColumns.length * 135);
+  }, [monthColumns.length]);
+
+  const totalTableWidth = 530 + trackMinWidth;
 
   if (!isReady) {
     return (
@@ -4047,6 +4186,28 @@ function TimelineIniciativasVP({
             </select>
           </div>
 
+          {/* Selector de Período / Ventana Temporal */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Período:</span>
+            <select
+              value={periodFilter}
+              onChange={e => setPeriodFilter(e.target.value as any)}
+              style={{
+                padding: '4px 8px',
+                fontSize: 11,
+                borderRadius: 8,
+                border: '1px solid #cbd5e1',
+                backgroundColor: '#ffffff',
+                color: '#1e293b',
+              }}
+            >
+              <option value="all">Todo el período</option>
+              <option value="focused">Ventana activa (±6 meses)</option>
+              <option value="current_year">Año {today.getFullYear()}</option>
+              <option value="next_year">Año {today.getFullYear() + 1}</option>
+            </select>
+          </div>
+
           {/* Toggle Solo con fechas */}
           <label
             style={{
@@ -4138,15 +4299,16 @@ function TimelineIniciativasVP({
         </div>
       ) : (
         <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
-          <div style={{ minWidth: 1240, display: 'flex', flexDirection: 'column' }}>
-            {/* Header del Gantt: Columnas a la izquierda (530px) | Meses y HOY a la derecha */}
+          <div style={{ minWidth: totalTableWidth, width: totalTableWidth, display: 'flex', flexDirection: 'column' }}>
+            {/* Header del Gantt: Columnas a la izquierda (530px sticky) | Años, Meses, Días y HOY a la derecha */}
             <div
               style={{
                 display: 'flex',
-                background: '#f8fafc',
-                borderBottom: '2px solid #e2e8f0',
-                position: 'relative',
-                paddingTop: 12,
+                background: '#ffffff',
+                borderBottom: '2px solid #cbd5e1',
+                position: 'sticky',
+                top: 0,
+                zIndex: 35,
               }}
             >
               {/* Columnas Izquierdas Header (530px en total: 360px + 85px + 85px) */}
@@ -4155,10 +4317,16 @@ function TimelineIniciativasVP({
                   width: 530,
                   minWidth: 530,
                   maxWidth: 530,
+                  height: 74,
                   display: 'flex',
-                  alignItems: 'center',
-                  borderRight: '1px solid #e2e8f0',
+                  alignItems: 'stretch',
+                  borderRight: '1px solid #cbd5e1',
                   boxSizing: 'border-box',
+                  background: '#f8fafc',
+                  position: 'sticky',
+                  left: 0,
+                  zIndex: 40,
+                  boxShadow: '2px 0 5px rgba(0,0,0,0.03)',
                 }}
               >
                 <div
@@ -4166,11 +4334,11 @@ function TimelineIniciativasVP({
                     width: 360,
                     minWidth: 360,
                     maxWidth: 360,
-                    padding: '8px 12px',
+                    padding: '0 12px',
                     fontWeight: 700,
                     fontSize: 11,
-                    color: '#475569',
-                    borderRight: '1px solid #f1f5f9',
+                    color: '#334155',
+                    borderRight: '1px solid #e2e8f0',
                     boxSizing: 'border-box',
                     display: 'flex',
                     alignItems: 'center',
@@ -4187,13 +4355,16 @@ function TimelineIniciativasVP({
                     width: 85,
                     minWidth: 85,
                     maxWidth: 85,
-                    padding: '8px 4px',
+                    padding: '0 4px',
                     fontWeight: 700,
                     fontSize: 11,
-                    color: '#475569',
+                    color: '#334155',
                     textAlign: 'center',
-                    borderRight: '1px solid #f1f5f9',
+                    borderRight: '1px solid #e2e8f0',
                     boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
                   F. Inicio
@@ -4203,65 +4374,129 @@ function TimelineIniciativasVP({
                     width: 85,
                     minWidth: 85,
                     maxWidth: 85,
-                    padding: '8px 4px',
+                    padding: '0 4px',
                     fontWeight: 700,
                     fontSize: 11,
-                    color: '#475569',
+                    color: '#334155',
                     textAlign: 'center',
                     boxSizing: 'border-box',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                   }}
                 >
                   F. Fin
                 </div>
               </div>
 
-              {/* Pista Temporal Header */}
+              {/* Pista Temporal Header (3 Tiers: Años, Meses, Días) */}
               <div
                 style={{
+                  width: trackMinWidth,
+                  minWidth: trackMinWidth,
                   flex: 1,
                   position: 'relative',
-                  height: 36,
+                  height: 74,
                   display: 'flex',
+                  flexDirection: 'column',
                   boxSizing: 'border-box',
+                  overflow: 'hidden',
                 }}
               >
-                {/* Meses */}
-                {monthColumns.map((col, idx) => (
-                  <div
-                    key={idx}
-                    style={{
-                      position: 'absolute',
-                      left: `${col.leftPct}%`,
-                      width: `${col.widthPct}%`,
-                      height: '100%',
-                      borderRight: '1px solid #e2e8f0',
-                      padding: '8px 6px',
-                      boxSizing: 'border-box',
-                      fontSize: 10,
-                      fontWeight: 700,
-                      color: '#475569',
-                      textTransform: 'capitalize',
-                      overflow: 'hidden',
-                      whiteSpace: 'nowrap',
-                      textOverflow: 'ellipsis',
-                    }}
-                  >
-                    {col.label}
-                  </div>
-                ))}
+                {/* Tier 1: Años (24px) */}
+                <div style={{ position: 'relative', height: 24, width: '100%', background: '#0f172a', borderBottom: '1px solid #1e293b' }}>
+                  {yearColumns.map((y, idx) => {
+                    const isUpcoming = y.year > today.getFullYear();
+                    return (
+                      <div
+                        key={idx}
+                        style={{
+                          position: 'absolute',
+                          left: `${y.leftPct}%`,
+                          width: `${y.widthPct}%`,
+                          height: '100%',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          fontWeight: 800,
+                          fontSize: 11,
+                          letterSpacing: '0.05em',
+                          color: '#ffffff',
+                          backgroundColor: isUpcoming ? '#059669' : '#0f172a',
+                          borderRight: '1px solid #334155',
+                          boxSizing: 'border-box',
+                        }}
+                      >
+                        {y.year}
+                      </div>
+                    );
+                  })}
+                </div>
 
-                {/* Badge flotante de HOY en la cabecera */}
+                {/* Tier 2: Meses (28px) */}
+                <div style={{ position: 'relative', height: 28, width: '100%', background: '#1e293b', borderBottom: '1px solid #334155' }}>
+                  {monthColumns.map((col, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: 'absolute',
+                        left: `${col.leftPct}%`,
+                        width: `${col.widthPct}%`,
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 11,
+                        fontWeight: 700,
+                        color: '#f8fafc',
+                        textTransform: 'capitalize',
+                        borderRight: '1px solid #334155',
+                        boxSizing: 'border-box',
+                        letterSpacing: '0.02em',
+                      }}
+                    >
+                      {col.monthName}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Tier 3: Días (Lunes / Hitos semanales) (22px) */}
+                <div style={{ position: 'relative', height: 22, width: '100%', background: '#f8fafc', borderBottom: '1px solid #cbd5e1' }}>
+                  {allMondays.map((m, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        position: 'absolute',
+                        left: `${m.leftPct}%`,
+                        width: `${m.widthPct}%`,
+                        height: '100%',
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'center',
+                        fontSize: 9.5,
+                        fontWeight: 600,
+                        color: '#64748b',
+                        borderRight: '1px solid #e2e8f0',
+                        boxSizing: 'border-box',
+                      }}
+                    >
+                      {m.dayNumber}
+                    </div>
+                  ))}
+                </div>
+
+                {/* Badge de HOY flotante en la cabecera */}
                 <div
                   style={{
                     position: 'absolute',
                     left: `${todayPct}%`,
                     top: 2,
                     transform: 'translateX(-50%)',
-                    zIndex: 30,
+                    zIndex: 40,
                     display: 'inline-flex',
                     alignItems: 'center',
                     gap: 3,
-                    padding: '2px 7px',
+                    padding: '2px 8px',
                     borderRadius: 12,
                     backgroundColor: '#ef4444',
                     color: '#ffffff',
@@ -4272,7 +4507,7 @@ function TimelineIniciativasVP({
                     pointerEvents: 'none',
                   }}
                 >
-                  <span>📍 HOY</span>
+                  <span>HOY</span>
                   <span style={{ fontWeight: 600, opacity: 0.9 }}>
                     ({format(today, 'dd/MM/yy')})
                   </span>
@@ -4281,49 +4516,66 @@ function TimelineIniciativasVP({
             </div>
 
             {/* GRUPOS POR COLUMNA AM */}
-            <div style={{ position: 'relative' }}>
-              {/* CUADRÍCULA GLOBAL DE MESES DE FONDO (una sola vez para toda la tabla, en vez de repetirla en cada fila) */}
+            <div style={{ position: 'relative', width: totalTableWidth, minWidth: totalTableWidth }}>
+              {/* CUADRÍCULA GLOBAL DE MESES Y LUNES DE FONDO */}
               <div
                 style={{
                   position: 'absolute',
                   left: 530,
-                  right: 0,
+                  width: trackMinWidth,
                   top: 0,
                   bottom: 0,
                   pointerEvents: 'none',
                   zIndex: 0,
                 }}
               >
+                {/* Líneas de lunes */}
+                {allMondays.map((m, idx) => (
+                  <div
+                    key={`m-${idx}`}
+                    style={{
+                      position: 'absolute',
+                      left: `${m.leftPct}%`,
+                      width: 1,
+                      top: 0,
+                      bottom: 0,
+                      borderRight: '1px dashed #f1f5f9',
+                      boxSizing: 'border-box',
+                    }}
+                  />
+                ))}
+
+                {/* Líneas divisorias de meses */}
                 {monthColumns.map((col, idx) => (
                   <div
-                    key={idx}
+                    key={`col-${idx}`}
                     style={{
                       position: 'absolute',
                       left: `${col.leftPct}%`,
                       width: `${col.widthPct}%`,
                       top: 0,
                       bottom: 0,
-                      borderRight: '1px solid #f1f5f9',
+                      borderRight: '1px solid #e2e8f0',
                       boxSizing: 'border-box',
                     }}
                   />
                 ))}
-              </div>
 
-              {/* LÍNEA VERTICAL DE HOY QUE ATRAVIESA TODAS LAS FILAS */}
-              <div
-                style={{
-                  position: 'absolute',
-                  left: `calc(530px + (100% - 530px) * ${todayPct / 100})`,
-                  top: 0,
-                  bottom: 0,
-                  width: 2,
-                  borderLeft: '2px dashed #ef4444',
-                  boxShadow: '0 0 8px rgba(239, 68, 68, 0.4)',
-                  zIndex: 20,
-                  pointerEvents: 'none',
-                }}
-              />
+                {/* LÍNEA VERTICAL DE HOY QUE ATRAVIESA TODAS LAS FILAS */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${todayPct}%`,
+                    top: 0,
+                    bottom: 0,
+                    width: 2,
+                    borderLeft: '2px dashed #ef4444',
+                    boxShadow: '0 0 8px rgba(239, 68, 68, 0.35)',
+                    zIndex: 15,
+                    pointerEvents: 'none',
+                  }}
+                />
+              </div>
 
               {groupedData.map(grp => {
                 const isCollapsed = Boolean(collapsedGroups[grp.key]);
@@ -4432,121 +4684,140 @@ function TimelineIniciativasVP({
                                         rowIdx % 2 === 0 ? 'rgba(255,255,255,0.85)' : 'rgba(252,252,253,0.85)';
                                     }}
                                   >
-                                    {/* Columna 1: ID · Título (360px) - Nombre Completo */}
+                                    {/* Bloque Sticky Izquierdo: Columnas 1, 2 y 3 (530px) */}
                                     <div
                                       style={{
-                                        width: 360,
-                                        minWidth: 360,
-                                        maxWidth: 360,
-                                        padding: '6px 12px',
-                                        borderRight: '1px solid #f1f5f9',
+                                        width: 530,
+                                        minWidth: 530,
+                                        maxWidth: 530,
                                         display: 'flex',
-                                        alignItems: 'flex-start',
-                                        gap: 6,
-                                        boxSizing: 'border-box',
+                                        alignItems: 'stretch',
+                                        position: 'sticky',
+                                        left: 0,
+                                        zIndex: 10,
+                                        backgroundColor: rowIdx % 2 === 0 ? '#ffffff' : '#fcfcfd',
+                                        borderRight: '1px solid #cbd5e1',
+                                        boxShadow: '2px 0 5px rgba(0,0,0,0.03)',
                                       }}
                                     >
-                                      <span
-                                        onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
-                                        title={`Ver detalle de #${row.iniciativa.id}`}
+                                      {/* Columna 1: ID · Título (360px) - Nombre Completo */}
+                                      <div
                                         style={{
-                                          fontSize: 10.5,
-                                          fontWeight: 700,
-                                          color: '#2563eb',
-                                          cursor: 'pointer',
-                                          flexShrink: 0,
-                                          paddingTop: 1.5,
+                                          width: 360,
+                                          minWidth: 360,
+                                          maxWidth: 360,
+                                          padding: '6px 12px',
+                                          borderRight: '1px solid #f1f5f9',
+                                          display: 'flex',
+                                          alignItems: 'flex-start',
+                                          gap: 6,
+                                          boxSizing: 'border-box',
                                         }}
                                       >
-                                        {row.iniciativa.id} ·
-                                      </span>
-
-                                      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                                         <span
                                           onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
-                                          title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${getEtapaHumanLabel(row.iniciativa.etapa_actual)}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
+                                          title={`Ver detalle de #${row.iniciativa.id}`}
                                           style={{
-                                            fontSize: 11,
-                                            fontWeight: 600,
-                                            color: '#1e293b',
+                                            fontSize: 10.5,
+                                            fontWeight: 700,
+                                            color: '#2563eb',
                                             cursor: 'pointer',
-                                            whiteSpace: 'normal',
-                                            wordBreak: 'break-word',
-                                            lineHeight: 1.35,
+                                            flexShrink: 0,
+                                            paddingTop: 1.5,
                                           }}
                                         >
-                                          {row.iniciativa.titulo}
+                                          {row.iniciativa.id} ·
                                         </span>
 
-                                        {/* Badge para iniciativas eliminadas: Muestra fecha de eliminación y motivo */}
-                                        {(row.iniciativa.etapa_actual === 'eliminadas' || row.iniciativa.etapa_actual === 'eliminada') && (
-                                          <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 2 }}>
-                                            <span
-                                              style={{
-                                                fontSize: 9.5,
-                                                fontWeight: 700,
-                                                padding: '1px 6px',
-                                                borderRadius: 4,
-                                                background: '#fee2e2',
-                                                color: '#991b1b',
-                                                border: '1px solid #fca5a5',
-                                                display: 'inline-flex',
-                                                alignItems: 'center',
-                                                gap: 3,
-                                              }}
-                                              title={row.iniciativa.motivo_eliminacion || undefined}
-                                            >
-                                              ✕ Eliminada: {row.iniciativa.fecha_eliminacion ? fmtDateShort(row.iniciativa.fecha_eliminacion) : 'Sin fecha'}
-                                            </span>
+                                        <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
+                                          <span
+                                            onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                            title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${getEtapaHumanLabel(row.iniciativa.etapa_actual)}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
+                                            style={{
+                                              fontSize: 11,
+                                              fontWeight: 600,
+                                              color: '#1e293b',
+                                              cursor: 'pointer',
+                                              whiteSpace: 'normal',
+                                              wordBreak: 'break-word',
+                                              lineHeight: 1.35,
+                                            }}
+                                          >
+                                            {row.iniciativa.titulo}
+                                          </span>
 
-                                          </div>
-                                        )}
+                                          {/* Badge para iniciativas eliminadas: Muestra fecha de eliminación y motivo */}
+                                          {(row.iniciativa.etapa_actual === 'eliminadas' || row.iniciativa.etapa_actual === 'eliminada') && (
+                                            <div style={{ display: 'flex', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginTop: 2 }}>
+                                              <span
+                                                style={{
+                                                  fontSize: 9.5,
+                                                  fontWeight: 700,
+                                                  padding: '1px 6px',
+                                                  borderRadius: 4,
+                                                  background: '#fee2e2',
+                                                  color: '#991b1b',
+                                                  border: '1px solid #fca5a5',
+                                                  display: 'inline-flex',
+                                                  alignItems: 'center',
+                                                  gap: 3,
+                                                }}
+                                                title={row.iniciativa.motivo_eliminacion || undefined}
+                                              >
+                                                ✕ Eliminada: {row.iniciativa.fecha_eliminacion ? fmtDateShort(row.iniciativa.fecha_eliminacion) : 'Sin fecha'}
+                                              </span>
+                                            </div>
+                                          )}
+                                        </div>
                                       </div>
-                                    </div>
 
-                                    {/* Columna 2: F. Inicio (85px) */}
-                                    <div
-                                      style={{
-                                        width: 85,
-                                        minWidth: 85,
-                                        maxWidth: 85,
-                                        padding: '6px 4px',
-                                        borderRight: '1px solid #f1f5f9',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: 11,
-                                        color: '#475569',
-                                        fontVariantNumeric: 'tabular-nums',
-                                        boxSizing: 'border-box',
-                                      }}
-                                    >
-                                      {fmtDateShort(row.startDate)}
-                                    </div>
+                                      {/* Columna 2: F. Inicio (85px) */}
+                                      <div
+                                        style={{
+                                          width: 85,
+                                          minWidth: 85,
+                                          maxWidth: 85,
+                                          padding: '6px 4px',
+                                          borderRight: '1px solid #f1f5f9',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          fontVariantNumeric: 'tabular-nums',
+                                          boxSizing: 'border-box',
+                                        }}
+                                      >
+                                        {fmtDateShort(row.startDate)}
+                                      </div>
 
-                                    {/* Columna 3: F. Fin (85px) */}
-                                    <div
-                                      style={{
-                                        width: 85,
-                                        minWidth: 85,
-                                        maxWidth: 85,
-                                        padding: '6px 4px',
-                                        borderRight: '1px solid #e2e8f0',
-                                        display: 'flex',
-                                        alignItems: 'center',
-                                        justifyContent: 'center',
-                                        fontSize: 11,
-                                        color: '#475569',
-                                        fontVariantNumeric: 'tabular-nums',
-                                        boxSizing: 'border-box',
-                                      }}
-                                    >
-                                      {fmtDateShort(row.endDate)}
+                                      {/* Columna 3: F. Fin (85px) */}
+                                      <div
+                                        style={{
+                                          width: 85,
+                                          minWidth: 85,
+                                          maxWidth: 85,
+                                          padding: '6px 4px',
+                                          display: 'flex',
+                                          alignItems: 'center',
+                                          justifyContent: 'center',
+                                          fontSize: 11,
+                                          fontWeight: 600,
+                                          color: '#334155',
+                                          fontVariantNumeric: 'tabular-nums',
+                                          boxSizing: 'border-box',
+                                        }}
+                                      >
+                                        {fmtDateShort(row.endDate)}
+                                      </div>
                                     </div>
 
                                     {/* Columna 4: Pista Temporal (Gantt Track) */}
                                     <div
                                       style={{
+                                        width: trackMinWidth,
+                                        minWidth: trackMinWidth,
                                         flex: 1,
                                         position: 'relative',
                                         boxSizing: 'border-box',
@@ -4569,7 +4840,7 @@ function TimelineIniciativasVP({
                                           Sin fechas registradas
                                         </div>
                                       ) : (
-                                        /* Segmentos de Tiempo con ID impreso dentro de la barra */
+                                        /* Segmentos de Tiempo con ID impreso FUERA de la barra, al lado izquierdo */
                                         row.segments.map((seg, sIdx) => {
                                           const isElimSeg = seg.stageKey === 'eliminada';
                                           const leftPct = Math.max(
@@ -4602,8 +4873,8 @@ function TimelineIniciativasVP({
                                                 cursor: 'pointer',
                                                 display: 'flex',
                                                 alignItems: 'center',
-                                                justifyContent: 'flex-start',
-                                                padding: '0 6px',
+                                                justifyContent: 'center',
+                                                padding: '0 4px',
                                                 boxSizing: 'border-box',
                                                 zIndex: isElimSeg ? 9 : seg.isSingleDay ? 8 : 4 + sIdx,
                                                 transition: 'transform 0.1s ease, filter 0.1s ease, z-index 0.1s ease',
@@ -4632,23 +4903,40 @@ function TimelineIniciativasVP({
                                                 onOpenDetailModal && onOpenDetailModal(row.iniciativa)
                                               }
                                             >
-                                              <span
-                                                style={{
-                                                  fontSize: 9,
-                                                  fontWeight: 800,
-                                                  color: '#ffffff',
-                                                  whiteSpace: 'nowrap',
-                                                  overflow: 'hidden',
-                                                  textOverflow: 'ellipsis',
-                                                  textShadow: '0 1px 2px rgba(0,0,0,0.4)',
-                                                  display: 'inline-flex',
-                                                  alignItems: 'center',
-                                                  gap: 2,
-                                                }}
-                                              >
-                                                {isElimSeg && '✕ '}
-                                                {row.iniciativa.id}
-                                              </span>
+                                              {/* 3. Número de iniciativa FUERA de la barra, al lado izquierdo (solo en el primer segmento) */}
+                                              {sIdx === 0 && (
+                                                <div
+                                                  style={{
+                                                    position: 'absolute',
+                                                    right: 'calc(100% + 6px)',
+                                                    top: '50%',
+                                                    transform: 'translateY(-50%)',
+                                                    display: 'inline-flex',
+                                                    alignItems: 'center',
+                                                    gap: 3,
+                                                    padding: '1px 5px',
+                                                    borderRadius: 10,
+                                                    backgroundColor: '#f1f5f9',
+                                                    border: '1px solid #cbd5e1',
+                                                    fontSize: 10,
+                                                    fontWeight: 800,
+                                                    color: '#334155',
+                                                    whiteSpace: 'nowrap',
+                                                    lineHeight: 1.2,
+                                                    boxShadow: '0 1px 2px rgba(0,0,0,0.06)',
+                                                    pointerEvents: 'none',
+                                                    zIndex: 10,
+                                                  }}
+                                                >
+                                                  {isElimSeg && <span style={{ color: '#ef4444' }}>✕</span>}
+                                                  {row.iniciativa.id}
+                                                </div>
+                                              )}
+
+                                              {/* Contenido dentro de la barra: limpio y elegante */}
+                                              {isElimSeg && (
+                                                <span style={{ fontSize: 9, fontWeight: 800, color: '#ffffff' }}>✕</span>
+                                              )}
                                             </div>
                                           );
                                         })

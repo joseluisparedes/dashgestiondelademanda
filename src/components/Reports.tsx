@@ -52,6 +52,7 @@ import {
   Check,
   Plus,
   Trash2,
+  Zap,
 } from 'lucide-react';
 import { IniciativaDetailModal } from './DataTable';
 
@@ -4729,7 +4730,19 @@ function TimelineIniciativasVP({
                         (e.currentTarget as HTMLElement).style.filter = 'none';
                       }}
                     >
-                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <div
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 8,
+                          position: 'sticky',
+                          left: 14,
+                          zIndex: 15,
+                          background: grp.headerBg,
+                          padding: '2px 8px',
+                          borderRadius: 6,
+                        }}
+                      >
                         {isCollapsed ? (
                           <ChevronRight size={14} style={{ color: grp.headerText }} />
                         ) : (
@@ -5587,6 +5600,107 @@ function exportReportToHTML(
     .df-btn-clear:hover {
       color: #ef4444;
     }
+    .df-quick-bar {
+      display: flex;
+      align-items: center;
+      flex-wrap: wrap;
+      gap: 8px;
+      padding: 8px 12px;
+      background: #f8fafc;
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      margin-top: 4px;
+      margin-bottom: 4px;
+    }
+    .df-quick-label {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      font-size: 11px;
+      font-weight: 700;
+      color: #334155;
+    }
+    .df-quick-group {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 3px 8px;
+      border-radius: 6px;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      transition: all 0.15s ease;
+    }
+    .df-quick-group.active {
+      background: #e0f2fe;
+      border: 1.5px solid #0284c7;
+    }
+    .df-quick-select {
+      font-family: inherit;
+      font-size: 11px;
+      font-weight: 700;
+      color: #0f172a;
+      padding: 2px 6px;
+      border-radius: 4px;
+      border: 1px solid #94a3b8;
+      background: #ffffff;
+      cursor: pointer;
+      outline: none;
+    }
+    .df-quick-btn-sub {
+      font-family: inherit;
+      background: #f1f5f9;
+      color: #334155;
+      border: 1px solid #cbd5e1;
+      border-radius: 4px;
+      padding: 2px 8px;
+      font-size: 10.5px;
+      font-weight: 700;
+      cursor: pointer;
+      transition: all 0.15s ease;
+    }
+    .df-quick-group.active .df-quick-btn-sub {
+      background: #0284c7;
+      color: #ffffff;
+      border-color: #0284c7;
+    }
+    .df-quick-btn {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      padding: 4px 10px;
+      font-size: 11px;
+      font-weight: 600;
+      color: #334155;
+      background: #ffffff;
+      border: 1px solid #cbd5e1;
+      border-radius: 6px;
+      cursor: pointer;
+      font-family: inherit;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.03);
+      transition: all 0.15s ease;
+    }
+    .df-quick-btn:hover {
+      background: #f1f5f9;
+    }
+    .df-quick-btn.active {
+      background: #e0f2fe !important;
+      border: 1.5px solid #0284c7 !important;
+      color: #0284c7 !important;
+      font-weight: 700;
+    }
+    .df-quick-btn.active-green {
+      background: #dcfce7 !important;
+      border: 1.5px solid #16a34a !important;
+      color: #15803d !important;
+      font-weight: 700;
+    }
+    .df-quick-btn.active-amber {
+      background: #fef3c7 !important;
+      border: 1.5px solid #f59e0b !important;
+      color: #b45309 !important;
+      font-weight: 700;
+    }
     .df-rows-container {
       display: flex;
       flex-direction: column;
@@ -6317,6 +6431,38 @@ function exportReportToHTML(
           <button type="button" class="df-btn-clear" id="df-btn-clear" style="display:none;" onclick="clearAllDateFilters()">✕ Limpiar fechas</button>
         </div>
       </div>
+
+      <!-- Barra de Filtros Rápidos -->
+      <div class="df-quick-bar">
+        <div class="df-quick-label">
+          <span style="color: #f59e0b;">⚡</span>
+          <span>Filtros Rápidos:</span>
+        </div>
+        <div class="df-quick-group" id="qg-reg-months">
+          <span style="font-size: 11px; font-weight: 600; color: #475569;">📥 Registradas últimos</span>
+          <select id="df-quick-months" class="df-quick-select" onchange="applyQuickDateFilter('reg_months', this.value)">
+            <option value="1">1 mes</option>
+            <option value="2">2 meses</option>
+            <option value="3" selected>3 meses</option>
+            <option value="4">4 meses</option>
+            <option value="5">5 meses</option>
+            <option value="6">6 meses</option>
+          </select>
+          <button type="button" class="df-quick-btn-sub" id="btn-quick-reg" onclick="applyQuickDateFilter('reg_months')">Aplicar</button>
+        </div>
+        <button type="button" class="df-quick-btn" id="btn-quick-2026" onclick="applyQuickDateFilter('year_2026')">
+          📅 Todo lo solicitado 2026
+        </button>
+        <button type="button" class="df-quick-btn" id="btn-quick-plan-fin" onclick="applyQuickDateFilter('plan_fin_month')">
+          🎯 Terminan este mes (Planificación)
+        </button>
+        <button type="button" class="df-quick-btn" id="btn-quick-est-fin" onclick="applyQuickDateFilter('est_fin_month')">
+          ⏱️ Terminan este mes (Estimación)
+        </button>
+        <button type="button" class="df-quick-btn" id="btn-quick-plan-ini" onclick="applyQuickDateFilter('plan_ini_month')">
+          🚀 Inician este mes (Planificación)
+        </button>
+      </div>
       <div id="df-rows-container" class="df-rows-container"></div>
     </div>
   </div>
@@ -6936,6 +7082,8 @@ function exportReportToHTML(
         clearBtn.style.display = dateFilters.length > 0 ? 'inline-flex' : 'none';
       }
 
+      updateQuickFilterButtonsState();
+
       if (dateFilters.length === 0) {
         container.innerHTML = '<div class="df-empty-hint">No hay filtros de fecha aplicados. Haz clic en "+ Agregar filtro de fecha" para filtrar por inicio/fin planificado, registro, pase a producción, etc.</div>';
         return;
@@ -7018,6 +7166,112 @@ function exportReportToHTML(
 
     function clearAllDateFilters() {
       dateFilters = [];
+      renderDateFilterRows();
+      onFilterChange();
+    }
+
+    function updateQuickFilterButtonsState() {
+      const today = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const toIso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+      const selMonths = document.getElementById('df-quick-months');
+      const months = Number(selMonths ? selMonths.value : 3);
+      const dRegDesde = toIso(new Date(today.getFullYear(), today.getMonth() - months, today.getDate()));
+      const dRegHasta = toIso(today);
+
+      const dMonthIni = toIso(new Date(today.getFullYear(), today.getMonth(), 1));
+      const dMonthFin = toIso(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+
+      const isRegActive = dateFilters.length === 1 && dateFilters[0].field === 'fecha_registro' && dateFilters[0].desde === dRegDesde && dateFilters[0].hasta === dRegHasta;
+      const is2026Active = dateFilters.length === 1 && dateFilters[0].field === 'fecha_registro' && dateFilters[0].desde === '2026-01-01' && dateFilters[0].hasta === '2026-12-31';
+      const isPlanFinActive = dateFilters.length === 1 && dateFilters[0].field === 'fecha_fin_planificada' && dateFilters[0].desde === dMonthIni && dateFilters[0].hasta === dMonthFin;
+      const isEstFinActive = dateFilters.length === 1 && dateFilters[0].field === 'fecha_fin_estimacion' && dateFilters[0].desde === dMonthIni && dateFilters[0].hasta === dMonthFin;
+      const isPlanIniActive = dateFilters.length === 1 && dateFilters[0].field === 'fecha_inicio_planificada' && dateFilters[0].desde === dMonthIni && dateFilters[0].hasta === dMonthFin;
+
+      const qgReg = document.getElementById('qg-reg-months');
+      const btnReg = document.getElementById('btn-quick-reg');
+      if (qgReg) qgReg.classList.toggle('active', isRegActive);
+      if (btnReg) btnReg.innerText = isRegActive ? '✓ Activo' : 'Aplicar';
+
+      const btn2026 = document.getElementById('btn-quick-2026');
+      if (btn2026) {
+        btn2026.classList.toggle('active', is2026Active);
+        btn2026.innerText = is2026Active ? '✓ Solicitado todo 2026' : '📅 Todo lo solicitado 2026';
+      }
+
+      const btnPlanFin = document.getElementById('btn-quick-plan-fin');
+      if (btnPlanFin) {
+        btnPlanFin.classList.toggle('active-green', isPlanFinActive);
+        btnPlanFin.innerText = isPlanFinActive ? '✓ Terminan este mes (Planificación)' : '🎯 Terminan este mes (Planificación)';
+      }
+
+      const btnEstFin = document.getElementById('btn-quick-est-fin');
+      if (btnEstFin) {
+        btnEstFin.classList.toggle('active-amber', isEstFinActive);
+        btnEstFin.innerText = isEstFinActive ? '✓ Terminan este mes (Estimación)' : '⏱️ Terminan este mes (Estimación)';
+      }
+
+      const btnPlanIni = document.getElementById('btn-quick-plan-ini');
+      if (btnPlanIni) {
+        btnPlanIni.classList.toggle('active', isPlanIniActive);
+        btnPlanIni.innerText = isPlanIniActive ? '✓ Inician este mes (Planificación)' : '🚀 Inician este mes (Planificación)';
+      }
+    }
+
+    function applyQuickDateFilter(type, param) {
+      const today = new Date();
+      const pad = n => String(n).padStart(2, '0');
+      const toIso = d => d.getFullYear() + '-' + pad(d.getMonth() + 1) + '-' + pad(d.getDate());
+
+      let targetField = '';
+      let targetDesde = '';
+      let targetHasta = '';
+
+      if (type === 'reg_months') {
+        const sel = document.getElementById('df-quick-months');
+        const months = Number(param || (sel ? sel.value : 3));
+        targetField = 'fecha_registro';
+        targetHasta = toIso(today);
+        const dDesde = new Date(today.getFullYear(), today.getMonth() - months, today.getDate());
+        targetDesde = toIso(dDesde);
+      } else if (type === 'year_2026') {
+        targetField = 'fecha_registro';
+        targetDesde = '2026-01-01';
+        targetHasta = '2026-12-31';
+      } else if (type === 'plan_fin_month') {
+        targetField = 'fecha_fin_planificada';
+        targetDesde = toIso(new Date(today.getFullYear(), today.getMonth(), 1));
+        targetHasta = toIso(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+      } else if (type === 'est_fin_month') {
+        targetField = 'fecha_fin_estimacion';
+        targetDesde = toIso(new Date(today.getFullYear(), today.getMonth(), 1));
+        targetHasta = toIso(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+      } else if (type === 'plan_ini_month') {
+        targetField = 'fecha_inicio_planificada';
+        targetDesde = toIso(new Date(today.getFullYear(), today.getMonth(), 1));
+        targetHasta = toIso(new Date(today.getFullYear(), today.getMonth() + 1, 0));
+      }
+
+      // Alternar / Toggle off si ya está activo
+      const isAlreadyActive =
+        dateFilters.length === 1 &&
+        dateFilters[0].field === targetField &&
+        dateFilters[0].desde === targetDesde &&
+        dateFilters[0].hasta === targetHasta;
+
+      if (isAlreadyActive) {
+        dateFilters = [];
+      } else {
+        dfIdCounter++;
+        dateFilters = [{
+          id: 'df_quick_' + dfIdCounter,
+          field: targetField,
+          desde: targetDesde,
+          hasta: targetHasta
+        }];
+      }
+
       renderDateFilterRows();
       onFilterChange();
     }
@@ -7717,7 +7971,7 @@ function exportReportToHTML(
           <tr class="group-section-header" onclick="if(window._tlHasMoved) return; toggleGroupCollapse('\${grp.key}')" style="background: \${grp.headerBg};">
             <td colspan="6" style="padding: 8px 14px; border-top: 1px solid \${grp.headerBorder}; border-bottom: 1px solid \${grp.headerBorder}; cursor: pointer;">
               <div style="display: flex; align-items: center; justify-content: space-between;">
-                <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 12px; color: \${grp.headerText};">
+                <div style="position: sticky; left: 14px; display: inline-flex; align-items: center; gap: 8px; font-weight: 800; font-size: 12px; color: \${grp.headerText}; background: \${grp.headerBg}; padding: 2px 8px; border-radius: 6px; z-index: 15;">
                   <span>\${isCol ? '▶' : '▼'}</span>
                   <span>\${grp.title} · \${grp.items.length} iniciativa\${grp.items.length === 1 ? '' : 's'}</span>
                 </div>
@@ -10188,6 +10442,147 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     setDateFilters([]);
   };
 
+  // ---- Filtros Rápidos de Fecha ----
+  const [quickRegMonths, setQuickRegMonths] = useState<number>(3);
+
+  const toIsoDateString = (d: Date) => {
+    const y = d.getFullYear();
+    const m = String(d.getMonth() + 1).padStart(2, '0');
+    const day = String(d.getDate()).padStart(2, '0');
+    return `${y}-${m}-${day}`;
+  };
+
+  const handleApplyQuickRegMonths = (months: number) => {
+    const today = new Date();
+    const hasta = toIsoDateString(today);
+    const dDesde = new Date(today.getFullYear(), today.getMonth() - months, today.getDate());
+    const desde = toIsoDateString(dDesde);
+
+    const isCurrentlyActive =
+      dateFilters.length === 1 &&
+      dateFilters[0].field === 'fecha_registro' &&
+      dateFilters[0].desde === desde &&
+      dateFilters[0].hasta === hasta;
+
+    if (isCurrentlyActive) {
+      setDateFilters([]);
+    } else {
+      setDateFilters([
+        {
+          id: `df_quick_reg_${months}_${Date.now()}`,
+          field: 'fecha_registro',
+          desde,
+          hasta,
+        },
+      ]);
+    }
+  };
+
+  const handleApplyQuickYear = (year: number = 2026) => {
+    const desde = `${year}-01-01`;
+    const hasta = `${year}-12-31`;
+
+    const isCurrentlyActive =
+      dateFilters.length === 1 &&
+      dateFilters[0].field === 'fecha_registro' &&
+      dateFilters[0].desde === desde &&
+      dateFilters[0].hasta === hasta;
+
+    if (isCurrentlyActive) {
+      setDateFilters([]);
+    } else {
+      setDateFilters([
+        {
+          id: `df_quick_year_${year}_${Date.now()}`,
+          field: 'fecha_registro',
+          desde,
+          hasta,
+        },
+      ]);
+    }
+  };
+
+  const handleApplyQuickPlanFinMonth = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const desde = toIsoDateString(startOfMonth);
+    const hasta = toIsoDateString(endOfMonth);
+
+    const isCurrentlyActive =
+      dateFilters.length === 1 &&
+      dateFilters[0].field === 'fecha_fin_planificada' &&
+      dateFilters[0].desde === desde &&
+      dateFilters[0].hasta === hasta;
+
+    if (isCurrentlyActive) {
+      setDateFilters([]);
+    } else {
+      setDateFilters([
+        {
+          id: `df_quick_plan_fin_${Date.now()}`,
+          field: 'fecha_fin_planificada',
+          desde,
+          hasta,
+        },
+      ]);
+    }
+  };
+
+  const handleApplyQuickEstFinMonth = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const desde = toIsoDateString(startOfMonth);
+    const hasta = toIsoDateString(endOfMonth);
+
+    const isCurrentlyActive =
+      dateFilters.length === 1 &&
+      dateFilters[0].field === 'fecha_fin_estimacion' &&
+      dateFilters[0].desde === desde &&
+      dateFilters[0].hasta === hasta;
+
+    if (isCurrentlyActive) {
+      setDateFilters([]);
+    } else {
+      setDateFilters([
+        {
+          id: `df_quick_est_fin_${Date.now()}`,
+          field: 'fecha_fin_estimacion',
+          desde,
+          hasta,
+        },
+      ]);
+    }
+  };
+
+  const handleApplyQuickPlanIniMonth = () => {
+    const today = new Date();
+    const startOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const endOfMonth = new Date(today.getFullYear(), today.getMonth() + 1, 0);
+    const desde = toIsoDateString(startOfMonth);
+    const hasta = toIsoDateString(endOfMonth);
+
+    const isCurrentlyActive =
+      dateFilters.length === 1 &&
+      dateFilters[0].field === 'fecha_inicio_planificada' &&
+      dateFilters[0].desde === desde &&
+      dateFilters[0].hasta === hasta;
+
+    if (isCurrentlyActive) {
+      setDateFilters([]);
+    } else {
+      setDateFilters([
+        {
+          id: `df_quick_plan_ini_${Date.now()}`,
+          field: 'fecha_inicio_planificada',
+          desde,
+          hasta,
+        },
+      ]);
+    }
+  };
+
   // ---- Estado del popup de iniciativas standard ----
   const [popupFilters, setPopupFilters] = useState<Partial<FilterState> | null>(null);
 
@@ -11307,6 +11702,221 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                       )}
                     </div>
                   </div>
+
+                  {/* Barra de Filtros Rápidos */}
+                  {(() => {
+                    const todayRef = new Date();
+                    const currentStartOfMonth = toIsoDateString(new Date(todayRef.getFullYear(), todayRef.getMonth(), 1));
+                    const currentEndOfMonth = toIsoDateString(new Date(todayRef.getFullYear(), todayRef.getMonth() + 1, 0));
+                    const currentRegNDesde = toIsoDateString(new Date(todayRef.getFullYear(), todayRef.getMonth() - quickRegMonths, todayRef.getDate()));
+                    const currentRegNHasta = toIsoDateString(todayRef);
+
+                    const isQuickRegNActive =
+                      dateFilters.length === 1 &&
+                      dateFilters[0].field === 'fecha_registro' &&
+                      dateFilters[0].desde === currentRegNDesde &&
+                      dateFilters[0].hasta === currentRegNHasta;
+
+                    const isQuickYear2026Active =
+                      dateFilters.length === 1 &&
+                      dateFilters[0].field === 'fecha_registro' &&
+                      dateFilters[0].desde === '2026-01-01' &&
+                      dateFilters[0].hasta === '2026-12-31';
+
+                    const isQuickPlanFinMonthActive =
+                      dateFilters.length === 1 &&
+                      dateFilters[0].field === 'fecha_fin_planificada' &&
+                      dateFilters[0].desde === currentStartOfMonth &&
+                      dateFilters[0].hasta === currentEndOfMonth;
+
+                    const isQuickEstFinMonthActive =
+                      dateFilters.length === 1 &&
+                      dateFilters[0].field === 'fecha_fin_estimacion' &&
+                      dateFilters[0].desde === currentStartOfMonth &&
+                      dateFilters[0].hasta === currentEndOfMonth;
+
+                    const isQuickPlanIniMonthActive =
+                      dateFilters.length === 1 &&
+                      dateFilters[0].field === 'fecha_inicio_planificada' &&
+                      dateFilters[0].desde === currentStartOfMonth &&
+                      dateFilters[0].hasta === currentEndOfMonth;
+
+                    return (
+                      <div
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          flexWrap: 'wrap',
+                          gap: 8,
+                          padding: '8px 12px',
+                          backgroundColor: '#f8fafc',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 8,
+                        }}
+                      >
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 5, color: '#334155', fontSize: 11, fontWeight: 700 }}>
+                          <Zap size={13} style={{ color: '#f59e0b' }} />
+                          <span>Filtros Rápidos:</span>
+                        </div>
+
+                        {/* Control 1: Registradas últimos N meses (1 a 6) */}
+                        <div
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '3px 8px',
+                            borderRadius: 6,
+                            background: isQuickRegNActive ? '#e0f2fe' : '#ffffff',
+                            border: isQuickRegNActive ? '1.5px solid #0284c7' : '1px solid #cbd5e1',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span style={{ fontSize: 11, fontWeight: 600, color: isQuickRegNActive ? '#0369a1' : '#475569' }}>
+                            📥 Registradas últimos
+                          </span>
+                          <select
+                            value={quickRegMonths}
+                            onChange={e => {
+                              const val = Number(e.target.value);
+                              setQuickRegMonths(val);
+                              handleApplyQuickRegMonths(val);
+                            }}
+                            style={{
+                              fontSize: 11,
+                              fontWeight: 700,
+                              color: '#0f172a',
+                              padding: '2px 6px',
+                              borderRadius: 4,
+                              border: '1px solid #94a3b8',
+                              background: '#ffffff',
+                              cursor: 'pointer',
+                              outline: 'none',
+                            }}
+                          >
+                            {[1, 2, 3, 4, 5, 6].map(m => (
+                              <option key={m} value={m}>{m} {m === 1 ? 'mes' : 'meses'}</option>
+                            ))}
+                          </select>
+                          <button
+                            type="button"
+                            onClick={() => handleApplyQuickRegMonths(quickRegMonths)}
+                            style={{
+                              background: isQuickRegNActive ? '#0284c7' : '#f1f5f9',
+                              color: isQuickRegNActive ? '#ffffff' : '#334155',
+                              border: '1px solid',
+                              borderColor: isQuickRegNActive ? '#0284c7' : '#cbd5e1',
+                              borderRadius: 4,
+                              padding: '2px 8px',
+                              fontSize: 10.5,
+                              fontWeight: 700,
+                              cursor: 'pointer',
+                              transition: 'all 0.15s ease',
+                            }}
+                          >
+                            {isQuickRegNActive ? '✓ Activo' : 'Aplicar'}
+                          </button>
+                        </div>
+
+                        {/* Botón 2: Solicitado en 2026 */}
+                        <button
+                          type="button"
+                          onClick={() => handleApplyQuickYear(2026)}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            fontWeight: isQuickYear2026Active ? 700 : 600,
+                            color: isQuickYear2026Active ? '#0284c7' : '#334155',
+                            background: isQuickYear2026Active ? '#e0f2fe' : '#ffffff',
+                            border: isQuickYear2026Active ? '1.5px solid #0284c7' : '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>📅</span>
+                          <span>{isQuickYear2026Active ? '✓ Solicitado todo 2026' : 'Todo lo solicitado 2026'}</span>
+                        </button>
+
+                        {/* Botón 3: Terminan este mes (Planificadas) */}
+                        <button
+                          type="button"
+                          onClick={handleApplyQuickPlanFinMonth}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            fontWeight: isQuickPlanFinMonthActive ? 700 : 600,
+                            color: isQuickPlanFinMonthActive ? '#15803d' : '#334155',
+                            background: isQuickPlanFinMonthActive ? '#dcfce7' : '#ffffff',
+                            border: isQuickPlanFinMonthActive ? '1.5px solid #16a34a' : '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>🎯</span>
+                          <span>{isQuickPlanFinMonthActive ? '✓ Terminan este mes (Planificación)' : 'Terminan este mes (Planificación)'}</span>
+                        </button>
+
+                        {/* Botón 4: Vencen este mes (Estimación) */}
+                        <button
+                          type="button"
+                          onClick={handleApplyQuickEstFinMonth}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            fontWeight: isQuickEstFinMonthActive ? 700 : 600,
+                            color: isQuickEstFinMonthActive ? '#b45309' : '#334155',
+                            background: isQuickEstFinMonthActive ? '#fef3c7' : '#ffffff',
+                            border: isQuickEstFinMonthActive ? '1.5px solid #f59e0b' : '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>⏱️</span>
+                          <span>{isQuickEstFinMonthActive ? '✓ Terminan este mes (Estimación)' : 'Terminan este mes (Estimación)'}</span>
+                        </button>
+
+                        {/* Botón 5: Inician este mes (Planificadas) */}
+                        <button
+                          type="button"
+                          onClick={handleApplyQuickPlanIniMonth}
+                          style={{
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: 5,
+                            padding: '4px 10px',
+                            fontSize: 11,
+                            fontWeight: isQuickPlanIniMonthActive ? 700 : 600,
+                            color: isQuickPlanIniMonthActive ? '#0284c7' : '#334155',
+                            background: isQuickPlanIniMonthActive ? '#e0f2fe' : '#ffffff',
+                            border: isQuickPlanIniMonthActive ? '1.5px solid #0284c7' : '1px solid #cbd5e1',
+                            borderRadius: 6,
+                            cursor: 'pointer',
+                            boxShadow: '0 1px 2px rgba(0,0,0,0.03)',
+                            transition: 'all 0.15s ease',
+                          }}
+                        >
+                          <span>🚀</span>
+                          <span>{isQuickPlanIniMonthActive ? '✓ Inician este mes (Planificación)' : 'Inician este mes (Planificación)'}</span>
+                        </button>
+                      </div>
+                    );
+                  })()}
 
                   {dateFilters.length > 0 ? (
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>

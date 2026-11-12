@@ -3232,6 +3232,28 @@ export function getVpPipelinePhase(etapa: string): VpPipelinePhase {
   return 3;
 }
 
+export const PHASE_ETAPAS_MAP: Record<VpPipelinePhase, string[]> = {
+  1: ['por_estimar', 'por_aprobar_estimacion', 'por_reestimar'],
+  2: ['por_planificar', 'aprobar_planificacion', 'por_aprobar_planificacion', 'por_habilitar_presupuesto'],
+  3: ['planificadas', 'planificada', 'implementadas', 'implementada', 'por_iniciar', 'en_ejecucion', 'terminado', 'detenido'],
+  'observaciones': ['registro_incompleto', 'eliminadas', 'eliminada']
+};
+
+export function getEtapasForPhases(phases: VpPipelinePhase[], allIniciativas?: Iniciativa[]): string[] {
+  const stagesSet = new Set<string>();
+  phases.forEach(p => {
+    (PHASE_ETAPAS_MAP[p] || []).forEach(st => stagesSet.add(st));
+  });
+  if (allIniciativas) {
+    allIniciativas.forEach(i => {
+      if (i.etapa_actual && phases.includes(getVpPipelinePhase(i.etapa_actual))) {
+        stagesSet.add(i.etapa_actual);
+      }
+    });
+  }
+  return Array.from(stagesSet);
+}
+
 export function getEtapaHumanLabel(etapa: string): string {
   const norm = (etapa || '').trim().toLowerCase();
   switch (norm) {
@@ -3467,11 +3489,13 @@ function TimelineIniciativasVP({
   iniciativas,
   onOpenDetailModal,
   phaseFilter,
+  selectedPhases,
   onClearPhaseFilter,
 }: {
   iniciativas: Iniciativa[];
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
   phaseFilter?: VpPipelinePhase | null;
+  selectedPhases?: VpPipelinePhase[];
   onClearPhaseFilter?: () => void;
 }) {
   const [isReady, setIsReady] = useState<boolean>(false);
@@ -3619,12 +3643,18 @@ function TimelineIniciativasVP({
     });
   }, [iniciativas]);
 
+  const effectivePhases = useMemo<VpPipelinePhase[]>(() => {
+    if (selectedPhases && selectedPhases.length > 0) return selectedPhases;
+    if (phaseFilter) return [phaseFilter];
+    return [];
+  }, [selectedPhases, phaseFilter]);
+
   // Filtrar iniciativas
   const filteredRows = useMemo(() => {
     return allRows.filter(row => {
-      // Filtro dinámico por Fase seleccionada desde el Dashboard Estadístico
-      if (phaseFilter) {
-        if (getVpPipelinePhase(row.iniciativa.etapa_actual) !== phaseFilter) {
+      // Filtro dinámico por Fase(s) seleccionadas
+      if (effectivePhases.length > 0) {
+        if (!effectivePhases.includes(getVpPipelinePhase(row.iniciativa.etapa_actual))) {
           return false;
         }
       }
@@ -4007,8 +4037,8 @@ function TimelineIniciativasVP({
         </div>
       </div>
 
-      {/* Banner de Filtro Dinámico por Fase (sincronizado con Dashboard Estadístico) */}
-      {phaseFilter && (
+      {/* Banner de Filtro Dinámico por Fase(s) (sincronizado con Dashboard Estadístico) */}
+      {effectivePhases.length > 0 && (
         <div
           style={{
             padding: '9px 20px',
@@ -4030,22 +4060,8 @@ function TimelineIniciativasVP({
                 letterSpacing: '0.06em',
                 padding: '3px 8px',
                 borderRadius: 4,
-                background:
-                  phaseFilter === 1
-                    ? '#fef3c7'
-                    : phaseFilter === 2
-                    ? '#dbeafe'
-                    : phaseFilter === 3
-                    ? '#d1fae5'
-                    : '#fee2e2',
-                color:
-                  phaseFilter === 1
-                    ? '#b45309'
-                    : phaseFilter === 2
-                    ? '#1d4ed8'
-                    : phaseFilter === 3
-                    ? '#047857'
-                    : '#991b1b',
+                background: '#0284c7',
+                color: '#ffffff',
               }}
             >
               Filtro Activo
@@ -4053,10 +4069,12 @@ function TimelineIniciativasVP({
             <span style={{ fontSize: 12, fontWeight: 700, color: '#1e293b' }}>
               Mostrando iniciativas de:{' '}
               <strong style={{ color: '#0284c7' }}>
-                {phaseFilter === 1 && 'Fase 1 (Estimación y Aprobación)'}
-                {phaseFilter === 2 && 'Fase 2 (Planificación y Presupuesto)'}
-                {phaseFilter === 3 && 'Fase 3 (Planificadas e Implementadas)'}
-                {phaseFilter === 'observaciones' && 'Con Observaciones (Registro Incompleto y Eliminadas)'}
+                {effectivePhases.map(p => {
+                  if (p === 1) return 'Fase 1 (Estimación y Aprobación)';
+                  if (p === 2) return 'Fase 2 (Planificación y Presupuesto)';
+                  if (p === 3) return 'Fase 3 (Planificadas e Implementadas)';
+                  return 'Con Observaciones (Registro Incompleto y Eliminadas)';
+                }).join(' + ')}
               </strong>
             </span>
             <span style={{ fontSize: 11, color: '#64748b' }}>
@@ -6432,7 +6450,38 @@ function exportReportToHTML(
       { key: 'fecha_fin_real', label: 'Fecha Fin Real' }
     ];
 
-    let activePhaseFilter = null;
+    const PHASE_ETAPAS = {
+      1: ['por_estimar', 'por_aprobar_estimacion', 'por_reestimar'],
+      2: ['por_planificar', 'aprobar_planificacion', 'por_aprobar_planificacion', 'por_habilitar_presupuesto'],
+      3: ['planificadas', 'planificada', 'implementadas', 'implementada', 'por_iniciar', 'en_ejecucion', 'terminado', 'detenido'],
+      'observaciones': ['registro_incompleto', 'eliminadas', 'eliminada']
+    };
+
+    function getPhaseEtapasInDataset(targetPhase) {
+      const stagesFound = new Set();
+      RAW_DATA.forEach(i => {
+        if (i.etapa_actual && getPhase(i.etapa_actual) === targetPhase) {
+          stagesFound.add(i.etapa_actual);
+        }
+      });
+      if (stagesFound.size === 0 && PHASE_ETAPAS[targetPhase]) {
+        PHASE_ETAPAS[targetPhase].forEach(s => stagesFound.add(s));
+      }
+      return Array.from(stagesFound);
+    }
+
+    function getActivePhases() {
+      const drop = document.getElementById('ms-drop-estado');
+      const totalCount = drop ? drop.querySelectorAll('input[type="checkbox"]').length : 0;
+      if (selectedEstados.size === 0 || (totalCount > 0 && selectedEstados.size === totalCount)) return [];
+      const set = new Set();
+      selectedEstados.forEach(est => {
+        const p = getPhase(est);
+        if (p !== null && p !== undefined) set.add(p);
+      });
+      return Array.from(set);
+    }
+
     let searchQuery = '';
 
     // Filtros superiores multiselector (Conjuntos de valores seleccionados)
@@ -7019,14 +7068,45 @@ function exportReportToHTML(
       renderTimeline();
     }
 
+    // Dataset para las tarjetas de Fase (sin filtrar por selectedEstados para mostrar siempre los totales reales por fase)
+    function getPhaseDataset() {
+      return RAW_DATA.filter(i => {
+        const vp = (i.vp_solicitante || '').trim();
+        if (selectedVPs.size > 0 && !selectedVPs.has(vp)) return false;
+
+        const inst = (i.institucion || '').trim();
+        if (selectedInstituciones.size > 0 && !selectedInstituciones.has(inst)) return false;
+
+        const bp = (i.it_bp || i.it_business_partner || '').trim();
+        if (selectedITBPs.size > 0 && !selectedITBPs.has(bp)) return false;
+
+        const lid = (i.lider_dominio || '').trim();
+        if (selectedLideres.size > 0 && !selectedLideres.has(lid)) return false;
+
+        if (Array.isArray(dateFilters) && dateFilters.length > 0) {
+          for (let k = 0; k < dateFilters.length; k++) {
+            const df = dateFilters[k];
+            if (!df.desde && !df.hasta) continue;
+            const rawVal = i[df.field];
+            if (!rawVal) return false;
+            const d = String(rawVal).slice(0, 10);
+            if (df.desde && d < df.desde) return false;
+            if (df.hasta && d > df.hasta) return false;
+          }
+        }
+        return true;
+      });
+    }
+
     // Render Cards de Fase con estilos idénticos a la app
     function renderPhaseCards() {
-      const dataset = getActiveDataset();
+      const dataset = getPhaseDataset();
       const total = dataset.length || 1;
       const f1 = dataset.filter(i => getPhase(i.etapa_actual) === 1);
       const f2 = dataset.filter(i => getPhase(i.etapa_actual) === 2);
       const f3 = dataset.filter(i => getPhase(i.etapa_actual) === 3);
       const fObs = dataset.filter(i => getPhase(i.etapa_actual) === 'observaciones');
+      const activePhases = getActivePhases();
 
       const calcAction = list => {
         const it = list.filter(i => getResponsable(i) === 'IT').length;
@@ -7039,10 +7119,15 @@ function exportReportToHTML(
       const a2 = calcAction(f2);
       const a3 = calcAction(f3);
 
+      const isF1Active = activePhases.includes(1);
+      const isF2Active = activePhases.includes(2);
+      const isF3Active = activePhases.includes(3);
+      const isObsActive = activePhases.includes('observaciones');
+
       const container = document.getElementById('phase-cards-container');
       container.innerHTML = \`
         <!-- FASE 1 -->
-        <div class="phase-card phase-card-1 \${activePhaseFilter === 1 ? 'active' : ''}" onclick="togglePhase(1)">
+        <div class="phase-card phase-card-1 \${isF1Active ? 'active' : ''}" onclick="togglePhase(1, event)" title="Haz clic para seleccionar estados de Fase 1 (Ctrl+clic para selección múltiple)">
           <div>
             <div class="phase-top">
               <span class="phase-pill" style="color: #b45309; background: #fef3c7;">FASE 1</span>
@@ -7076,15 +7161,15 @@ function exportReportToHTML(
               <div style="width: \${a1.negPct}%; background: #f59e0b;"></div>
             </div>
             <div style="text-align: center;">
-              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 1 ? '#b45309' : '#fffbeb'}; color: \${activePhaseFilter === 1 ? '#ffffff' : '#b45309'};">
-                \${activePhaseFilter === 1 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              <span class="filter-btn-pill" style="background: \${isF1Active ? '#b45309' : '#fffbeb'}; color: \${isF1Active ? '#ffffff' : '#b45309'};">
+                \${isF1Active ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
               </span>
             </div>
           </div>
         </div>
 
         <!-- FASE 2 -->
-        <div class="phase-card phase-card-2 \${activePhaseFilter === 2 ? 'active' : ''}" onclick="togglePhase(2)">
+        <div class="phase-card phase-card-2 \${isF2Active ? 'active' : ''}" onclick="togglePhase(2, event)" title="Haz clic para seleccionar estados de Fase 2 (Ctrl+clic para selección múltiple)">
           <div>
             <div class="phase-top">
               <span class="phase-pill" style="color: #1d4ed8; background: #dbeafe;">FASE 2</span>
@@ -7118,15 +7203,15 @@ function exportReportToHTML(
               <div style="width: \${a2.negPct}%; background: #f59e0b;"></div>
             </div>
             <div style="text-align: center;">
-              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 2 ? '#1d4ed8' : '#eff6ff'}; color: \${activePhaseFilter === 2 ? '#ffffff' : '#1d4ed8'};">
-                \${activePhaseFilter === 2 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              <span class="filter-btn-pill" style="background: \${isF2Active ? '#1d4ed8' : '#eff6ff'}; color: \${isF2Active ? '#ffffff' : '#1d4ed8'};">
+                \${isF2Active ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
               </span>
             </div>
           </div>
         </div>
 
         <!-- FASE 3 -->
-        <div class="phase-card phase-card-3 \${activePhaseFilter === 3 ? 'active' : ''}" onclick="togglePhase(3)">
+        <div class="phase-card phase-card-3 \${isF3Active ? 'active' : ''}" onclick="togglePhase(3, event)" title="Haz clic para seleccionar estados de Fase 3 (Ctrl+clic para selección múltiple)">
           <div>
             <div class="phase-top">
               <span class="phase-pill" style="color: #047857; background: #d1fae5;">FASE 3</span>
@@ -7156,15 +7241,15 @@ function exportReportToHTML(
               <div style="width: \${a3.negPct}%; background: #f59e0b;"></div>
             </div>
             <div style="text-align: center;">
-              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 3 ? '#059669' : '#ecfdf5'}; color: \${activePhaseFilter === 3 ? '#ffffff' : '#047857'};">
-                \${activePhaseFilter === 3 ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              <span class="filter-btn-pill" style="background: \${isF3Active ? '#059669' : '#ecfdf5'}; color: \${isF3Active ? '#ffffff' : '#047857'};">
+                \${isF3Active ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
               </span>
             </div>
           </div>
         </div>
 
         <!-- CON OBSERVACIONES -->
-        <div class="phase-card phase-card-obs \${activePhaseFilter === 'observaciones' ? 'active' : ''}" onclick="togglePhase('observaciones')">
+        <div class="phase-card phase-card-obs \${isObsActive ? 'active' : ''}" onclick="togglePhase('observaciones', event)" title="Haz clic para seleccionar estados con Observaciones (Ctrl+clic para selección múltiple)">
           <div>
             <div class="phase-top">
               <span class="phase-pill" style="color: #9f1239; background: #ffe4e6;">CON OBSERVACIONES</span>
@@ -7193,22 +7278,70 @@ function exportReportToHTML(
               <div style="width: 100%; background: #e11d48;"></div>
             </div>
             <div style="text-align: center;">
-              <span class="filter-btn-pill" style="background: \${activePhaseFilter === 'observaciones' ? '#e11d48' : '#fff1f2'}; color: \${activePhaseFilter === 'observaciones' ? '#ffffff' : '#be123c'};">
-                \${activePhaseFilter === 'observaciones' ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+              <span class="filter-btn-pill" style="background: \${isObsActive ? '#e11d48' : '#fff1f2'}; color: \${isObsActive ? '#ffffff' : '#be123c'};">
+                \${isObsActive ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
               </span>
             </div>
           </div>
         </div>
+
+        <div style="grid-column: 1 / -1; margin-top: -4px; margin-bottom: 6px; font-size: 11px; color: #64748b; font-weight: 500; display: flex; align-items: center; gap: 6px;">
+          <span>💡</span>
+          <span>
+            Haz clic en un rectángulo de fase para seleccionar automáticamente sus estados en el filtro superior.
+            Mantén presionado <strong>Ctrl</strong> (o <strong>Cmd</strong> en Mac) para seleccionar varias fases simultáneamente.
+          </span>
+        </div>
       \`;
     }
 
-    // Toggle interactivo de fase
-    function togglePhase(phase) {
-      if (activePhaseFilter === phase) {
-        activePhaseFilter = null;
+    function syncEstadoCheckboxes() {
+      const drop = document.getElementById('ms-drop-estado');
+      if (!drop) return;
+      const inputs = drop.querySelectorAll('input[type="checkbox"]');
+      inputs.forEach(input => {
+        input.checked = selectedEstados.has(input.value);
+      });
+      updateButtonLabels();
+      onFilterChange();
+    }
+
+    // Toggle interactivo de fase (normal o multi-selección con Ctrl)
+    function togglePhase(phase, event) {
+      const isCtrl = Boolean(event && (event.ctrlKey || event.metaKey));
+      const totalEstadosCount = document.querySelectorAll('#ms-drop-estado input[type="checkbox"]').length;
+      const isAllSelected = selectedEstados.size === totalEstadosCount || selectedEstados.size === 0;
+
+      const currentActive = isAllSelected ? [] : getActivePhases();
+      const stagesForPhase = getPhaseEtapasInDataset(phase);
+
+      if (!isCtrl) {
+        if (currentActive.length === 1 && currentActive[0] === phase) {
+          // Si solo esta fase estaba seleccionada, al hacer clic de nuevo se deselecciona (vuelve a Todos)
+          selectAllMs('estado', true);
+        } else {
+          // Seleccionar únicamente las etapas de esta fase
+          selectedEstados = new Set(stagesForPhase);
+          syncEstadoCheckboxes();
+        }
       } else {
-        activePhaseFilter = phase;
+        // Multi-selección con Ctrl
+        if (isAllSelected) {
+          selectedEstados = new Set(stagesForPhase);
+        } else if (currentActive.includes(phase)) {
+          // Quitar etapas de esta fase
+          stagesForPhase.forEach(st => selectedEstados.delete(st));
+          if (selectedEstados.size === 0) {
+            selectAllMs('estado', true);
+            return;
+          }
+        } else {
+          // Agregar etapas de esta fase
+          stagesForPhase.forEach(st => selectedEstados.add(st));
+        }
+        syncEstadoCheckboxes();
       }
+
       renderPhaseCards();
       renderTimeline();
       const el = document.getElementById('timeline-section');
@@ -7216,7 +7349,6 @@ function exportReportToHTML(
     }
 
     function clearAllFilters() {
-      activePhaseFilter = null;
       searchQuery = '';
 
       // Re-seleccionar todos los checkboxes
@@ -7236,10 +7368,6 @@ function exportReportToHTML(
     function renderTimeline() {
       let filtered = getActiveDataset();
 
-      if (activePhaseFilter !== null) {
-        filtered = filtered.filter(i => getPhase(i.etapa_actual) === activePhaseFilter);
-      }
-
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
         filtered = filtered.filter(i =>
@@ -7255,14 +7383,19 @@ function exportReportToHTML(
       const countBadge = document.getElementById('timeline-count-badge');
       countBadge.innerText = \`\${filtered.length} iniciativa\${filtered.length === 1 ? '' : 's'}\`;
 
-      if (activePhaseFilter !== null || searchQuery.trim()) {
+      const activePhases = getActivePhases();
+      if (activePhases.length > 0 || searchQuery.trim()) {
         banner.style.display = 'flex';
         clearBtn.style.display = 'inline-block';
         let txt = '';
-        if (activePhaseFilter === 1) txt = 'Fase 1 (Estimación y Aprobación)';
-        else if (activePhaseFilter === 2) txt = 'Fase 2 (Planificación y Presupuesto)';
-        else if (activePhaseFilter === 3) txt = 'Fase 3 (Planificadas e Implementadas)';
-        else if (activePhaseFilter === 'observaciones') txt = 'Con Observaciones (Registro Incompleto y Eliminadas)';
+        if (activePhases.length > 0) {
+          txt = activePhases.map(p => {
+            if (p === 1) return 'Fase 1 (Estimación y Aprobación)';
+            if (p === 2) return 'Fase 2 (Planificación y Presupuesto)';
+            if (p === 3) return 'Fase 3 (Planificadas e Implementadas)';
+            return 'Con Observaciones (Registro Incompleto y Eliminadas)';
+          }).join(' + ');
+        }
         if (searchQuery.trim()) txt += (txt ? ' • ' : '') + \`Búsqueda: "\${searchQuery}"\`;
         bannerText.innerText = \`Mostrando \${filtered.length} iniciativas: \${txt}\`;
       } else {
@@ -7738,16 +7871,24 @@ interface DashboardEstadisticoVPProps {
   iniciativas: Iniciativa[];
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
   selectedPhase?: VpPipelinePhase | null;
-  onSelectPhase?: (phase: VpPipelinePhase) => void;
+  selectedPhases?: VpPipelinePhase[];
+  onSelectPhase?: (phase: VpPipelinePhase, isCtrl: boolean) => void;
 }
 
 function DashboardEstadisticoVP({
   iniciativas,
   onOpenDetailModal,
   selectedPhase,
+  selectedPhases,
   onSelectPhase,
 }: DashboardEstadisticoVPProps) {
   const total = iniciativas.length || 1;
+
+  const activePhasesList = useMemo<VpPipelinePhase[]>(() => {
+    if (selectedPhases && selectedPhases.length > 0) return selectedPhases;
+    if (selectedPhase) return [selectedPhase];
+    return [];
+  }, [selectedPhases, selectedPhase]);
 
   // 1. Clasificación por las 4 Fases Ejecutivas solicitadas
   const { fase1, fase2, fase3, faseObs } = useMemo(() => {
@@ -7812,10 +7953,10 @@ function DashboardEstadisticoVP({
       >
         {/* FASE 1: Estimación y Aprobación */}
         {(() => {
-          const isSelected = selectedPhase === 1;
+          const isSelected = activePhasesList.includes(1);
           return (
             <div
-              onClick={() => onSelectPhase && onSelectPhase(1)}
+              onClick={e => onSelectPhase && onSelectPhase(1, e.ctrlKey || e.metaKey)}
               style={{
                 background: '#ffffff',
                 border: isSelected ? '2px solid #f59e0b' : '1px solid #fde68a',
@@ -7832,7 +7973,7 @@ function DashboardEstadisticoVP({
                 transition: 'all 0.15s ease',
                 position: 'relative',
               }}
-              title="Haz clic para filtrar el cronograma inferior por Fase 1"
+              title="Haz clic para seleccionar estados de Fase 1 (Ctrl+clic para seleccionar varias fases)"
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -7907,7 +8048,7 @@ function DashboardEstadisticoVP({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
                   </span>
                 </div>
               </div>
@@ -7917,10 +8058,10 @@ function DashboardEstadisticoVP({
 
         {/* FASE 2: Planificación y Presupuesto */}
         {(() => {
-          const isSelected = selectedPhase === 2;
+          const isSelected = activePhasesList.includes(2);
           return (
             <div
-              onClick={() => onSelectPhase && onSelectPhase(2)}
+              onClick={e => onSelectPhase && onSelectPhase(2, e.ctrlKey || e.metaKey)}
               style={{
                 background: '#ffffff',
                 border: isSelected ? '2px solid #2563eb' : '1px solid #bfdbfe',
@@ -7937,7 +8078,7 @@ function DashboardEstadisticoVP({
                 transition: 'all 0.15s ease',
                 position: 'relative',
               }}
-              title="Haz clic para filtrar el cronograma inferior por Fase 2"
+              title="Haz clic para seleccionar estados de Fase 2 (Ctrl+clic para seleccionar varias fases)"
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -8012,7 +8153,7 @@ function DashboardEstadisticoVP({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
                   </span>
                 </div>
               </div>
@@ -8022,10 +8163,10 @@ function DashboardEstadisticoVP({
 
         {/* FASE 3: Planificadas e Implementadas */}
         {(() => {
-          const isSelected = selectedPhase === 3;
+          const isSelected = activePhasesList.includes(3);
           return (
             <div
-              onClick={() => onSelectPhase && onSelectPhase(3)}
+              onClick={e => onSelectPhase && onSelectPhase(3, e.ctrlKey || e.metaKey)}
               style={{
                 background: '#ffffff',
                 border: isSelected ? '2px solid #059669' : '1px solid #a7f3d0',
@@ -8042,7 +8183,7 @@ function DashboardEstadisticoVP({
                 transition: 'all 0.15s ease',
                 position: 'relative',
               }}
-              title="Haz clic para filtrar el cronograma inferior por Fase 3"
+              title="Haz clic para seleccionar estados de Fase 3 (Ctrl+clic para seleccionar varias fases)"
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -8117,7 +8258,7 @@ function DashboardEstadisticoVP({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
                   </span>
                 </div>
               </div>
@@ -8127,10 +8268,10 @@ function DashboardEstadisticoVP({
 
         {/* CON OBSERVACIONES: Registro Incompleto y Eliminadas */}
         {(() => {
-          const isSelected = selectedPhase === 'observaciones';
+          const isSelected = activePhasesList.includes('observaciones');
           return (
             <div
-              onClick={() => onSelectPhase && onSelectPhase('observaciones')}
+              onClick={e => onSelectPhase && onSelectPhase('observaciones', e.ctrlKey || e.metaKey)}
               style={{
                 background: '#ffffff',
                 border: isSelected ? '2px solid #e11d48' : '1px solid #fecdd3',
@@ -8147,7 +8288,7 @@ function DashboardEstadisticoVP({
                 transition: 'all 0.15s ease',
                 position: 'relative',
               }}
-              title="Haz clic para filtrar el cronograma inferior por iniciativas Con Observaciones"
+              title="Haz clic para seleccionar estados con Observaciones (Ctrl+clic para seleccionar varias fases)"
             >
               <div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
@@ -8221,13 +8362,21 @@ function DashboardEstadisticoVP({
                       transition: 'all 0.15s ease',
                     }}
                   >
-                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para filtrar cronograma'}
+                    {isSelected ? '✓ Filtrando en cronograma' : '🔍 Clic para seleccionar estados'}
                   </span>
                 </div>
               </div>
             </div>
           );
         })()}
+      </div>
+
+      <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#64748b', marginTop: -4, padding: '0 4px' }}>
+        <span>💡</span>
+        <span>
+          Haz clic en un rectángulo de fase para seleccionar automáticamente sus estados en el filtro superior.
+          Mantén presionado <strong>Ctrl</strong> (o <strong>Cmd</strong> en Mac) para seleccionar varias fases simultáneamente.
+        </span>
       </div>
 
     </div>
@@ -8315,37 +8464,87 @@ function SectionHeaderToggle({ title, badge, isOpen, onToggle, actions }: Sectio
 // REPORTE 1 — Por VP del Área Solicitante
 // ---------------------------------------------------------------------------
 function ReporteVP({
-  iniciativas, onNavigate, macro, onOpenDetailModal, onOpenVPSelector,
+  iniciativas,
+  iniciativasTotalVP,
+  onNavigate,
+  macro,
+  onOpenDetailModal,
+  onOpenVPSelector,
+  selectedEtapas,
+  onSelectEtapas,
 }: {
   iniciativas: Iniciativa[];
+  iniciativasTotalVP?: Iniciativa[];
   onNavigate: NavigateFn;
   macro: MacroFilters;
   onOpenDetailModal?: (iniciativa: Iniciativa) => void;
   onOpenVPSelector?: () => void;
+  selectedEtapas?: string[];
+  onSelectEtapas?: (etapas: string[]) => void;
 }) {
   // Estados plegables (toggles) para cada sección
   const [isPipelineStatsOpen, setIsPipelineStatsOpen] = useState(true);
   const [isTimelineOpen, setIsTimelineOpen] = useState(true);
 
-  // Filtro interactivo de Fase (sincroniza Dashboard Estadístico con el Cronograma Timeline)
-  const [selectedPhaseFilter, setSelectedPhaseFilter] = useState<VpPipelinePhase | null>(null);
+  // Derivar fases activas a partir de las etapas seleccionadas en el filtro ESTADO
+  const activePhases = useMemo<VpPipelinePhase[]>(() => {
+    if (!selectedEtapas || selectedEtapas.length === 0) return [];
+    const set = new Set<VpPipelinePhase>();
+    selectedEtapas.forEach(st => {
+      set.add(getVpPipelinePhase(st));
+    });
+    return Array.from(set);
+  }, [selectedEtapas]);
 
-  const handleSelectPhase = (phase: VpPipelinePhase) => {
-    if (selectedPhaseFilter === phase) {
-      setSelectedPhaseFilter(null);
+  // Selección de fase (normal o multi-selección con Ctrl)
+  const handleSelectPhase = (phase: VpPipelinePhase, isCtrl: boolean) => {
+    if (!onSelectEtapas) return;
+
+    const baseList = iniciativasTotalVP && iniciativasTotalVP.length > 0 ? iniciativasTotalVP : iniciativas;
+    const stagesFound = Array.from(new Set(
+      baseList
+        .filter(i => getVpPipelinePhase(i.etapa_actual) === phase)
+        .map(i => i.etapa_actual)
+        .filter(Boolean)
+    ));
+    const stagesForPhase = stagesFound.length > 0 ? stagesFound : (PHASE_ETAPAS_MAP[phase] || []);
+    const isAllSelected = !selectedEtapas || selectedEtapas.length === 0;
+
+    if (!isCtrl) {
+      if (activePhases.length === 1 && activePhases[0] === phase) {
+        // Toggle OFF si ya era la única fase activa: restablecer a Todos
+        onSelectEtapas([]);
+      } else {
+        // Seleccionar únicamente las etapas asociadas a este rectángulo
+        onSelectEtapas(stagesForPhase);
+      }
     } else {
-      setSelectedPhaseFilter(phase);
-      setIsTimelineOpen(true);
-      setTimeout(() => {
-        const el = document.getElementById('cronograma-timeline-section');
-        if (el) {
-          el.scrollIntoView({ behavior: 'smooth', block: 'start' });
-        }
-      }, 60);
+      // Multi-selección con Ctrl
+      if (isAllSelected) {
+        onSelectEtapas(stagesForPhase);
+      } else if (activePhases.includes(phase)) {
+        // Quitar las etapas de esta fase de la selección
+        const stagesSet = new Set(stagesForPhase);
+        const remaining = (selectedEtapas || []).filter(s => !stagesSet.has(s) && getVpPipelinePhase(s) !== phase);
+        onSelectEtapas(remaining);
+      } else {
+        // Agregar las etapas de esta fase a la selección existente
+        const combined = Array.from(new Set([...(selectedEtapas || []), ...stagesForPhase]));
+        onSelectEtapas(combined);
+      }
     }
+
+    setIsTimelineOpen(true);
+    setTimeout(() => {
+      const el = document.getElementById('cronograma-timeline-section');
+      if (el) {
+        el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }
+    }, 60);
   };
 
-  if (iniciativas.length === 0) {
+  const totalPool = iniciativasTotalVP && iniciativasTotalVP.length > 0 ? iniciativasTotalVP : iniciativas;
+  if (totalPool.length === 0) {
     const isNoVpSelected = macro.vp_solicitantes.length === 0;
     return (
       <div style={{ textAlign: 'center', padding: '56px 24px', background: '#ffffff', borderRadius: 14, border: '1.5px dashed #cbd5e1', boxShadow: '0 1px 3px rgba(0,0,0,0.02)' }}>
@@ -8423,7 +8622,7 @@ function ReporteVP({
           title="Pipeline Estadístico de Iniciativas"
           badge={
             <span style={{ fontSize: 11, fontWeight: 700, color: '#0284c7', background: '#e0f2fe', padding: '2px 8px', borderRadius: 12 }}>
-              {iniciativas.length} iniciativa{iniciativas.length === 1 ? '' : 's'}
+              {totalPool.length} iniciativa{totalPool.length === 1 ? '' : 's'}
             </span>
           }
           isOpen={isPipelineStatsOpen}
@@ -8432,9 +8631,9 @@ function ReporteVP({
         {isPipelineStatsOpen && (
           <div style={{ padding: 16 }}>
             <DashboardEstadisticoVP
-              iniciativas={iniciativas}
+              iniciativas={totalPool}
               onOpenDetailModal={onOpenDetailModal}
-              selectedPhase={selectedPhaseFilter}
+              selectedPhases={activePhases}
               onSelectPhase={handleSelectPhase}
             />
           </div>
@@ -8464,12 +8663,14 @@ function ReporteVP({
           onToggle={() => setIsTimelineOpen(prev => !prev)}
         />
         {isTimelineOpen && (
-          <TimelineIniciativasVP
-            iniciativas={iniciativas}
-            onOpenDetailModal={onOpenDetailModal}
-            phaseFilter={selectedPhaseFilter}
-            onClearPhaseFilter={() => setSelectedPhaseFilter(null)}
-          />
+          <div id="cronograma-timeline-section">
+            <TimelineIniciativasVP
+              iniciativas={iniciativas}
+              onOpenDetailModal={onOpenDetailModal}
+              selectedPhases={activePhases}
+              onClearPhaseFilter={() => onSelectEtapas && onSelectEtapas([])}
+            />
+          </div>
         )}
       </div>
     </div>
@@ -10482,6 +10683,35 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     });
   }, [iniciativas, selectedReport, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroEtapas, macroLideres, macroMotivos, dateFilters]);
 
+  // Data filtrada por todos los criterios EXCEPTO etapa (para que el Pipeline Estadístico siempre muestre los totales reales de cada fase)
+  const filteredSinEtapas = useMemo(() => {
+    const ref = new Date();
+    if (selectedReport === 'vp' && macroVPs.length === 0) {
+      return [];
+    }
+    return iniciativas.filter(i => {
+      if (macroInstituciones.length && !macroInstituciones.includes(normalize(i.institucion))) return false;
+      if (macroSPO.length           && !macroSPO.includes(normalize(i.proyecto_spo)))          return false;
+      if (macroITBPs.length         && !macroITBPs.includes(normalize(i.it_bp)))               return false;
+      if (macroVPs.length           && !macroVPs.includes(normalize(i.vp_solicitante)))         return false;
+      if (macroLideres.length       && !macroLideres.includes(normalize(i.lider_dominio)))      return false;
+      if (macroMotivos.length) {
+        const resEst = checkFueraFechaEstimacion(i, ref);
+        const resReest = checkFueraFechaReestimacion(i, ref);
+        const resPlan = checkFueraFechaPlanificacion(i, ref);
+        const reasons = [
+          resEst.isOutOfDate ? resEst.reason : null,
+          resReest.isOutOfDate ? resReest.reason : null,
+          resPlan.isOutOfDate ? resPlan.reason : null,
+        ].filter(Boolean) as string[];
+        const hasMatch = reasons.some(r => macroMotivos.includes(r));
+        if (!hasMatch) return false;
+      }
+      if (!matchesDateFilters(i)) return false;
+      return true;
+    });
+  }, [iniciativas, selectedReport, macroInstituciones, macroSPO, macroITBPs, macroVPs, macroLideres, macroMotivos, dateFilters]);
+
   // ---- Métricas para las tarjetas del catálogo ----
   const fueraFechaMetrics = useMemo(() => {
     const refDate = new Date();
@@ -11415,9 +11645,12 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
         <ReportCard title="Reporte por VP del Área Solicitante" icon={<Users size={18} />}>
           <ReporteVP
             iniciativas={filtered}
+            iniciativasTotalVP={filteredSinEtapas}
             onNavigate={setPopupFilters}
             macro={macro}
             onOpenDetailModal={setDetailModalIniciativa}
+            selectedEtapas={macroEtapas}
+            onSelectEtapas={setMacroEtapas}
             onOpenVPSelector={() => {
               setIsFilterPanelOpen(true);
               setIsVpDropdownOpen(true);

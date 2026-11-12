@@ -3501,6 +3501,53 @@ function TimelineIniciativasVP({
     return () => cancelAnimationFrame(frameId);
   }, []);
 
+  // Drag-to-scroll horizontal con clic izquierdo para desplazarse entre meses
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
+  const [isDragging, setIsDragging] = useState<boolean>(false);
+  const dragInfoRef = useRef({
+    isDown: false,
+    startX: 0,
+    scrollLeft: 0,
+    hasMoved: false,
+  });
+
+  const handleMouseDown = (e: React.MouseEvent) => {
+    // Solo botón izquierdo del ratón
+    if (e.button !== 0) return;
+    const target = e.target as HTMLElement;
+    // No iniciar drag si el clic es en un control interactivo (select, input, botón)
+    if (target.closest('button, input, select, textarea, a, .no-drag')) return;
+
+    if (!scrollContainerRef.current) return;
+    dragInfoRef.current = {
+      isDown: true,
+      startX: e.clientX,
+      scrollLeft: scrollContainerRef.current.scrollLeft,
+      hasMoved: false,
+    };
+    setIsDragging(true);
+  };
+
+  const handleMouseMove = (e: React.MouseEvent) => {
+    if (!dragInfoRef.current.isDown || !scrollContainerRef.current) return;
+    const dx = e.clientX - dragInfoRef.current.startX;
+    if (Math.abs(dx) > 3) {
+      dragInfoRef.current.hasMoved = true;
+    }
+    scrollContainerRef.current.scrollLeft = dragInfoRef.current.scrollLeft - dx;
+  };
+
+  useEffect(() => {
+    const handleGlobalMouseUp = () => {
+      if (dragInfoRef.current.isDown) {
+        dragInfoRef.current.isDown = false;
+        setIsDragging(false);
+      }
+    };
+    window.addEventListener('mouseup', handleGlobalMouseUp);
+    return () => window.removeEventListener('mouseup', handleGlobalMouseUp);
+  }, []);
+
   const today = useMemo(() => new Date(), []);
   const todayMs = today.getTime();
 
@@ -4228,6 +4275,26 @@ function TimelineIniciativasVP({
             />
             Solo con fechas
           </label>
+
+          {/* Indicador de arrastre con el ratón */}
+          <span
+            style={{
+              fontSize: 10.5,
+              fontWeight: 600,
+              color: '#64748b',
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 4,
+              backgroundColor: '#f8fafc',
+              border: '1px solid #e2e8f0',
+              padding: '3px 8px',
+              borderRadius: 6,
+              userSelect: 'none',
+            }}
+            title="Haz clic izquierdo y arrastra horizontalmente para moverte entre meses sin necesidad de usar la barra de desplazamiento"
+          >
+            <span>✋</span> Clic y arrastra para moverte
+          </span>
         </div>
 
         {/* Acciones de Acordeón y Modo Paginado */}
@@ -4298,7 +4365,18 @@ function TimelineIniciativasVP({
           </p>
         </div>
       ) : (
-        <div style={{ overflowX: 'auto', overflowY: 'visible', position: 'relative' }}>
+        <div
+          ref={scrollContainerRef}
+          onMouseDown={handleMouseDown}
+          onMouseMove={handleMouseMove}
+          style={{
+            overflowX: 'auto',
+            overflowY: 'visible',
+            position: 'relative',
+            cursor: isDragging ? 'grabbing' : 'grab',
+            userSelect: isDragging ? 'none' : 'auto',
+          }}
+        >
           <div style={{ minWidth: totalTableWidth, width: totalTableWidth, display: 'flex', flexDirection: 'column' }}>
             {/* Header del Gantt: Columnas a la izquierda (530px sticky) | Años, Meses, Días y HOY a la derecha */}
             <div
@@ -4485,6 +4563,21 @@ function TimelineIniciativasVP({
                   ))}
                 </div>
 
+                {/* Línea vertical de HOY en la cabecera (Alto Contraste) */}
+                <div
+                  style={{
+                    position: 'absolute',
+                    left: `${todayPct}%`,
+                    top: 24,
+                    bottom: 0,
+                    width: 0,
+                    borderLeft: '2.5px dashed #dc2626',
+                    boxShadow: '0 0 6px rgba(220, 38, 38, 0.8)',
+                    zIndex: 38,
+                    pointerEvents: 'none',
+                  }}
+                />
+
                 {/* Badge de HOY flotante en la cabecera */}
                 <div
                   style={{
@@ -4492,23 +4585,24 @@ function TimelineIniciativasVP({
                     left: `${todayPct}%`,
                     top: 2,
                     transform: 'translateX(-50%)',
-                    zIndex: 40,
+                    zIndex: 50,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    gap: 3,
-                    padding: '2px 8px',
-                    borderRadius: 12,
-                    backgroundColor: '#ef4444',
+                    gap: 4,
+                    padding: '3px 10px',
+                    borderRadius: 14,
+                    backgroundColor: '#dc2626',
                     color: '#ffffff',
-                    fontSize: 9,
+                    fontSize: 9.5,
                     fontWeight: 800,
-                    boxShadow: '0 2px 6px rgba(239, 68, 68, 0.45)',
+                    boxShadow: '0 2px 8px rgba(220, 38, 38, 0.6), 0 0 0 2px #ffffff',
                     whiteSpace: 'nowrap',
                     pointerEvents: 'none',
                   }}
                 >
+                  <span style={{ fontSize: 10 }}>📍</span>
                   <span>HOY</span>
-                  <span style={{ fontWeight: 600, opacity: 0.9 }}>
+                  <span style={{ fontWeight: 600, opacity: 0.95 }}>
                     ({format(today, 'dd/MM/yy')})
                   </span>
                 </div>
@@ -4560,18 +4654,29 @@ function TimelineIniciativasVP({
                     }}
                   />
                 ))}
+              </div>
 
-                {/* LÍNEA VERTICAL DE HOY QUE ATRAVIESA TODAS LAS FILAS */}
+              {/* LÍNEA VERTICAL DE HOY GLOBAL SUPERPUESTA A TODAS LAS FILAS (ALTO CONTRASTE) */}
+              <div
+                style={{
+                  position: 'absolute',
+                  left: 530,
+                  width: trackMinWidth,
+                  top: 0,
+                  bottom: 0,
+                  pointerEvents: 'none',
+                  zIndex: 25,
+                }}
+              >
                 <div
                   style={{
                     position: 'absolute',
                     left: `${todayPct}%`,
                     top: 0,
                     bottom: 0,
-                    width: 2,
-                    borderLeft: '2px dashed #ef4444',
-                    boxShadow: '0 0 8px rgba(239, 68, 68, 0.35)',
-                    zIndex: 15,
+                    width: 0,
+                    borderLeft: '2.5px dashed #dc2626',
+                    boxShadow: '0 0 6px rgba(220, 38, 38, 0.8), 0 0 12px rgba(239, 68, 68, 0.4)',
                     pointerEvents: 'none',
                   }}
                 />
@@ -4584,7 +4689,10 @@ function TimelineIniciativasVP({
                   <div key={grp.key} style={{ borderBottom: '1px solid #e2e8f0', position: 'relative', zIndex: 1 }}>
                     {/* ENCABEZADO DE GRUPO (ACCORDION) */}
                     <div
-                      onClick={() => toggleGroup(grp.key)}
+                      onClick={() => {
+                        if (dragInfoRef.current.hasMoved) return;
+                        toggleGroup(grp.key);
+                      }}
                       style={{
                         display: 'flex',
                         alignItems: 'center',
@@ -4715,7 +4823,10 @@ function TimelineIniciativasVP({
                                         }}
                                       >
                                         <span
-                                          onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                          onClick={() => {
+                                            if (dragInfoRef.current.hasMoved) return;
+                                            onOpenDetailModal && onOpenDetailModal(row.iniciativa);
+                                          }}
                                           title={`Ver detalle de #${row.iniciativa.id}`}
                                           style={{
                                             fontSize: 10.5,
@@ -4731,7 +4842,10 @@ function TimelineIniciativasVP({
 
                                         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', gap: 2, minWidth: 0 }}>
                                           <span
-                                            onClick={() => onOpenDetailModal && onOpenDetailModal(row.iniciativa)}
+                                            onClick={() => {
+                                              if (dragInfoRef.current.hasMoved) return;
+                                              onOpenDetailModal && onOpenDetailModal(row.iniciativa);
+                                            }}
                                             title={`${row.iniciativa.titulo}\nVP: ${row.iniciativa.vp_solicitante || '—'}\nEtapa: ${getEtapaHumanLabel(row.iniciativa.etapa_actual)}\nColumna AM: ${row.iniciativa.proyecto_o_req || '(Vacío)'}`}
                                             style={{
                                               fontSize: 11,
@@ -4899,9 +5013,10 @@ function TimelineIniciativasVP({
                                                 target.style.zIndex = String(isElimSeg ? 9 : seg.isSingleDay ? 8 : 4 + sIdx);
                                                 setTooltipData(null);
                                               }}
-                                              onClick={() =>
-                                                onOpenDetailModal && onOpenDetailModal(row.iniciativa)
-                                              }
+                                              onClick={() => {
+                                                if (dragInfoRef.current.hasMoved) return;
+                                                onOpenDetailModal && onOpenDetailModal(row.iniciativa);
+                                              }}
                                             >
                                               {/* 3. Número de iniciativa FUERA de la barra, al lado izquierdo (solo en el primer segmento) */}
                                               {sIdx === 0 && (
@@ -5777,10 +5892,16 @@ function exportReportToHTML(
     .timeline-body {
       overflow-x: auto;
       min-width: 100%;
+      cursor: grab;
+      user-select: auto;
+    }
+    .timeline-body.is-dragging {
+      cursor: grabbing;
+      user-select: none;
     }
     .timeline-table {
       width: 100%;
-      min-width: 950px;
+      min-width: 1380px;
       border-collapse: collapse;
       font-size: 11px;
     }
@@ -5804,8 +5925,9 @@ function exportReportToHTML(
     .gantt-cell {
       position: relative;
       height: 36px;
-      min-width: 480px;
+      min-width: 850px;
       background: #fafafa;
+      overflow: visible;
     }
     .gantt-bar {
       position: absolute;
@@ -5823,14 +5945,32 @@ function exportReportToHTML(
       box-shadow: 0 1px 2px rgba(0,0,0,0.12);
       cursor: pointer;
       white-space: nowrap;
-      overflow: hidden;
-      text-overflow: ellipsis;
-      transition: transform 0.1s ease;
+      overflow: visible;
+      transition: transform 0.1s ease, filter 0.1s ease;
     }
     .gantt-bar:hover {
       transform: translateY(-50%) scaleY(1.2);
       filter: brightness(1.15);
-      z-index: 20;
+      z-index: 30;
+    }
+    .gantt-id-badge {
+      position: absolute;
+      right: calc(100% + 6px);
+      top: 50%;
+      transform: translateY(-50%);
+      display: inline-flex;
+      align-items: center;
+      gap: 3px;
+      padding: 1px 6px;
+      border-radius: 4px;
+      background-color: #f1f5f9;
+      border: 1px solid #cbd5e1;
+      color: #1e293b;
+      font-size: 9.5px;
+      font-weight: 800;
+      white-space: nowrap;
+      box-shadow: 0 1px 2px rgba(0,0,0,0.06);
+      pointer-events: auto;
     }
 
     /* Multiselect Component Styles */
@@ -6191,6 +6331,7 @@ function exportReportToHTML(
           <span id="timeline-count-badge" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #e0f2fe; padding: 2px 8px; border-radius: 12px;">
             ${dataFiltered.length} iniciativas
           </span>
+          <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: #475569; background: #f1f5f9; padding: 2px 8px; border-radius: 12px; border: 1px solid #cbd5e1;">✋ Clic y arrastra para moverte</span>
         </div>
         <div class="no-print" style="display: flex; align-items: center; gap: 8px;">
           <input type="text" id="filter-search" placeholder="🔍 Buscar ID, título..." style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; width: 180px;">
@@ -6215,8 +6356,8 @@ function exportReportToHTML(
               <th style="width: 140px;">Fase / Etapa</th>
               <th style="width: 80px;">Inicio</th>
               <th style="width: 80px;">Fin</th>
-              <th style="padding: 0; min-width: 480px; position: relative; height: 50px; overflow: visible;">
-                <div id="gantt-month-headers" style="position: relative; width: 100%; height: 100%; margin-top: 10px;"></div>
+              <th id="gantt-header-th" style="padding: 0; min-width: 850px; position: relative; height: 74px; overflow: visible;">
+                <div id="gantt-month-headers" style="position: relative; width: 100%; height: 74px;"></div>
               </th>
             </tr>
           </thead>
@@ -7156,49 +7297,124 @@ function exportReportToHTML(
         }
       });
 
-      // Asegurar margen temporal
+      // Asegurar margen temporal con buffer de 10 días para el badge ID al inicio
       const minDateObj = new Date(minTime);
       const maxDateObj = new Date(maxTime);
-      const startRange = new Date(minDateObj.getFullYear(), minDateObj.getMonth(), 1);
-      const endRange = new Date(maxDateObj.getFullYear(), maxDateObj.getMonth() + 2, 1);
+      const padStart = new Date(minDateObj);
+      padStart.setDate(padStart.getDate() - 10);
+      const startRange = new Date(padStart.getFullYear(), padStart.getMonth(), 1);
+
+      const padEnd = new Date(maxDateObj);
+      padEnd.setDate(padEnd.getDate() + 10);
+      const endRange = new Date(padEnd.getFullYear(), padEnd.getMonth() + 1, 0, 23, 59, 59);
+
       const rangeMin = startRange.getTime();
       const rangeMax = endRange.getTime();
-      const totalDuration = rangeMax - rangeMin || 1;
+      const totalDuration = Math.max(1, rangeMax - rangeMin);
 
       // Calcular posición de la línea de HOY
       const todayLeftPct = Math.max(0, Math.min(100, ((todayTime - rangeMin) / totalDuration) * 100));
 
-      // 1. Renderizar Cabecera de Meses en la columna Gantt
+      // 1. Renderizar Cabecera de 3 Tiers (Años, Meses, Días Lunes) en la columna Gantt
       const monthHeaderContainer = document.getElementById('gantt-month-headers');
       if (monthHeaderContainer) {
         let curr = new Date(startRange);
         const months = [];
-        while (curr < endRange) {
+        const allMondays = [];
+        const yearMap = new Map();
+
+        while (curr <= endRange) {
           const next = new Date(curr.getFullYear(), curr.getMonth() + 1, 1);
           const startMs = curr.getTime();
           const endMs = Math.min(next.getTime(), rangeMax);
           const leftPct = ((startMs - rangeMin) / totalDuration) * 100;
           const widthPct = ((endMs - startMs) / totalDuration) * 100;
+          const yr = curr.getFullYear();
+
+          if (!yearMap.has(yr)) {
+            yearMap.set(yr, { year: yr, minMs: startMs, maxMs: endMs });
+          } else {
+            const yObj = yearMap.get(yr);
+            yObj.maxMs = Math.max(yObj.maxMs, endMs);
+          }
+
+          // Lunes de este mes
+          const monthEnd = new Date(curr.getFullYear(), curr.getMonth() + 1, 0, 23, 59, 59);
+          let d = new Date(curr);
+          while (d.getDay() !== 1) {
+            d.setDate(d.getDate() + 1);
+          }
+          while (d <= monthEnd) {
+            const mDate = new Date(d);
+            const mStartMs = mDate.getTime();
+            const mEndMs = mStartMs + 7 * 24 * 60 * 60 * 1000;
+            const mLeft = ((mStartMs - rangeMin) / totalDuration) * 100;
+            const mWidth = ((Math.min(mEndMs, rangeMax) - mStartMs) / totalDuration) * 100;
+            allMondays.push({
+              dayNumber: mDate.getDate(),
+              leftPct: mLeft,
+              widthPct: mWidth
+            });
+            d.setDate(d.getDate() + 7);
+          }
+
           months.push({
-            label: MONTH_NAMES[curr.getMonth()] + ' ' + curr.getFullYear(),
+            label: MONTH_NAMES[curr.getMonth()],
+            year: yr,
             leftPct,
             widthPct
           });
           curr = next;
         }
 
-        monthHeaderContainer.innerHTML = \`
-          <div style="position: absolute; inset: 0; display: flex;">
-            \${months.map(m => \`
-              <div style="position: absolute; left: \${m.leftPct}%; width: \${m.widthPct}%; height: 100%; border-right: 1px solid #e2e8f0; padding: 9px 6px; box-sizing: border-box; font-size: 10px; font-weight: 700; color: #475569; overflow: hidden; white-space: nowrap; text-overflow: ellipsis; text-transform: capitalize;">
-                \${m.label}
-              </div>
-            \`).join('')}
+        const years = Array.from(yearMap.values()).map(y => {
+          const leftPct = ((Math.max(rangeMin, y.minMs) - rangeMin) / totalDuration) * 100;
+          const rightPct = ((Math.min(rangeMax, y.maxMs) - rangeMin) / totalDuration) * 100;
+          return {
+            year: y.year,
+            leftPct,
+            widthPct: Math.max(0, rightPct - leftPct)
+          };
+        });
 
-            <!-- Badge flotante de HOY -->
-            <div style="position: absolute; left: \${todayLeftPct}%; top: 2px; transform: translateX(-50%); z-index: 30; display: inline-flex; align-items: center; gap: 3px; padding: 2px 7px; border-radius: 12px; background-color: #ef4444; color: #ffffff; font-size: 9px; font-weight: 800; box-shadow: 0 2px 6px rgba(239, 68, 68, 0.45); white-space: nowrap; pointer-events: none;">
+        const currentYear = now.getFullYear();
+
+        monthHeaderContainer.innerHTML = \`
+          <div style="position: relative; width: 100%; height: 74px; display: flex; flex-direction: column; overflow: hidden;">
+            <!-- Tier 1: Años (24px) -->
+            <div style="position: relative; height: 24px; width: 100%; background: #0f172a; border-bottom: 1px solid #1e293b;">
+              \${years.map(y => \`
+                <div style="position: absolute; left: \${y.leftPct}%; width: \${y.widthPct}%; height: 100%; display: flex; align-items: center; justify-content: center; font-weight: 800; font-size: 11px; letter-spacing: 0.05em; color: #ffffff; background-color: \${y.year > currentYear ? '#059669' : '#0f172a'}; border-right: 1px solid #334155; box-sizing: border-box;">
+                  \${y.year}
+                </div>
+              \`).join('')}
+            </div>
+
+            <!-- Tier 2: Meses (28px) -->
+            <div style="position: relative; height: 28px; width: 100%; background: #1e293b; border-bottom: 1px solid #334155;">
+              \${months.map(m => \`
+                <div style="position: absolute; left: \${m.leftPct}%; width: \${m.widthPct}%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; color: #f8fafc; text-transform: capitalize; border-right: 1px solid #334155; box-sizing: border-box; letter-spacing: 0.02em;">
+                  \${m.label}
+                </div>
+              \`).join('')}
+            </div>
+
+            <!-- Tier 3: Días (Lunes / Hitos semanales) (22px) -->
+            <div style="position: relative; height: 22px; width: 100%; background: #f8fafc; border-bottom: 1px solid #cbd5e1;">
+              \${allMondays.map(m => \`
+                <div style="position: absolute; left: \${m.leftPct}%; width: \${m.widthPct}%; height: 100%; display: flex; align-items: center; justify-content: center; font-size: 9.5px; font-weight: 600; color: #64748b; border-right: 1px solid #e2e8f0; box-sizing: border-box;">
+                  \${m.dayNumber}
+                </div>
+              \`).join('')}
+            </div>
+
+            <!-- Línea vertical de HOY en la cabecera (Alto Contraste) -->
+            <div style="position: absolute; left: \${todayLeftPct}%; top: 24px; bottom: 0; width: 0; border-left: 2.5px dashed #dc2626; box-shadow: 0 0 6px rgba(220, 38, 38, 0.8); z-index: 38; pointer-events: none;"></div>
+
+            <!-- Badge de HOY flotante en la cabecera -->
+            <div style="position: absolute; left: \${todayLeftPct}%; top: 2px; transform: translateX(-50%); z-index: 50; display: inline-flex; align-items: center; gap: 4px; padding: 3px 10px; border-radius: 14px; background-color: #dc2626; color: #ffffff; font-size: 9.5px; font-weight: 800; box-shadow: 0 2px 8px rgba(220, 38, 38, 0.6), 0 0 0 2px #ffffff; white-space: nowrap; pointer-events: none;">
               <span>📍 HOY</span>
-              <span style="font-weight: 600; opacity: 0.9;">(\${fmtDate(now)})</span>
+              <span style="font-weight: 600; opacity: 0.95;">(\${fmtDate(now)})</span>
             </div>
           </div>
         \`;
@@ -7251,10 +7467,10 @@ function exportReportToHTML(
             segments.push({
               start: dElim,
               end: dElim,
-              label: '✕ ' + i.id,
+              label: '✕ #' + i.id,
               bg: 'linear-gradient(135deg, #ef4444 0%, #b91c1c 100%)',
               border: '#991b1b',
-              tooltip: \`<b>[Eliminada]</b> \${i.id}<br>Fecha: \${fmtDate(dElim)}<br>\${i.motivo_eliminacion ? 'Motivo: ' + i.motivo_eliminacion : ''}\`
+              tooltip: \`<b>[Eliminada]</b> #\${i.id}<br>Fecha: \${fmtDate(dElim)}<br>\${i.motivo_eliminacion ? 'Motivo: ' + i.motivo_eliminacion : ''}\`
             });
           }
         } else {
@@ -7270,10 +7486,10 @@ function exportReportToHTML(
               segments.push({
                 start: st,
                 end: en,
-                label: String(i.id),
+                label: '#' + i.id,
                 bg: 'linear-gradient(135deg, #f59e0b 0%, #d97706 100%)',
                 border: '#b45309',
-                tooltip: \`<b>[Estimación]</b> \${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.estatus_estimacion || ''}\`
+                tooltip: \`<b>[Estimación]</b> #\${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.estatus_estimacion || ''}\`
               });
             }
           }
@@ -7288,23 +7504,35 @@ function exportReportToHTML(
             segments.push({
               start: st,
               end: en,
-              label: String(i.id),
+              label: '#' + i.id,
               bg: 'linear-gradient(135deg, #10b981 0%, #059669 100%)',
               border: '#047857',
-              tooltip: \`<b>[Planificada]</b> \${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.planificacion_aprobada ? 'Aprobada: ' + i.planificacion_aprobada : ''}\`
+              tooltip: \`<b>[Planificada]</b> #\${i.id}<br>\${fmtDate(st)} - \${fmtDate(en)}<br>\${i.planificacion_aprobada ? 'Aprobada: ' + i.planificacion_aprobada : ''}\`
             });
+          }
+        }
+
+        // Fallbacks seguros: asegurar que no queden vacíos si hay segmentos
+        if (segments.length > 0) {
+          if (startDisplay === '—') {
+            const minSeg = new Date(Math.min(...segments.map(s => s.start.getTime())));
+            startDisplay = fmtDate(minSeg);
+          }
+          if (endDisplay === '—') {
+            const maxSeg = new Date(Math.max(...segments.map(s => s.end.getTime())));
+            endDisplay = fmtDate(maxSeg);
           }
         }
 
         return \`
           <tr>
             <td style="font-weight: 800; color: #475569; text-align: center;">
-              <span class="id-link" onclick="openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
+              <span class="id-link" onclick="if(window._tlHasMoved) return; openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
                 #\${i.id}
               </span>
             </td>
             <td>
-              <div style="font-weight: 700; color: #0f172a; max-width: 280px; word-break: break-word; cursor: pointer;" onclick="openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
+              <div style="font-weight: 700; color: #0f172a; max-width: 280px; word-break: break-word; cursor: pointer;" onclick="if(window._tlHasMoved) return; openDetailModal('\${i.id}')" title="Clic para ver detalle completo">
                 \${i.titulo || 'Sin Título'}
               </div>
               \${isElim ? \`
@@ -7323,21 +7551,25 @@ function exportReportToHTML(
             <td style="font-family: monospace; color: #64748b;">\${startDisplay}</td>
             <td style="font-family: monospace; color: #64748b;">\${endDisplay}</td>
             <td class="gantt-cell">
-              <!-- Línea vertical de HOY -->
-              <div style="position: absolute; left: \${todayLeftPct}%; top: 0; bottom: 0; width: 2px; border-left: 2px dashed #ef4444; box-shadow: 0 0 6px rgba(239, 68, 68, 0.35); z-index: 15; pointer-events: none;"></div>
+              <!-- Línea vertical de HOY (Alto Contraste) -->
+              <div style="position: absolute; left: \${todayLeftPct}%; top: 0; bottom: 0; width: 0; border-left: 2.5px dashed #dc2626; box-shadow: 0 0 6px rgba(220, 38, 38, 0.8), 0 0 12px rgba(239, 68, 68, 0.4); z-index: 25; pointer-events: none;"></div>
 
               \${segments.length === 0 ? '<span style="font-size: 10px; color: #94a3b8; font-style: italic; position: relative; z-index: 2;">Sin fechas</span>' : ''}
-              \${segments.map(seg => {
+              \${segments.map((seg, sIdx) => {
                 const left = Math.max(0, ((seg.start.getTime() - rangeMin) / totalDuration) * 100);
                 const right = Math.min(100, ((seg.end.getTime() - rangeMin) / totalDuration) * 100);
-                const width = Math.max(2.0, right - left);
+                const width = Math.max(1.5, right - left);
                 return \`
                   <div class="gantt-bar"
                        style="left: \${left}%; width: \${width}%; background: \${seg.bg}; border: 1px solid \${seg.border};"
-                       onclick="openDetailModal('\${i.id}')"
+                       onclick="if(window._tlHasMoved) return; openDetailModal('\${i.id}')"
                        onmouseenter="showTooltip(event, '\${escapeJs(seg.tooltip)}')"
                        onmouseleave="hideTooltip()">
-                    \${seg.label}
+                    \${sIdx === 0 ? \`
+                      <div class="gantt-id-badge" onclick="if(window._tlHasMoved) return; openDetailModal('\${i.id}')" title="Iniciativa #\${i.id}">
+                        #\${i.id}
+                      </div>
+                    \` : ''}
                   </div>
                 \`;
               }).join('')}
@@ -7349,7 +7581,7 @@ function exportReportToHTML(
       tbody.innerHTML = activeGroups.map(grp => {
         const isCol = Boolean(collapsedGroups[grp.key]);
         const headerRow = \`
-          <tr class="group-section-header" onclick="toggleGroupCollapse('\${grp.key}')" style="background: \${grp.headerBg};">
+          <tr class="group-section-header" onclick="if(window._tlHasMoved) return; toggleGroupCollapse('\${grp.key}')" style="background: \${grp.headerBg};">
             <td colspan="6" style="padding: 8px 14px; border-top: 1px solid \${grp.headerBorder}; border-bottom: 1px solid \${grp.headerBorder}; cursor: pointer;">
               <div style="display: flex; align-items: center; justify-content: space-between;">
                 <div style="display: flex; align-items: center; gap: 8px; font-weight: 800; font-size: 12px; color: \${grp.headerText};">
@@ -7438,6 +7670,45 @@ function exportReportToHTML(
       searchQuery = e.target.value;
       renderTimeline();
     });
+
+    // Drag-to-scroll horizontal en el Timeline Gantt (clic y arrastrar)
+    (function initDragToScroll() {
+      const container = document.querySelector('.timeline-body');
+      if (!container) return;
+
+      let isDown = false;
+      let startX = 0;
+      let scrollLeft = 0;
+      window._tlHasMoved = false;
+
+      container.addEventListener('mousedown', e => {
+        if (e.button !== 0) return;
+        isDown = true;
+        window._tlHasMoved = false;
+        container.classList.add('is-dragging');
+        startX = e.pageX - container.offsetLeft;
+        scrollLeft = container.scrollLeft;
+      });
+
+      window.addEventListener('mouseup', () => {
+        if (!isDown) return;
+        isDown = false;
+        container.classList.remove('is-dragging');
+        setTimeout(() => {
+          window._tlHasMoved = false;
+        }, 80);
+      });
+
+      container.addEventListener('mousemove', e => {
+        if (!isDown) return;
+        const x = e.pageX - container.offsetLeft;
+        const walk = x - startX;
+        if (Math.abs(walk) > 3) {
+          window._tlHasMoved = true;
+        }
+        container.scrollLeft = scrollLeft - walk;
+      });
+    })();
 
     // Inicialización completa
     initFilterOptions();

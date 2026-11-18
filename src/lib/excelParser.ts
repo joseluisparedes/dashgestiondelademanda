@@ -314,6 +314,8 @@ export async function parseExcelFile(
           'Fecha de conformidad', 'Fecha conformidad',
           // --- Columnas v90 (Col AB en todas las hojas operativas) ---
           'Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante', 'Direccion solicitante', 'Dirección del área', 'Direccion del area',
+          // --- Columnas v91 (Col AC en todas las hojas operativas) ---
+          'Priorización VP', 'Priorizacion VP',
         ];
 
         const REQUIRED_KEYWORDS = [
@@ -501,6 +503,8 @@ export async function parseExcelFile(
                 formatDt(g('Fecha de conformidad', 'Fecha conformidad')),
               direccion_solicitante:
                 parseStr(g('Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante', 'Direccion solicitante', 'Dirección del área', 'Direccion del area')),
+              priorizacion_vp:
+                parseStr(g('Priorización VP', 'Priorizacion VP')),
               raw_fields: extractRawFields(row),
             };
 
@@ -530,6 +534,7 @@ export async function parseExcelFile(
                 if (!iniciativa.persona_conformidad) iniciativa.persona_conformidad = existing.iniciativa.persona_conformidad;
                 if (!iniciativa.fecha_conformidad) iniciativa.fecha_conformidad = existing.iniciativa.fecha_conformidad;
                 if (!iniciativa.direccion_solicitante) iniciativa.direccion_solicitante = existing.iniciativa.direccion_solicitante;
+                if (!iniciativa.priorizacion_vp) iniciativa.priorizacion_vp = existing.iniciativa.priorizacion_vp;
                 if (iniciativa.duracion_meses == null && existing.iniciativa.duracion_meses != null) iniciativa.duracion_meses = existing.iniciativa.duracion_meses;
                 if (iniciativa.tiempo_estimado == null && existing.iniciativa.tiempo_estimado != null) iniciativa.tiempo_estimado = existing.iniciativa.tiempo_estimado;
               }
@@ -550,6 +555,7 @@ export async function parseExcelFile(
               if (!existing.iniciativa.persona_conformidad && iniciativa.persona_conformidad) existing.iniciativa.persona_conformidad = iniciativa.persona_conformidad;
               if (!existing.iniciativa.fecha_conformidad && iniciativa.fecha_conformidad) existing.iniciativa.fecha_conformidad = iniciativa.fecha_conformidad;
               if (!existing.iniciativa.direccion_solicitante && iniciativa.direccion_solicitante) existing.iniciativa.direccion_solicitante = iniciativa.direccion_solicitante;
+              if (!existing.iniciativa.priorizacion_vp && iniciativa.priorizacion_vp) existing.iniciativa.priorizacion_vp = iniciativa.priorizacion_vp;
               if (existing.iniciativa.duracion_meses == null && iniciativa.duracion_meses != null) existing.iniciativa.duracion_meses = iniciativa.duracion_meses;
               if (existing.iniciativa.tiempo_estimado == null && iniciativa.tiempo_estimado != null) existing.iniciativa.tiempo_estimado = iniciativa.tiempo_estimado;
               existing.iniciativa.raw_fields = mergedRaw;

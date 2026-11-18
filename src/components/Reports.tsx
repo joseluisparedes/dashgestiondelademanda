@@ -9239,7 +9239,62 @@ function isAffirmative(v: string | null | undefined): boolean {
   return ['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s);
 }
 
-type PendingBPTab = 'consolidado' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion';
+function normalizeRawColKey(k: string): string {
+  return k.toLowerCase().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getRawColValue(ini: Iniciativa, candidateKeys: string[]): unknown {
+  if (!ini.raw_fields) return undefined;
+  const normalizedTargets = candidateKeys.map(normalizeRawColKey);
+  for (const [k, v] of Object.entries(ini.raw_fields)) {
+    if (normalizedTargets.includes(normalizeRawColKey(k))) {
+      return v;
+    }
+  }
+  return undefined;
+}
+
+function isFilledVal(v: unknown): boolean {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return s !== '' && s !== '—';
+}
+
+function getMoverEtapaAction(i: Iniciativa): string | null {
+  if (i.etapa_actual === 'por_estimar') {
+    const colAJ = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
+    if (isFilledVal(colAJ)) {
+      return 'Mover a "Por aprobar estimación"';
+    }
+  }
+  if (i.etapa_actual === 'por_reestimar') {
+    const colAW = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
+    if (isFilledVal(colAW)) {
+      return 'Mover a "Por aprobar estimación"';
+    }
+  }
+  if (i.etapa_actual === 'por_planificar') {
+    if (isFilledVal(i.fecha_inicio_planificada) && isFilledVal(i.fecha_fin_planificada)) {
+      return 'Mover a "Aprobar planificación"';
+    }
+  }
+  return null;
+}
+
+type PendingBPTab = 'consolidado' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' | 'mover_etapa';
+type BPModalStageFilter = 'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' | 'mover_etapa';
+type BPModalSortField = 'id' | 'titulo' | 'it_bp' | 'vp_solicitante' | 'solicitante' | 'lider_dominio' | 'etapa_actual' | 'accion_bp';
+
+const DEFAULT_BP_MODAL_COLS: { id: BPModalSortField; label: string }[] = [
+  { id: 'id', label: 'ID' },
+  { id: 'titulo', label: 'Título de la Iniciativa' },
+  { id: 'it_bp', label: 'IT BP' },
+  { id: 'vp_solicitante', label: 'VP Área Solicitante' },
+  { id: 'solicitante', label: 'Solicitante' },
+  { id: 'lider_dominio', label: 'Líder Dominio' },
+  { id: 'etapa_actual', label: 'Etapa Pipeline' },
+  { id: 'accion_bp', label: 'Acción Pendiente BP' },
+];
 
 interface ReportePendientesBPProps {
   iniciativas: Iniciativa[];
@@ -9255,7 +9310,7 @@ export function ReportePendientesBP({
   onOpenDetailModal,
 }: ReportePendientesBPProps) {
   const [activeTab, setActiveTab] = useState<PendingBPTab>('consolidado');
-  const [sortField, setSortField] = useState<'total' | 'bp' | 'est' | 'presup' | 'plan'>('total');
+  const [sortField, setSortField] = useState<'total' | 'bp' | 'est' | 'presup' | 'plan' | 'mover'>('total');
   const [sortDir, setSortDir] = useState<'asc' | 'desc'>('desc');
   const [selectedModalData, setSelectedModalData] = useState<{
     bp: string;
@@ -9263,18 +9318,51 @@ export function ReportePendientesBP({
     items: Iniciativa[];
   } | null>(null);
   const [modalSearch, setModalSearch] = useState('');
-  const [modalStageFilter, setModalStageFilter] = useState<'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion'>('all');
+  const [modalStageFilter, setModalStageFilter] = useState<BPModalStageFilter>('all');
+  const [bpModalSortField, setBpModalSortField] = useState<BPModalSortField>('id');
+  const [bpModalSortDir, setBpModalSortDir] = useState<'asc' | 'desc'>('asc');
+  const [bpModalColOrder, setBpModalColOrder] = useState<BPModalSortField[]>(() => DEFAULT_BP_MODAL_COLS.map(c => c.id));
+  const [bpHiddenModalCols, setBpHiddenModalCols] = useState<Set<BPModalSortField>>(() => new Set());
+  const [showBpModalColPicker, setShowBpModalColPicker] = useState(false);
+  const [bpDraggingColId, setBpDraggingColId] = useState<BPModalSortField | null>(null);
+  const [bpDragOverColId, setBpDragOverColId] = useState<BPModalSortField | null>(null);
 
-  // Clasificar iniciativas según aprobaciones pendientes por BP
+  const toggleBpModalCol = (colId: BPModalSortField) => {
+    setBpHiddenModalCols(prev => {
+      const next = new Set(prev);
+      if (next.has(colId)) next.delete(colId);
+      else next.add(colId);
+      return next;
+    });
+  };
+  const moveBpModalCol = (colId: BPModalSortField, dir: 'up' | 'down') => {
+    setBpModalColOrder(prev => {
+      const idx = prev.indexOf(colId);
+      if (idx === -1) return prev;
+      const target = dir === 'up' ? idx - 1 : idx + 1;
+      if (target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[idx], next[target]] = [next[target], next[idx]];
+      return next;
+    });
+  };
+  const resetBpModalCols = () => {
+    setBpModalColOrder(DEFAULT_BP_MODAL_COLS.map(c => c.id));
+    setBpHiddenModalCols(new Set());
+  };
+
+  // Clasificar iniciativas según aprobaciones y movimientos de etapa pendientes por BP
   const {
     itemsEstimacion,
     itemsPresupuesto,
     itemsPlanificacion,
+    itemsMoverEtapa,
     allPendingItems,
   } = useMemo(() => {
     const est: Iniciativa[] = [];
     const presup: Iniciativa[] = [];
     const plan: Iniciativa[] = [];
+    const mover: Iniciativa[] = [];
 
     iniciativas.forEach(i => {
       // 1. Por Aprobar Estimación
@@ -9289,14 +9377,19 @@ export function ReportePendientesBP({
       if (i.etapa_actual === 'aprobar_planificacion' && !isAffirmative(i.planificacion_aprobada)) {
         plan.push(i);
       }
+      // 4. Por Mover de Etapa (estimación/reestimación/planificación llena sin avanzar)
+      if (getMoverEtapaAction(i)) {
+        mover.push(i);
+      }
     });
 
-    const all = Array.from(new Set([...est, ...presup, ...plan]));
+    const all = Array.from(new Set([...est, ...presup, ...plan, ...mover]));
 
     return {
       itemsEstimacion: est,
       itemsPresupuesto: presup,
       itemsPlanificacion: plan,
+      itemsMoverEtapa: mover,
       allPendingItems: all,
     };
   }, [iniciativas]);
@@ -9310,10 +9403,12 @@ export function ReportePendientesBP({
         estCount: number;
         presupCount: number;
         planCount: number;
+        moverCount: number;
         totalCount: number;
         itemsEst: Iniciativa[];
         itemsPresup: Iniciativa[];
         itemsPlan: Iniciativa[];
+        itemsMover: Iniciativa[];
         itemsAll: Iniciativa[];
       }
     > = {};
@@ -9326,10 +9421,12 @@ export function ReportePendientesBP({
           estCount: 0,
           presupCount: 0,
           planCount: 0,
+          moverCount: 0,
           totalCount: 0,
           itemsEst: [],
           itemsPresup: [],
           itemsPlan: [],
+          itemsMover: [],
           itemsAll: [],
         };
       }
@@ -9354,14 +9451,20 @@ export function ReportePendientesBP({
       entry.itemsPlan.push(i);
     });
 
+    itemsMoverEtapa.forEach(i => {
+      const entry = getEntry(i.it_bp);
+      entry.moverCount++;
+      entry.itemsMover.push(i);
+    });
+
     Object.values(map).forEach(entry => {
-      const combined = Array.from(new Set([...entry.itemsEst, ...entry.itemsPresup, ...entry.itemsPlan]));
+      const combined = Array.from(new Set([...entry.itemsEst, ...entry.itemsPresup, ...entry.itemsPlan, ...entry.itemsMover]));
       entry.itemsAll = combined;
       entry.totalCount = combined.length;
     });
 
     return Object.values(map);
-  }, [itemsEstimacion, itemsPresupuesto, itemsPlanificacion]);
+  }, [itemsEstimacion, itemsPresupuesto, itemsPlanificacion, itemsMoverEtapa]);
 
   // Ordenamiento
   const sortedSummary = useMemo(() => {
@@ -9372,6 +9475,7 @@ export function ReportePendientesBP({
       else if (sortField === 'est') cmp = a.estCount - b.estCount;
       else if (sortField === 'presup') cmp = a.presupCount - b.presupCount;
       else if (sortField === 'plan') cmp = a.planCount - b.planCount;
+      else if (sortField === 'mover') cmp = a.moverCount - b.moverCount;
       return sortDir === 'asc' ? cmp : -cmp;
     });
   }, [summaryByBP, sortField, sortDir]);
@@ -9396,6 +9500,7 @@ export function ReportePendientesBP({
         'Por Aprobar Est.': s.estCount,
         'Hab. Presupuesto': s.presupCount,
         'Aprobar Planif.': s.planCount,
+        'Por Mover Etapa': s.moverCount,
         total: s.totalCount,
       }));
   }, [sortedSummary]);
@@ -9428,7 +9533,16 @@ export function ReportePendientesBP({
       }));
   }, [sortedSummary]);
 
-  const openBPModal = (bp: string, items: Iniciativa[], title?: string, stageFilter: 'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' = 'all') => {
+  const chartDataMoverEtapa = useMemo(() => {
+    return sortedSummary
+      .filter(s => s.moverCount > 0)
+      .map(s => ({
+        name: optLabel(s.bp).length > 24 ? optLabel(s.bp).slice(0, 22) + '…' : optLabel(s.bp),
+        value: s.moverCount,
+      }));
+  }, [sortedSummary]);
+
+  const openBPModal = (bp: string, items: Iniciativa[], title?: string, stageFilter: BPModalStageFilter = 'all') => {
     setModalSearch('');
     setModalStageFilter(stageFilter);
     setSelectedModalData({
@@ -9438,11 +9552,22 @@ export function ReportePendientesBP({
     });
   };
 
+  const getBPActionText = (t: Iniciativa): string => {
+    const moverAction = getMoverEtapaAction(t);
+    if (moverAction) return moverAction;
+    if (t.etapa_actual === 'por_aprobar_estimacion') return `Aprobar Estimación: ${t.aprobar_estimacion || 'Pendiente'}`;
+    if (t.etapa_actual === 'por_habilitar_presupuesto') return `Habilitar Presupuesto: ${t.presupuesto_habilitado || 'Pendiente'}`;
+    if (t.etapa_actual === 'aprobar_planificacion') return `Aprobar Planificación: ${t.planificacion_aprobada || 'Pendiente'}`;
+    return 'Pendiente';
+  };
+
   const filteredModalItems = useMemo(() => {
     if (!selectedModalData) return [];
     let list = selectedModalData.items;
 
-    if (modalStageFilter !== 'all') {
+    if (modalStageFilter === 'mover_etapa') {
+      list = list.filter(i => Boolean(getMoverEtapaAction(i)));
+    } else if (modalStageFilter !== 'all') {
       list = list.filter(i => i.etapa_actual === modalStageFilter);
     }
 
@@ -9454,18 +9579,32 @@ export function ReportePendientesBP({
         const bp = (i.it_bp || '').toLowerCase();
         const vp = (i.vp_solicitante || '').toLowerCase();
         const sol = (i.usuario_negocio || '').toLowerCase();
-        return idStr.includes(q) || tit.includes(q) || bp.includes(q) || vp.includes(q) || sol.includes(q);
+        const ld = (i.lider_dominio || '').toLowerCase();
+        const act = getBPActionText(i).toLowerCase();
+        return idStr.includes(q) || tit.includes(q) || bp.includes(q) || vp.includes(q) || sol.includes(q) || ld.includes(q) || act.includes(q);
       });
     }
 
-    return list;
-  }, [selectedModalData, modalSearch, modalStageFilter]);
+    return [...list].sort((a, b) => {
+      let cmp = 0;
+      if (bpModalSortField === 'id') cmp = a.id - b.id;
+      else if (bpModalSortField === 'titulo') cmp = (a.titulo || '').localeCompare(b.titulo || '', 'es');
+      else if (bpModalSortField === 'it_bp') cmp = (a.it_bp || '').localeCompare(b.it_bp || '', 'es');
+      else if (bpModalSortField === 'vp_solicitante') cmp = (a.vp_solicitante || '').localeCompare(b.vp_solicitante || '', 'es');
+      else if (bpModalSortField === 'solicitante') cmp = (a.usuario_negocio || '').localeCompare(b.usuario_negocio || '', 'es');
+      else if (bpModalSortField === 'lider_dominio') cmp = (a.lider_dominio || '').localeCompare(b.lider_dominio || '', 'es');
+      else if (bpModalSortField === 'etapa_actual') cmp = (ETAPAS_MAP.get(a.etapa_actual)?.label || a.etapa_actual).localeCompare(ETAPAS_MAP.get(b.etapa_actual)?.label || b.etapa_actual, 'es');
+      else if (bpModalSortField === 'accion_bp') cmp = getBPActionText(a).localeCompare(getBPActionText(b), 'es');
+      return bpModalSortDir === 'asc' ? cmp : -cmp;
+    });
+  }, [selectedModalData, modalSearch, modalStageFilter, bpModalSortField, bpModalSortDir]);
 
   const TABS_CONFIG = [
     { id: 'consolidado' as PendingBPTab, label: 'Consolidado General', count: allPendingItems.length, color: '#8b5cf6', bg: '#f5f3ff' },
     { id: 'por_aprobar_estimacion' as PendingBPTab, label: 'Por Aprobar Estimación', count: itemsEstimacion.length, color: '#8b5cf6', bg: '#f5f3ff' },
     { id: 'por_habilitar_presupuesto' as PendingBPTab, label: 'Por Habilitar Presupuesto', count: itemsPresupuesto.length, color: '#06b6d4', bg: '#ecfeff' },
     { id: 'aprobar_planificacion' as PendingBPTab, label: 'Aprobar Planificación', count: itemsPlanificacion.length, color: '#10b981', bg: '#ecfdf5' },
+    { id: 'mover_etapa' as PendingBPTab, label: 'Por Mover de Etapa', count: itemsMoverEtapa.length, color: '#d97706', bg: '#fffbeb' },
   ];
 
   return (
@@ -9609,6 +9748,30 @@ export function ReportePendientesBP({
           </div>
           <span style={{ fontSize: 10, color: '#059669', fontWeight: 600 }}>Esperando visto bueno plan</span>
         </div>
+
+        <div
+          onClick={() => setActiveTab('mover_etapa')}
+          style={{
+            background: '#ffffff',
+            border: activeTab === 'mover_etapa' ? '1.5px solid #d97706' : '1px solid #e2e8f0',
+            borderRadius: 14,
+            padding: '14px 18px',
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 4,
+            cursor: 'pointer',
+            boxShadow: '0 2px 6px rgba(0,0,0,0.02)',
+          }}
+        >
+          <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: '0.04em' }}>
+            Por Mover de Etapa
+          </span>
+          <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
+            <span style={{ fontSize: 24, fontWeight: 900, color: '#d97706' }}>{itemsMoverEtapa.length}</span>
+            <span style={{ fontSize: 11, color: '#94a3b8' }}>iniciativas</span>
+          </div>
+          <span style={{ fontSize: 10, color: '#d97706', fontWeight: 600 }}>Con datos completos sin avanzar</span>
+        </div>
       </div>
 
       {/* VISTA 1: CONSOLIDADO GENERAL */}
@@ -9632,7 +9795,8 @@ export function ReportePendientesBP({
                   <Tooltip content={<ReportTooltip />} />
                   <Bar dataKey="Por Aprobar Est." stackId="a" fill="#8b5cf6" />
                   <Bar dataKey="Hab. Presupuesto" stackId="a" fill="#06b6d4" />
-                  <Bar dataKey="Aprobar Planif." stackId="a" fill="#10b981" radius={[0, 4, 4, 0]}>
+                  <Bar dataKey="Aprobar Planif." stackId="a" fill="#10b981" />
+                  <Bar dataKey="Por Mover Etapa" stackId="a" fill="#f59e0b" radius={[0, 4, 4, 0]}>
                     <LabelList
                       content={(props: any) => {
                         const { index, x, y, width, height } = props;
@@ -9670,6 +9834,10 @@ export function ReportePendientesBP({
                 <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#10b981' }} />
                 Aprobar Planificación
               </span>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 11, color: '#475569' }}>
+                <span style={{ width: 10, height: 10, borderRadius: 2, backgroundColor: '#f59e0b' }} />
+                Por Mover de Etapa
+              </span>
             </div>
           </div>
 
@@ -9690,6 +9858,9 @@ export function ReportePendientesBP({
                   <th onClick={() => toggleSort('plan')} style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>Aprobar Planif. <SortIcon field="plan" /></span>
                   </th>
+                  <th onClick={() => toggleSort('mover')} style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4 }}>Mover Etapa <SortIcon field="mover" /></span>
+                  </th>
                   <th onClick={() => toggleSort('total')} style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none' }}>
                     <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total Pendientes <SortIcon field="total" /></span>
                   </th>
@@ -9700,7 +9871,7 @@ export function ReportePendientesBP({
               <tbody>
                 {sortedSummary.filter(s => s.totalCount > 0).length === 0 ? (
                   <tr>
-                    <td colSpan={7} style={{ padding: '30px 12px', textAlign: 'center', color: '#94a3b8' }}>
+                    <td colSpan={8} style={{ padding: '30px 12px', textAlign: 'center', color: '#94a3b8' }}>
                       Sin pendientes por parte de los IT BPs.
                     </td>
                   </tr>
@@ -9789,6 +9960,31 @@ export function ReportePendientesBP({
                           <span style={{ color: '#cbd5e1' }}>—</span>
                         )}
                       </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        {row.moverCount > 0 ? (
+                          <span
+                            onClick={() => openBPModal(row.bp, row.itemsMover, `Iniciativas Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 4,
+                              padding: '2px 8px',
+                              borderRadius: 20,
+                              background: '#fffbeb',
+                              color: '#d97706',
+                              border: '1px solid #fde68a',
+                              fontWeight: 700,
+                              fontSize: 11,
+                              cursor: 'pointer',
+                            }}
+                            title="Ver iniciativas por mover de etapa"
+                          >
+                            {row.moverCount}
+                          </span>
+                        ) : (
+                          <span style={{ color: '#cbd5e1' }}>—</span>
+                        )}
+                      </td>
                       <td style={{ padding: '10px 12px', textAlign: 'right' }}>
                         <span style={{ fontWeight: 800, color: '#5b21b6', fontSize: 13 }}>
                           {row.totalCount}
@@ -9827,6 +10023,7 @@ export function ReportePendientesBP({
                   <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#7c3aed' }}>{itemsEstimacion.length}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#0891b2' }}>{itemsPresupuesto.length}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#059669' }}>{itemsPlanificacion.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'center', fontWeight: 800, color: '#d97706' }}>{itemsMoverEtapa.length}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 900, fontSize: 14, color: '#5b21b6' }}>{allPendingItems.length}</td>
                   <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#6d28d9' }}>100%</td>
                   <td />
@@ -10125,6 +10322,102 @@ export function ReportePendientesBP({
         </div>
       )}
 
+      {/* VISTA 5: POR MOVER DE ETAPA */}
+      {activeTab === 'mover_etapa' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div style={{ background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', gap: 8 }}>
+            <AlertCircle size={15} style={{ flexShrink: 0 }} />
+            <span>
+              Iniciativas que aún figuran en <strong>Por estimar</strong> (col. AJ llena), <strong>Por Reestimar</strong> (col. AW llena) o <strong>Por Planificar</strong> (fechas de inicio y fin planificadas llenas) y requieren que el IT BP las mueva a la siguiente etapa.
+            </span>
+          </div>
+
+          <div>
+            <p style={{ fontSize: 10, color: '#94a3b8', marginBottom: 8, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.06em' }}>
+              Iniciativas Por Mover de Etapa por IT BP
+            </p>
+            {chartDataMoverEtapa.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '30px 0', color: '#94a3b8', fontSize: 12 }}>
+                🎉 No hay iniciativas pendientes de cambio de etapa.
+              </div>
+            ) : (
+              <ResponsiveContainer width="100%" height={Math.max(200, chartDataMoverEtapa.length * 36 + 30)}>
+                <BarChart data={chartDataMoverEtapa} layout="vertical" margin={{ top: 0, right: 65, left: 10, bottom: 0 }}>
+                  <CartesianGrid strokeDasharray="3 3" horizontal={false} stroke="#f0f4f8" />
+                  <XAxis type="number" style={{ fontSize: 10 }} allowDecimals={false} />
+                  <YAxis dataKey="name" type="category" width={175} style={{ fontSize: 11 }} tick={{ fill: '#475569' }} />
+                  <Tooltip content={<ReportTooltip />} />
+                  <Bar dataKey="value" name="Por Mover de Etapa" fill="#f59e0b" radius={[0, 4, 4, 0]}>
+                    <LabelList
+                      content={(props: any) => {
+                        const { x, y, width, height, value } = props;
+                        if (!value) return null;
+                        return (
+                          <text
+                            x={x + width + 8}
+                            y={y + height / 2}
+                            fill="#b45309"
+                            textAnchor="start"
+                            dominantBaseline="central"
+                            style={{ fontSize: 11, fontWeight: 700 }}
+                          >
+                            {value}
+                          </text>
+                        );
+                      }}
+                    />
+                  </Bar>
+                </BarChart>
+              </ResponsiveContainer>
+            )}
+          </div>
+
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
+              <thead>
+                <tr style={{ background: '#f8fafc' }}>
+                  <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>IT BP</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Mover Etapa</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSummary.filter(s => s.moverCount > 0).map((row, idx) => (
+                  <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                    <td style={{ padding: '10px 12px' }}>
+                      <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')} />
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#d97706', fontSize: 13 }}>{row.moverCount}</td>
+                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: 20 }}>
+                        {Math.round((row.moverCount / (itemsMoverEtapa.length || 1)) * 100)}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                      <button
+                        onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
+                        style={{ fontSize: 11, fontWeight: 600, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                      >
+                        Ver Iniciativas
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+              <tfoot>
+                <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
+                  <td style={{ padding: '10px 12px', fontWeight: 700, fontSize: 12, color: '#334155' }}>TOTAL</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, fontSize: 13, color: '#d97706' }}>{itemsMoverEtapa.length}</td>
+                  <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 700, color: '#d97706' }}>100%</td>
+                  <td />
+                </tr>
+              </tfoot>
+            </table>
+          </div>
+        </div>
+      )}
+
       {/* ================================================================
           MODAL DE DETALLE DE INICIATIVAS PENDIENTES DEL BP TI
       ================================================================ */}
@@ -10147,9 +10440,9 @@ export function ReportePendientesBP({
             style={{
               backgroundColor: '#ffffff',
               borderRadius: 16,
-              boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.25)',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 10px 10px -5px rgba(0, 0, 0, 0.05)',
               width: '96vw',
-              maxWidth: 1500,
+              maxWidth: 1650,
               maxHeight: '90vh',
               display: 'flex',
               flexDirection: 'column',
@@ -10158,214 +10451,545 @@ export function ReportePendientesBP({
             }}
             onClick={e => e.stopPropagation()}
           >
-            {/* Header del modal */}
+            {/* Header del modal (estilo Líderes de Dominio) */}
             <div
               style={{
-                padding: '16px 22px',
+                padding: '16px 24px',
                 borderBottom: '1px solid #f1f5f9',
                 display: 'flex',
                 alignItems: 'center',
                 justifyContent: 'space-between',
                 background: 'linear-gradient(to right, #f8fafc, #ffffff)',
+                flexWrap: 'wrap',
+                gap: 12,
               }}
             >
               <div>
-                <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: 0 }}>
-                  {selectedModalData.title}
-                </h3>
-                <p style={{ fontSize: 12, color: '#64748b', margin: '3px 0 0 0' }}>
-                  Mostrando {filteredModalItems.length} de {selectedModalData.items.length} iniciativas pendientes
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <AlertTriangle size={18} style={{ color: '#8b5cf6' }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#0f172a', margin: 0 }}>
+                    {selectedModalData.title}
+                  </h3>
+                </div>
+                <p style={{ fontSize: 12, color: '#64748b', margin: '4px 0 0 0' }}>
+                  Pendientes de gestión por IT BP ({filteredModalItems.length === selectedModalData.items.length ? `${selectedModalData.items.length} iniciativas` : `mostrando ${filteredModalItems.length} de ${selectedModalData.items.length} iniciativas`})
                 </p>
               </div>
-              <button
-                onClick={() => setSelectedModalData(null)}
-                style={{
-                  background: '#f1f5f9',
-                  border: 'none',
-                  borderRadius: '50%',
-                  width: 32,
-                  height: 32,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  cursor: 'pointer',
-                  color: '#64748b',
-                }}
-              >
-                <X size={16} />
-              </button>
-            </div>
 
-            {/* Barra de filtros del modal */}
-            <div
-              style={{
-                padding: '10px 22px',
-                borderBottom: '1px solid #f1f5f9',
-                display: 'flex',
-                flexWrap: 'wrap',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                gap: 12,
-                backgroundColor: '#fafafa',
-              }}
-            >
-              {/* Buscador */}
-              <div style={{ position: 'relative', minWidth: 260, flex: 1, maxWidth: 420 }}>
-                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input
-                  type="text"
-                  placeholder="Buscar por ID, título, solicitante, VP..."
-                  value={modalSearch}
-                  onChange={e => setModalSearch(e.target.value)}
-                  style={{
-                    width: '100%',
-                    padding: '6px 10px 6px 30px',
-                    fontSize: 12,
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    outline: 'none',
-                    backgroundColor: '#ffffff',
-                  }}
-                />
-              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                {/* Search box */}
+                <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                  <Search size={12} style={{ position: 'absolute', left: 8, color: '#94a3b8', pointerEvents: 'none' }} />
+                  <input
+                    type="text"
+                    placeholder="Buscar en resultados..."
+                    value={modalSearch}
+                    onChange={e => setModalSearch(e.target.value)}
+                    style={{
+                      padding: '5px 24px 5px 26px',
+                      fontSize: 11,
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      outline: 'none',
+                      width: 180,
+                      color: '#1e293b',
+                      background: '#fff',
+                    }}
+                  />
+                  {modalSearch && (
+                    <button
+                      type="button"
+                      onClick={() => setModalSearch('')}
+                      style={{
+                        position: 'absolute',
+                        right: 6,
+                        background: 'none',
+                        border: 'none',
+                        cursor: 'pointer',
+                        padding: 0,
+                        color: '#94a3b8',
+                        display: 'flex',
+                        alignItems: 'center',
+                      }}
+                      title="Limpiar búsqueda"
+                    >
+                      <X size={11} />
+                    </button>
+                  )}
+                </div>
 
-              {/* Filtro de etapa */}
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b' }}>Fase:</span>
-                <select
-                  value={modalStageFilter}
-                  onChange={e => setModalStageFilter(e.target.value as any)}
+                {/* Reset filters button */}
+                {(Boolean(modalSearch.trim()) || modalStageFilter !== 'all') && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setModalSearch('');
+                      setModalStageFilter('all');
+                    }}
+                    style={{
+                      fontSize: 10,
+                      color: '#ef4444',
+                      fontWeight: 700,
+                      background: '#fef2f2',
+                      border: '1px solid #fecaca',
+                      borderRadius: 6,
+                      padding: '4px 8px',
+                      cursor: 'pointer',
+                    }}
+                    title="Restablecer filtros del modal"
+                  >
+                    Limpiar filtros
+                  </button>
+                )}
+
+                {/* Filtro de fase */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Fase:</span>
+                  <select
+                    value={modalStageFilter}
+                    onChange={e => setModalStageFilter(e.target.value as BPModalStageFilter)}
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      color: '#1e293b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="all">Todas las fases pendientes</option>
+                    <option value="por_aprobar_estimacion">Por Aprobar Estimación</option>
+                    <option value="por_habilitar_presupuesto">Por Habilitar Presupuesto</option>
+                    <option value="aprobar_planificacion">Aprobar Planificación</option>
+                    <option value="mover_etapa">Por Mover de Etapa</option>
+                  </select>
+                </div>
+
+                {/* Sort selector toolbar */}
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Ordenar por:</span>
+                  <select
+                    value={bpModalSortField}
+                    onChange={e => setBpModalSortField(e.target.value as BPModalSortField)}
+                    style={{
+                      fontSize: 11,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      color: '#1e293b',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <option value="id">ID</option>
+                    <option value="titulo">Título de la Iniciativa</option>
+                    <option value="it_bp">IT BP</option>
+                    <option value="vp_solicitante">VP Área Solicitante</option>
+                    <option value="solicitante">Solicitante</option>
+                    <option value="lider_dominio">Líder de Dominio</option>
+                    <option value="etapa_actual">Etapa Pipeline</option>
+                    <option value="accion_bp">Acción Pendiente BP</option>
+                  </select>
+                  <button
+                    type="button"
+                    onClick={() => setBpModalSortDir(d => (d === 'asc' ? 'desc' : 'asc'))}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 3,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      padding: '3px 8px',
+                      borderRadius: 6,
+                      border: '1px solid #cbd5e1',
+                      background: '#fff',
+                      color: '#2563eb',
+                      cursor: 'pointer',
+                    }}
+                    title={bpModalSortDir === 'asc' ? 'Orden Ascendente (clic para cambiar a Descendente)' : 'Orden Descendente (clic para cambiar a Ascendente)'}
+                  >
+                    {bpModalSortDir === 'asc' ? '↑ Asc' : '↓ Desc'}
+                  </button>
+                </div>
+
+                {/* Columnas selector */}
+                <div style={{ position: 'relative' }}>
+                  <button
+                    type="button"
+                    onClick={() => setShowBpModalColPicker(prev => !prev)}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      fontSize: 11,
+                      fontWeight: 600,
+                      color: bpHiddenModalCols.size > 0 ? '#2563eb' : '#475569',
+                      background: bpHiddenModalCols.size > 0 ? '#eff6ff' : '#fff',
+                      border: bpHiddenModalCols.size > 0 ? '1px solid #bfdbfe' : '1px solid #cbd5e1',
+                      borderRadius: 6,
+                      padding: '4px 10px',
+                      cursor: 'pointer',
+                      boxShadow: '0 1px 2px rgba(0,0,0,0.04)',
+                    }}
+                    title="Ocultar / Mostrar y reordenar columnas del modal"
+                  >
+                    <Columns3 size={13} style={{ color: bpHiddenModalCols.size > 0 ? '#2563eb' : '#64748b' }} />
+                    <span>Columnas ({DEFAULT_BP_MODAL_COLS.length - bpHiddenModalCols.size}/{DEFAULT_BP_MODAL_COLS.length})</span>
+                    <ChevronDown size={11} />
+                  </button>
+
+                  {showBpModalColPicker && (
+                    <>
+                      <div
+                        style={{ position: 'fixed', inset: 0, zIndex: 10000 }}
+                        onClick={() => setShowBpModalColPicker(false)}
+                      />
+                      <div
+                        style={{
+                          position: 'absolute',
+                          right: 0,
+                          marginTop: 4,
+                          width: 260,
+                          background: '#fff',
+                          border: '1px solid #e2e8f0',
+                          borderRadius: 10,
+                          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.15), 0 8px 10px -6px rgba(0,0,0,0.1)',
+                          zIndex: 10001,
+                          padding: 10,
+                        }}
+                      >
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', paddingBottom: 6, marginBottom: 6, borderBottom: '1px solid #f1f5f9' }}>
+                          <span style={{ fontSize: 11, fontWeight: 700, color: '#1e293b' }}>Columnas & Orden</span>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                              type="button"
+                              onClick={resetBpModalCols}
+                              style={{ fontSize: 10, color: '#64748b', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                              title="Restablecer orden y visibilidad predeterminada"
+                            >
+                              Restablecer
+                            </button>
+                            {bpHiddenModalCols.size > 0 && (
+                              <button
+                                type="button"
+                                onClick={() => setBpHiddenModalCols(new Set())}
+                                style={{ fontSize: 10, color: '#2563eb', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', textDecoration: 'underline' }}
+                              >
+                                Ver todas
+                              </button>
+                            )}
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 3, maxHeight: 250, overflowY: 'auto' }}>
+                          {bpModalColOrder.map((colId, idx) => {
+                            const col = DEFAULT_BP_MODAL_COLS.find(c => c.id === colId);
+                            if (!col) return null;
+                            const isVis = !bpHiddenModalCols.has(col.id);
+                            return (
+                              <div
+                                key={col.id}
+                                style={{
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'space-between',
+                                  padding: '4px 6px',
+                                  borderRadius: 6,
+                                  fontSize: 11,
+                                  background: isVis ? '#ffffff' : '#f8fafc',
+                                  border: '1px solid #f1f5f9',
+                                }}
+                              >
+                                <label style={{ display: 'flex', alignItems: 'center', gap: 6, cursor: 'pointer', flex: 1, minWidth: 0 }}>
+                                  <input
+                                    type="checkbox"
+                                    checked={isVis}
+                                    onChange={() => toggleBpModalCol(col.id)}
+                                    style={{ cursor: 'pointer', accentColor: '#2563eb' }}
+                                  />
+                                  <span style={{ color: isVis ? '#1e293b' : '#94a3b8', textDecoration: isVis ? 'none' : 'line-through', fontWeight: isVis ? 500 : 400, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                    {col.label}
+                                  </span>
+                                </label>
+                                <div style={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+                                  <button
+                                    type="button"
+                                    disabled={idx === 0}
+                                    onClick={() => moveBpModalCol(col.id, 'up')}
+                                    style={{
+                                      border: '1px solid #e2e8f0',
+                                      background: idx === 0 ? '#f8fafc' : '#ffffff',
+                                      borderRadius: 4,
+                                      cursor: idx === 0 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === 0 ? 0.3 : 0.85,
+                                      padding: '1px 5px',
+                                      fontSize: 9,
+                                      color: '#475569',
+                                    }}
+                                    title="Mover columna a la izquierda"
+                                  >
+                                    ▲
+                                  </button>
+                                  <button
+                                    type="button"
+                                    disabled={idx === bpModalColOrder.length - 1}
+                                    onClick={() => moveBpModalCol(col.id, 'down')}
+                                    style={{
+                                      border: '1px solid #e2e8f0',
+                                      background: idx === bpModalColOrder.length - 1 ? '#f8fafc' : '#ffffff',
+                                      borderRadius: 4,
+                                      cursor: idx === bpModalColOrder.length - 1 ? 'not-allowed' : 'pointer',
+                                      opacity: idx === bpModalColOrder.length - 1 ? 0.3 : 0.85,
+                                      padding: '1px 5px',
+                                      fontSize: 9,
+                                      color: '#475569',
+                                    }}
+                                    title="Mover columna a la derecha"
+                                  >
+                                    ▼
+                                  </button>
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                        <div style={{ paddingTop: 6, marginTop: 6, borderTop: '1px solid #f1f5f9', display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 10, color: '#94a3b8' }}>
+                          <span>Tip: También puedes arrastrar encabezados</span>
+                          <button
+                            type="button"
+                            onClick={() => setShowBpModalColPicker(false)}
+                            style={{ fontSize: 10, background: '#f1f5f9', border: 'none', borderRadius: 4, padding: '2px 8px', cursor: 'pointer', color: '#475569', fontWeight: 600 }}
+                          >
+                            Cerrar
+                          </button>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <button
+                  onClick={() => setSelectedModalData(null)}
                   style={{
-                    fontSize: 11.5,
-                    padding: '5px 10px',
-                    borderRadius: 8,
-                    border: '1px solid #cbd5e1',
-                    background: '#ffffff',
-                    color: '#334155',
+                    background: '#f1f5f9',
+                    border: 'none',
+                    borderRadius: '50%',
+                    width: 32,
+                    height: 32,
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
                     cursor: 'pointer',
+                    color: '#64748b',
+                    transition: 'background-color 0.15s',
                   }}
+                  onMouseOver={e => (e.currentTarget.style.backgroundColor = '#e2e8f0')}
+                  onMouseOut={e => (e.currentTarget.style.backgroundColor = '#f1f5f9')}
                 >
-                  <option value="all">Todas las fases pendientes</option>
-                  <option value="por_aprobar_estimacion">Por Aprobar Estimación</option>
-                  <option value="por_habilitar_presupuesto">Por Habilitar Presupuesto</option>
-                  <option value="aprobar_planificacion">Aprobar Planificación</option>
-                </select>
+                  <X size={16} />
+                </button>
               </div>
             </div>
 
             {/* Tabla de iniciativas */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 22px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
               {filteredModalItems.length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 0', color: '#94a3b8', fontSize: 13 }}>
-                  No se encontraron iniciativas con los filtros aplicados.
+                <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: 13 }}>
+                  No se encontraron iniciativas con los filtros aplicados en esta selección.
                 </div>
               ) : (
-                <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>
-                  <thead>
-                    <tr style={{ background: '#f8fafc', color: '#475569', borderBottom: '2px solid #e2e8f0', textAlign: 'left' }}>
-                      <th style={{ padding: '8px 8px', width: 36, textAlign: 'center' }}>
-                        <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
-                      </th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700, whiteSpace: 'nowrap' }}>ID</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700, minWidth: 260 }}>Título de la Iniciativa</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>IT BP</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>VP Solicitante</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Solicitante</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Líder Dominio</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Etapa Pipeline</th>
-                      <th style={{ padding: '8px 10px', fontWeight: 700 }}>Acción Pendiente BP</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredModalItems.map((t, idx) => {
-                      const idStr = String(t.id).padStart(4, '0');
-                      const cfg = ETAPAS_MAP.get(t.etapa_actual);
-
-                      let pendingBadge = null;
-                      if (t.etapa_actual === 'por_aprobar_estimacion') {
-                        pendingBadge = (
-                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontWeight: 700 }}>
-                            Aprobar Estimación: {t.aprobar_estimacion || 'Pendiente'}
-                          </span>
-                        );
-                      } else if (t.etapa_actual === 'por_habilitar_presupuesto') {
-                        pendingBadge = (
-                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc', fontWeight: 700 }}>
-                            Habilitar Presupuesto: {t.presupuesto_habilitado || 'Pendiente'}
-                          </span>
-                        );
-                      } else if (t.etapa_actual === 'aprobar_planificacion') {
-                        pendingBadge = (
-                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontWeight: 700 }}>
-                            Aprobar Planificación: {t.planificacion_aprobada || 'Pendiente'}
-                          </span>
-                        );
-                      }
-
-                      return (
-                        <tr
-                          key={t.id}
-                          style={{
-                            borderBottom: '1px solid #f1f5f9',
-                            backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                          }}
-                        >
-                          <td style={{ padding: '8px 8px', textAlign: 'center' }}>
-                            <button
-                              type="button"
-                              onClick={() => onOpenDetailModal(t)}
-                              style={{
-                                background: '#eff6ff',
-                                border: '1px solid #bfdbfe',
-                                borderRadius: 6,
-                                width: 26,
-                                height: 26,
-                                display: 'inline-flex',
-                                alignItems: 'center',
-                                justifyContent: 'center',
-                                cursor: 'pointer',
-                                color: '#2563eb',
+                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                    <thead>
+                      <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                        <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
+                          <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
+                        </th>
+                        {bpModalColOrder.map(colId => {
+                          if (bpHiddenModalCols.has(colId)) return null;
+                          const colMeta = DEFAULT_BP_MODAL_COLS.find(c => c.id === colId);
+                          if (!colMeta) return null;
+                          const isDragging = bpDraggingColId === colId;
+                          const isDragOver = bpDragOverColId === colId;
+                          return (
+                            <th
+                              key={colId}
+                              draggable
+                              onDragStart={e => {
+                                e.dataTransfer.setData('text/plain', colId);
+                                e.dataTransfer.effectAllowed = 'move';
+                                setBpDraggingColId(colId);
                               }}
-                              title="Abrir detalle completo de la iniciativa"
+                              onDragOver={e => {
+                                e.preventDefault();
+                                e.dataTransfer.dropEffect = 'move';
+                                if (bpDragOverColId !== colId) setBpDragOverColId(colId);
+                              }}
+                              onDrop={e => {
+                                e.preventDefault();
+                                const fromId = e.dataTransfer.getData('text/plain') as BPModalSortField;
+                                if (fromId && fromId !== colId) {
+                                  setBpModalColOrder(prev => {
+                                    const fromIdx = prev.indexOf(fromId);
+                                    const toIdx = prev.indexOf(colId);
+                                    if (fromIdx === -1 || toIdx === -1) return prev;
+                                    const next = [...prev];
+                                    const [moved] = next.splice(fromIdx, 1);
+                                    next.splice(toIdx, 0, moved);
+                                    return next;
+                                  });
+                                }
+                                setBpDraggingColId(null);
+                                setBpDragOverColId(null);
+                              }}
+                              onDragEnd={() => {
+                                setBpDraggingColId(null);
+                                setBpDragOverColId(null);
+                              }}
+                              onClick={() => {
+                                if (bpModalSortField === colId) setBpModalSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                                else { setBpModalSortField(colId); setBpModalSortDir('asc'); }
+                              }}
+                              style={{
+                                padding: '8px 10px',
+                                whiteSpace: 'nowrap',
+                                userSelect: 'none',
+                                fontSize: 11,
+                                fontWeight: 700,
+                                color: '#475569',
+                                backgroundColor: isDragOver ? '#dbeafe' : isDragging ? '#f1f5f9' : '#f8fafc',
+                                borderRight: isDragOver ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                                cursor: 'grab',
+                                opacity: isDragging ? 0.4 : 1,
+                                minWidth: colId === 'titulo' ? 260 : undefined,
+                              }}
+                              title="Clic para ordenar / Arrastrar para reordenar columna"
                             >
-                              <Eye size={13} />
-                            </button>
-                          </td>
-                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap' }}>
-                            {idStr}
-                          </td>
-                          <td style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', minWidth: 260, lineHeight: 1.4 }}>
-                            {t.titulo}
-                          </td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>
-                            {t.it_bp || '—'}
-                          </td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>
-                            {t.vp_solicitante || '—'}
-                          </td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>
-                            {t.usuario_negocio || '—'}
-                          </td>
-                          <td style={{ padding: '8px 10px', color: '#475569' }}>
-                            {t.lider_dominio || '—'}
-                          </td>
-                          <td style={{ padding: '8px 10px' }}>
-                            {cfg ? (
-                              <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, backgroundColor: cfg.bgColor, color: cfg.textColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                {cfg.label}
+                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {colMeta.label}
+                                {bpModalSortField === colId && (
+                                  <span style={{ color: '#2563eb', fontSize: 10 }}>{bpModalSortDir === 'asc' ? '↑' : '↓'}</span>
+                                )}
                               </span>
-                            ) : (
-                              <span>{t.etapa_actual}</span>
-                            )}
-                          </td>
-                          <td style={{ padding: '8px 10px' }}>
-                            {pendingBadge}
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </table>
+                            </th>
+                          );
+                        })}
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredModalItems.map((t, idx) => {
+                        const idStr = String(t.id).padStart(4, '0');
+                        const cfg = ETAPAS_MAP.get(t.etapa_actual);
+                        const moverAction = getMoverEtapaAction(t);
+
+                        let pendingBadge = null;
+                        if (moverAction) {
+                          pendingBadge = (
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                              {moverAction}
+                            </span>
+                          );
+                        } else if (t.etapa_actual === 'por_aprobar_estimacion') {
+                          pendingBadge = (
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontWeight: 700 }}>
+                              Aprobar Estimación: {t.aprobar_estimacion || 'Pendiente'}
+                            </span>
+                          );
+                        } else if (t.etapa_actual === 'por_habilitar_presupuesto') {
+                          pendingBadge = (
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc', fontWeight: 700 }}>
+                              Habilitar Presupuesto: {t.presupuesto_habilitado || 'Pendiente'}
+                            </span>
+                          );
+                        } else if (t.etapa_actual === 'aprobar_planificacion') {
+                          pendingBadge = (
+                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontWeight: 700 }}>
+                              Aprobar Planificación: {t.planificacion_aprobada || 'Pendiente'}
+                            </span>
+                          );
+                        }
+
+                        return (
+                          <tr
+                            key={t.id}
+                            style={{
+                              borderBottom: '1px solid #f1f5f9',
+                              backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                            }}
+                          >
+                            <td style={{ padding: '8px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
+                              <button
+                                type="button"
+                                onClick={() => onOpenDetailModal(t)}
+                                style={{
+                                  background: '#eff6ff',
+                                  border: '1px solid #bfdbfe',
+                                  borderRadius: 6,
+                                  width: 26,
+                                  height: 26,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  cursor: 'pointer',
+                                  color: '#2563eb',
+                                }}
+                                title="Abrir detalle completo de la iniciativa"
+                              >
+                                <Eye size={13} />
+                              </button>
+                            </td>
+                            {bpModalColOrder.map(colId => {
+                              if (bpHiddenModalCols.has(colId)) return null;
+                              if (colId === 'id') {
+                                return (
+                                  <td key={colId} style={{ padding: '8px 10px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
+                                    {idStr}
+                                  </td>
+                                );
+                              }
+                              if (colId === 'titulo') {
+                                return (
+                                  <td key={colId} style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', minWidth: 260, lineHeight: 1.4, borderRight: '1px solid #f1f5f9' }}>
+                                    {t.titulo}
+                                  </td>
+                                );
+                              }
+                              if (colId === 'it_bp') {
+                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.it_bp || '—'}</td>;
+                              }
+                              if (colId === 'vp_solicitante') {
+                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.vp_solicitante || '—'}</td>;
+                              }
+                              if (colId === 'solicitante') {
+                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.usuario_negocio || '—'}</td>;
+                              }
+                              if (colId === 'lider_dominio') {
+                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.lider_dominio || '—'}</td>;
+                              }
+                              if (colId === 'etapa_actual') {
+                                return (
+                                  <td key={colId} style={{ padding: '8px 10px', borderRight: '1px solid #f1f5f9' }}>
+                                    {cfg ? (
+                                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, backgroundColor: cfg.bgColor, color: cfg.textColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                        {cfg.label}
+                                      </span>
+                                    ) : (
+                                      <span>{t.etapa_actual}</span>
+                                    )}
+                                  </td>
+                                );
+                              }
+                              if (colId === 'accion_bp') {
+                                return <td key={colId} style={{ padding: '8px 10px' }}>{pendingBadge}</td>;
+                              }
+                              return null;
+                            })}
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </table>
+                </div>
               )}
             </div>
 

@@ -426,6 +426,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
       if (t.institucion) map.set('Institución', t.institucion);
       if (t.vp_solicitante) map.set('VP Solicitante', t.vp_solicitante);
       if (t.direccion_solicitante) map.set('Dirección Solicitante', t.direccion_solicitante);
+      if (t.priorizacion_vp) map.set('Priorización VP', t.priorizacion_vp);
       if (t.nombre_vp) map.set('Nombre VP', t.nombre_vp);
       if (t.usuario_negocio) map.set('Solicitante', t.usuario_negocio);
       if (t.it_bp) map.set('IT BP', t.it_bp);
@@ -448,6 +449,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
       if (t.institucion) map.set('Institución', t.institucion);
       if (t.vp_solicitante) map.set('VP del Área Solicitante', t.vp_solicitante);
       if (t.direccion_solicitante) map.set('Dirección del Área Solicitante', t.direccion_solicitante);
+      if (t.priorizacion_vp) map.set('Priorización VP', t.priorizacion_vp);
       if (t.usuario_negocio) map.set('Usuario Solicitante del Negocio', t.usuario_negocio);
       if (t.it_bp) map.set('IT BP', t.it_bp);
       if (t.fecha_registro) map.set('Fecha de Registro', fmtDateTime(t.fecha_registro));
@@ -571,6 +573,7 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
             { label: 'Institución', value: t.institucion },
             { label: 'VP / Área Solicitante', value: t.vp_solicitante || t.nombre_vp },
             { label: 'Dirección Solicitante', value: t.direccion_solicitante ?? getRawVal('Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante') },
+            { label: 'Priorización VP', value: t.priorizacion_vp ?? getRawVal('Priorización VP', 'Priorizacion VP') },
             { label: 'Solicitante', value: t.usuario_negocio },
             { label: 'IT BP', value: t.it_bp },
             { label: 'Líder de Dominio', value: t.lider_dominio },
@@ -626,7 +629,8 @@ export function IniciativaDetail({ t, mode = 'demanda', onOpenModal, isModal = f
           { label: 'Fecha de Registro', value: fmtDateTime(t.fecha_registro) },
           { label: 'Institución', value: t.institucion },
           { label: 'VP Solicitante', value: t.vp_solicitante },
-          { label: 'Dirección Solicitante', value: t.direccion_solicitante ?? getRawVal('Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante') },
+          { label: 'Dirección del área solicitante', value: t.direccion_solicitante ?? getRawVal('Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante') },
+          { label: 'Priorización VP', value: t.priorizacion_vp ?? getRawVal('Priorización VP', 'Priorizacion VP') },
           { label: 'Usuario / Gerencia Solicitante', value: t.usuario_negocio },
           { label: 'Correo Solicitante', value: getRawVal('Correo electrónico', 'Email', 'Correo') },
           { label: 'Nombre Solicitante', value: getRawVal('Nombre') },

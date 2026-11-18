@@ -66,6 +66,7 @@ export function generateMockData(): DashboardData {
       institucion: pick(instituciones),
       vp_solicitante: `VP Área ${Math.floor(Math.random() * 5) + 1}`,
       direccion_solicitante: null,
+      priorizacion_vp: null,
       usuario_negocio: `Gerente Negocio ${Math.floor(Math.random() * 10) + 1}`,
       it_bp: pick(it_bps),
       fecha_entrega_requerida: entrega.toISOString(),

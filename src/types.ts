@@ -93,6 +93,9 @@ export interface Iniciativa {
   // Campo añadido en v90 (Col AB: Dirección del área solicitante en todas las hojas operativas)
   direccion_solicitante?: string | null;
 
+  // Campo añadido en v91 (Col AC: Priorización VP en todas las hojas operativas)
+  priorizacion_vp?: string | null;
+
   /** Diccionario con todos los campos originales del archivo Excel (sin omitir ninguno) */
   raw_fields?: Record<string, unknown>;
 

@@ -212,6 +212,30 @@ function parseSiNo(val: unknown): 'SI' | 'NO' | null {
   return null;
 }
 
+/**
+ * Recorta el rango `!ref` de una hoja Excel al rectángulo real de celdas con datos,
+ * evitando que formatos o celdas vacías hasta la fila 1,048,576 congelen `sheet_to_json`.
+ */
+function clampSheetRef(sheet: XLSX.WorkSheet): XLSX.Range | null {
+  let maxR = -1;
+  let maxC = -1;
+
+  for (const key of Object.keys(sheet)) {
+    if (key.startsWith('!')) continue;
+    const cell = sheet[key] as XLSX.CellObject | undefined;
+    if (!cell || cell.v === undefined || cell.v === null || cell.v === '') continue;
+    const { r, c } = XLSX.utils.decode_cell(key);
+    if (r > maxR) maxR = r;
+    if (c > maxC) maxC = c;
+  }
+
+  if (maxR < 0 || maxC < 0) return null;
+
+  const clamped: XLSX.Range = { s: { r: 0, c: 0 }, e: { r: maxR, c: maxC } };
+  sheet['!ref'] = XLSX.utils.encode_range(clamped);
+  return clamped;
+}
+
 // ---------------------------------------------------------------------------
 // Parser principal
 // ---------------------------------------------------------------------------
@@ -328,7 +352,14 @@ export async function parseExcelFile(
         expectedTabs.forEach(sheetName => {
           const sheet = workbook.Sheets[sheetName];
           if (!sheet) return;
-          const headerRows = XLSX.utils.sheet_to_json(sheet, { header: 1 }) as unknown[][];
+          const range = clampSheetRef(sheet);
+          if (!range) return;
+
+          // Leer únicamente la fila de encabezados (fila 0) en lugar de toda la hoja
+          const headerRows = XLSX.utils.sheet_to_json(sheet, {
+            header: 1,
+            range: { s: { r: 0, c: 0 }, e: { r: 0, c: range.e.c } },
+          }) as unknown[][];
           if (!headerRows || headerRows.length === 0) return;
           
           const headers = (headerRows[0] || []).map(h => String(h || '').trim()).filter(h => h && !h.startsWith('__EMPTY'));
@@ -631,6 +662,7 @@ export async function parsePlanificadasExcelFile(
   if (!sheet) {
     throw new Error(`⚠️ El archivo Excel no contiene la pestaña requerida "${sheetName}".`);
   }
+  clampSheetRef(sheet);
 
   notify(50, 'Extrayendo iniciativas...', 'Procesando registros planificados...');
   await new Promise(r => setTimeout(r, 60));

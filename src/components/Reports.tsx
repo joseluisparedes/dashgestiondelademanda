@@ -9,6 +9,12 @@ import { ETAPAS_CONFIG, ETAPAS_MAP, ETAPAS_PLANIFICADAS_CONFIG, ETAPAS_PLANIFICA
 import { format, parseISO, differenceInCalendarDays, startOfDay, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 import {
+  exportFueraFechaToHTML,
+  exportPendientesBPToHTML,
+  exportEstadosToHTML,
+  exportITBPToHTML,
+} from '../lib/reportHtmlExport';
+import {
   ResponsiveContainer,
   BarChart,
   Bar,
@@ -12269,6 +12275,55 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     ? macroVPs.length === 0
     : filtered.length === 0;
 
+  const handleExportCurrentReport = () => {
+    const filterParts: string[] = [];
+    if (macroInstituciones.length) filterParts.push(`Institución: ${macroInstituciones.map(optLabel).join(', ')}`);
+    if (macroITBPs.length) filterParts.push(`IT BP: ${macroITBPs.map(optLabel).join(', ')}`);
+    if (macroVPs.length) filterParts.push(`VP: ${macroVPs.map(optLabel).join(', ')}`);
+    if (macroEtapas.length) filterParts.push(`Estado: ${macroEtapas.join(', ')}`);
+    if (macroLideres.length) filterParts.push(`Líder: ${macroLideres.map(optLabel).join(', ')}`);
+    if (macroMotivos.length) filterParts.push(`Motivo: ${macroMotivos.join(', ')}`);
+    if (macroSPO.length) filterParts.push(`Proyecto SPO: ${macroSPO.map(optLabel).join(', ')}`);
+    const filterSummary = filterParts.join(' · ');
+
+    switch (selectedReport) {
+      case 'fuera_fecha':
+        exportFueraFechaToHTML({
+          iniciativas: filtered,
+          checkEstimacion: checkFueraFechaEstimacion,
+          checkReestimacion: checkFueraFechaReestimacion,
+          checkPlanificacion: checkFueraFechaPlanificacion,
+          filterSummary,
+        });
+        break;
+      case 'pendientes_bp':
+        exportPendientesBPToHTML({
+          iniciativas: filtered,
+          isAffirmative,
+          getMoverEtapaAction,
+          filterSummary,
+        });
+        break;
+      case 'estados':
+        exportEstadosToHTML({ iniciativas: filtered, filterSummary });
+        break;
+      case 'it_bp':
+        exportITBPToHTML({ iniciativas: filtered, filterSummary });
+        break;
+      case 'vp':
+      default:
+        exportReportToHTML(
+          exportDataset,
+          macroVPs,
+          macro,
+          `Reporte_Demanda_TI_${selectedReport || 'General'}`,
+          opts.vps,
+          dateFilters
+        );
+        break;
+    }
+  };
+
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
 
@@ -12458,16 +12513,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                     {/* BOTÓN ÚNICO DE EXPORTACIÓN HTML */}
                     <button
                       type="button"
-                      onClick={() => exportReportToHTML(
-                        exportDataset,
-                        macroVPs,
-                        macro,
-                        `Reporte_Demanda_TI_${selectedReport || 'General'}`,
-                        opts.vps,
-                        dateFilters
-                      )}
+                      onClick={handleExportCurrentReport}
                       disabled={isExportDisabled}
-                      title={isExportDisabled ? 'Selecciona al menos una vicepresidencia para exportar' : 'Exportar resultado filtrado actual en un archivo HTML independiente'}
+                      title={
+                        isExportDisabled
+                          ? selectedReport === 'vp'
+                            ? 'Selecciona al menos una vicepresidencia para exportar'
+                            : 'No hay iniciativas filtradas para exportar'
+                          : 'Exportar resultado filtrado actual en un archivo HTML independiente'
+                      }
                       style={{
                         fontSize: 11,
                         color: isExportDisabled ? '#94a3b8' : '#ffffff',

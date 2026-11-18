@@ -35,6 +35,7 @@ import {
   GitBranch,
   UserCog,
   AlertTriangle,
+  AlertCircle,
   Clock,
   CalendarX,
   RotateCcw,

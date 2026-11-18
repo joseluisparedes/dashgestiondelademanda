@@ -9282,6 +9282,21 @@ function getMoverEtapaAction(i: Iniciativa): string | null {
   return null;
 }
 
+function getTiempoEstimadoMover(i: Iniciativa): string {
+  let raw: unknown = null;
+  if (i.etapa_actual === 'por_estimar') {
+    raw = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
+  } else if (i.etapa_actual === 'por_reestimar') {
+    raw = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
+  }
+  if (!isFilledVal(raw)) return '—';
+  const num = Number(raw);
+  if (!Number.isNaN(num)) {
+    return `${num} ${num === 1 ? 'mes' : 'meses'}`;
+  }
+  return String(raw).trim();
+}
+
 type PendingBPTab = 'consolidado' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' | 'mover_etapa';
 type BPModalStageFilter = 'all' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' | 'mover_etapa';
 type BPModalSortField = 'id' | 'titulo' | 'it_bp' | 'vp_solicitante' | 'solicitante' | 'lider_dominio' | 'etapa_actual' | 'accion_bp';
@@ -9962,27 +9977,106 @@ export function ReportePendientesBP({
                         )}
                       </td>
                       <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                        {row.moverCount > 0 ? (
-                          <span
-                            onClick={() => openBPModal(row.bp, row.itemsMover, `Iniciativas Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
-                            style={{
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: 4,
-                              padding: '2px 8px',
-                              borderRadius: 20,
-                              background: '#fffbeb',
-                              color: '#d97706',
-                              border: '1px solid #fde68a',
-                              fontWeight: 700,
-                              fontSize: 11,
-                              cursor: 'pointer',
-                            }}
-                            title="Ver iniciativas por mover de etapa"
-                          >
-                            {row.moverCount}
-                          </span>
-                        ) : (
+                        {row.moverCount > 0 ? (() => {
+                          const cntEst = row.itemsMover.filter(x => x.etapa_actual === 'por_estimar').length;
+                          const cntReest = row.itemsMover.filter(x => x.etapa_actual === 'por_reestimar').length;
+                          const cntPlan = row.itemsMover.filter(x => x.etapa_actual === 'por_planificar').length;
+                          return (
+                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                              <span
+                                onClick={() => openBPModal(row.bp, row.itemsMover, `Iniciativas Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
+                                style={{
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center',
+                                  minWidth: 28,
+                                  padding: '2px 10px',
+                                  borderRadius: 20,
+                                  background: '#fef3c7',
+                                  color: '#92400e',
+                                  border: '1px solid #fde68a',
+                                  fontWeight: 800,
+                                  fontSize: 12,
+                                  cursor: 'pointer',
+                                }}
+                                title="Ver todas las iniciativas por mover de etapa"
+                              >
+                                {row.moverCount}
+                              </span>
+                              <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
+                                {cntEst > 0 && (
+                                  <span
+                                    onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_estimar'), `Por Mover a Aprobar Estimación: ${optLabel(row.bp)}`, 'mover_etapa')}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      padding: '1px 7px',
+                                      borderRadius: 999,
+                                      background: '#fffbeb',
+                                      border: '1px solid #fcd34d',
+                                      color: '#92400e',
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      whiteSpace: 'nowrap',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Por Estimar con tiempo lleno → Mover a Por aprobar estimación"
+                                  >
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f59e0b' }} />
+                                    {cntEst} Por Estimar
+                                  </span>
+                                )}
+                                {cntReest > 0 && (
+                                  <span
+                                    onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_reestimar'), `Por Mover a Aprobar Estimación (Reestimar): ${optLabel(row.bp)}`, 'mover_etapa')}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      padding: '1px 7px',
+                                      borderRadius: 999,
+                                      background: '#ffedd5',
+                                      border: '1px solid #fdba74',
+                                      color: '#9a3412',
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      whiteSpace: 'nowrap',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Por Reestimar con tiempo lleno → Mover a Por aprobar estimación"
+                                  >
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f97316' }} />
+                                    {cntReest} Por Reestimar
+                                  </span>
+                                )}
+                                {cntPlan > 0 && (
+                                  <span
+                                    onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_planificar'), `Por Mover a Aprobar Planificación: ${optLabel(row.bp)}`, 'mover_etapa')}
+                                    style={{
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      gap: 4,
+                                      padding: '1px 7px',
+                                      borderRadius: 999,
+                                      background: '#d1fae5',
+                                      border: '1px solid #6ee7b7',
+                                      color: '#065f46',
+                                      fontSize: 10,
+                                      fontWeight: 600,
+                                      whiteSpace: 'nowrap',
+                                      cursor: 'pointer',
+                                    }}
+                                    title="Por Planificar con fechas llenas → Mover a Aprobar planificación"
+                                  >
+                                    <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10b981' }} />
+                                    {cntPlan} Por Planificar
+                                  </span>
+                                )}
+                              </div>
+                            </div>
+                          );
+                        })() : (
                           <span style={{ color: '#cbd5e1' }}>—</span>
                         )}
                       </td>
@@ -10378,33 +10472,89 @@ export function ReportePendientesBP({
               <thead>
                 <tr style={{ background: '#f8fafc' }}>
                   <th style={{ padding: '8px 12px', textAlign: 'left', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>IT BP</th>
-                  <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Mover Etapa</th>
+                  <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Pendientes Mover Etapa</th>
                   <th style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>% del Total</th>
                   <th style={{ padding: '8px 12px', textAlign: 'center', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0' }}>Acción</th>
                 </tr>
               </thead>
               <tbody>
-                {sortedSummary.filter(s => s.moverCount > 0).map((row, idx) => (
-                  <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
-                    <td style={{ padding: '10px 12px' }}>
-                      <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')} />
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right', fontWeight: 800, color: '#d97706', fontSize: 13 }}>{row.moverCount}</td>
-                    <td style={{ padding: '10px 12px', textAlign: 'right' }}>
-                      <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: 20 }}>
-                        {Math.round((row.moverCount / (itemsMoverEtapa.length || 1)) * 100)}%
-                      </span>
-                    </td>
-                    <td style={{ padding: '10px 12px', textAlign: 'center' }}>
-                      <button
-                        onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
-                        style={{ fontSize: 11, fontWeight: 600, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
-                      >
-                        Ver Iniciativas
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {sortedSummary.filter(s => s.moverCount > 0).map((row, idx) => {
+                  const cntEst = row.itemsMover.filter(x => x.etapa_actual === 'por_estimar').length;
+                  const cntReest = row.itemsMover.filter(x => x.etapa_actual === 'por_reestimar').length;
+                  const cntPlan = row.itemsMover.filter(x => x.etapa_actual === 'por_planificar').length;
+                  return (
+                    <tr key={row.bp} style={{ background: idx % 2 === 0 ? '#fff' : '#fafafa', borderBottom: '1px solid #f1f5f9' }}>
+                      <td style={{ padding: '10px 12px' }}>
+                        <ClickableCell label={optLabel(row.bp)} onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')} />
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5 }}>
+                          <span
+                            onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              minWidth: 28,
+                              padding: '2px 10px',
+                              borderRadius: 20,
+                              background: '#fef3c7',
+                              color: '#92400e',
+                              border: '1px solid #fde68a',
+                              fontWeight: 800,
+                              fontSize: 12,
+                              cursor: 'pointer',
+                            }}
+                          >
+                            {row.moverCount}
+                          </span>
+                          <div style={{ display: 'flex', flexWrap: 'wrap', justifyContent: 'center', gap: 4 }}>
+                            {cntEst > 0 && (
+                              <span
+                                onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_estimar'), `Por Mover a Aprobar Estimación: ${optLabel(row.bp)}`, 'mover_etapa')}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 999, background: '#fffbeb', border: '1px solid #fcd34d', color: '#92400e', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f59e0b' }} />
+                                {cntEst} Por Estimar
+                              </span>
+                            )}
+                            {cntReest > 0 && (
+                              <span
+                                onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_reestimar'), `Por Mover a Aprobar Estimación (Reestimar): ${optLabel(row.bp)}`, 'mover_etapa')}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 999, background: '#ffedd5', border: '1px solid #fdba74', color: '#9a3412', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#f97316' }} />
+                                {cntReest} Por Reestimar
+                              </span>
+                            )}
+                            {cntPlan > 0 && (
+                              <span
+                                onClick={() => openBPModal(row.bp, row.itemsMover.filter(x => x.etapa_actual === 'por_planificar'), `Por Mover a Aprobar Planificación: ${optLabel(row.bp)}`, 'mover_etapa')}
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4, padding: '1px 7px', borderRadius: 999, background: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46', fontSize: 10, fontWeight: 600, whiteSpace: 'nowrap', cursor: 'pointer' }}
+                              >
+                                <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: '#10b981' }} />
+                                {cntPlan} Por Planificar
+                              </span>
+                            )}
+                          </div>
+                        </div>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <span style={{ display: 'inline-block', fontSize: 11, fontWeight: 700, color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: 20 }}>
+                          {Math.round((row.moverCount / (itemsMoverEtapa.length || 1)) * 100)}%
+                        </span>
+                      </td>
+                      <td style={{ padding: '10px 12px', textAlign: 'center' }}>
+                        <button
+                          onClick={() => openBPModal(row.bp, row.itemsMover, `Por Mover de Etapa: ${optLabel(row.bp)}`, 'mover_etapa')}
+                          style={{ fontSize: 11, fontWeight: 600, color: '#d97706', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 6, padding: '4px 12px', cursor: 'pointer' }}
+                        >
+                          Ver Iniciativas
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
               <tfoot>
                 <tr style={{ background: '#f1f5f9', borderTop: '2px solid #e2e8f0' }}>
@@ -10543,33 +10693,63 @@ export function ReportePendientesBP({
                   </button>
                 )}
 
-                {/* Filtro de fase */}
-                <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Fase:</span>
-                  <select
-                    value={modalStageFilter}
-                    onChange={e => setModalStageFilter(e.target.value as BPModalStageFilter)}
-                    style={{
-                      fontSize: 11,
-                      padding: '3px 8px',
-                      borderRadius: 6,
-                      border: '1px solid #cbd5e1',
-                      background: '#fff',
-                      color: '#1e293b',
-                      cursor: 'pointer',
-                    }}
-                  >
-                    <option value="all">Todas las fases pendientes</option>
-                    <option value="por_aprobar_estimacion">Por Aprobar Estimación</option>
-                    <option value="por_habilitar_presupuesto">Por Habilitar Presupuesto</option>
-                    <option value="aprobar_planificacion">Aprobar Planificación</option>
-                    <option value="mover_etapa">Por Mover de Etapa</option>
-                  </select>
-                </div>
+                {/* Filtro de fase (solo opciones con resultados en la selección) */}
+                {(() => {
+                  const phaseOptions: { value: BPModalStageFilter; label: string; count: number }[] = [
+                    {
+                      value: 'por_aprobar_estimacion',
+                      label: 'Por Aprobar Estimación',
+                      count: selectedModalData.items.filter(i => i.etapa_actual === 'por_aprobar_estimacion' && !isAffirmative(i.aprobar_estimacion)).length,
+                    },
+                    {
+                      value: 'por_habilitar_presupuesto',
+                      label: 'Por Habilitar Presupuesto',
+                      count: selectedModalData.items.filter(i => i.etapa_actual === 'por_habilitar_presupuesto' && !isAffirmative(i.presupuesto_habilitado)).length,
+                    },
+                    {
+                      value: 'aprobar_planificacion',
+                      label: 'Aprobar Planificación',
+                      count: selectedModalData.items.filter(i => i.etapa_actual === 'aprobar_planificacion' && !isAffirmative(i.planificacion_aprobada)).length,
+                    },
+                    {
+                      value: 'mover_etapa',
+                      label: 'Por Mover de Etapa',
+                      count: selectedModalData.items.filter(i => Boolean(getMoverEtapaAction(i))).length,
+                    },
+                  ].filter(opt => opt.count > 0);
+
+                  if (phaseOptions.length === 0) return null;
+
+                  return (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
+                      <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Fase:</span>
+                      <select
+                        value={modalStageFilter}
+                        onChange={e => setModalStageFilter(e.target.value as BPModalStageFilter)}
+                        style={{
+                          fontSize: 11,
+                          padding: '3px 8px',
+                          borderRadius: 6,
+                          border: '1px solid #cbd5e1',
+                          background: '#fff',
+                          color: '#1e293b',
+                          cursor: 'pointer',
+                        }}
+                      >
+                        <option value="all">Todas las fases ({selectedModalData.items.length})</option>
+                        {phaseOptions.map(opt => (
+                          <option key={opt.value} value={opt.value}>
+                            {opt.label} ({opt.count})
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
 
                 {/* Sort selector toolbar */}
                 <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: '#f8fafc', padding: '3px 8px', borderRadius: 8, border: '1px solid #e2e8f0' }}>
-                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600 }}>Ordenar por:</span>
+                  <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, whiteSpace: 'nowrap' }}>Ordenar por:</span>
                   <select
                     value={bpModalSortField}
                     onChange={e => setBpModalSortField(e.target.value as BPModalSortField)}
@@ -10581,6 +10761,7 @@ export function ReportePendientesBP({
                       background: '#fff',
                       color: '#1e293b',
                       cursor: 'pointer',
+                      minWidth: 130,
                     }}
                   >
                     <option value="id">ID</option>
@@ -10792,206 +10973,360 @@ export function ReportePendientesBP({
               </div>
             </div>
 
-            {/* Tabla de iniciativas */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
+            {/* Tabla(s) de iniciativas */}
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
               {filteredModalItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8', fontSize: 13 }}>
                   No se encontraron iniciativas con los filtros aplicados en esta selección.
                 </div>
-              ) : (
-                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                        <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
-                          <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
-                        </th>
-                        {bpModalColOrder.map(colId => {
-                          if (bpHiddenModalCols.has(colId)) return null;
-                          const colMeta = DEFAULT_BP_MODAL_COLS.find(c => c.id === colId);
-                          if (!colMeta) return null;
-                          const isDragging = bpDraggingColId === colId;
-                          const isDragOver = bpDragOverColId === colId;
-                          return (
-                            <th
-                              key={colId}
-                              draggable
-                              onDragStart={e => {
-                                e.dataTransfer.setData('text/plain', colId);
-                                e.dataTransfer.effectAllowed = 'move';
-                                setBpDraggingColId(colId);
-                              }}
-                              onDragOver={e => {
-                                e.preventDefault();
-                                e.dataTransfer.dropEffect = 'move';
-                                if (bpDragOverColId !== colId) setBpDragOverColId(colId);
-                              }}
-                              onDrop={e => {
-                                e.preventDefault();
-                                const fromId = e.dataTransfer.getData('text/plain') as BPModalSortField;
-                                if (fromId && fromId !== colId) {
-                                  setBpModalColOrder(prev => {
-                                    const fromIdx = prev.indexOf(fromId);
-                                    const toIdx = prev.indexOf(colId);
-                                    if (fromIdx === -1 || toIdx === -1) return prev;
-                                    const next = [...prev];
-                                    const [moved] = next.splice(fromIdx, 1);
-                                    next.splice(toIdx, 0, moved);
-                                    return next;
-                                  });
-                                }
-                                setBpDraggingColId(null);
-                                setBpDragOverColId(null);
-                              }}
-                              onDragEnd={() => {
-                                setBpDraggingColId(null);
-                                setBpDragOverColId(null);
-                              }}
-                              onClick={() => {
-                                if (bpModalSortField === colId) setBpModalSortDir(d => d === 'asc' ? 'desc' : 'asc');
-                                else { setBpModalSortField(colId); setBpModalSortDir('asc'); }
-                              }}
-                              style={{
-                                padding: '8px 10px',
-                                whiteSpace: 'nowrap',
-                                userSelect: 'none',
-                                fontSize: 11,
-                                fontWeight: 700,
-                                color: '#475569',
-                                backgroundColor: isDragOver ? '#dbeafe' : isDragging ? '#f1f5f9' : '#f8fafc',
-                                borderRight: isDragOver ? '2px solid #2563eb' : '1px solid #e2e8f0',
-                                cursor: 'grab',
-                                opacity: isDragging ? 0.4 : 1,
-                                minWidth: colId === 'titulo' ? 260 : undefined,
-                              }}
-                              title="Clic para ordenar / Arrastrar para reordenar columna"
-                            >
-                              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
-                                {colMeta.label}
-                                {bpModalSortField === colId && (
-                                  <span style={{ color: '#2563eb', fontSize: 10 }}>{bpModalSortDir === 'asc' ? '↑' : '↓'}</span>
-                                )}
-                              </span>
+              ) : (() => {
+                const moverEstItems = filteredModalItems.filter(i => i.etapa_actual === 'por_estimar' || i.etapa_actual === 'por_reestimar');
+                const moverPlanItems = filteredModalItems.filter(i => i.etapa_actual === 'por_planificar');
+                const otherItems = filteredModalItems.filter(i => i.etapa_actual !== 'por_estimar' && i.etapa_actual !== 'por_reestimar' && i.etapa_actual !== 'por_planificar');
+
+                const groups: {
+                  key: string;
+                  bannerTitle?: string;
+                  bannerColor?: string;
+                  bannerBg?: string;
+                  bannerBorder?: string;
+                  mode: 'other' | 'mover_est' | 'mover_plan';
+                  items: Iniciativa[];
+                }[] = [];
+
+                if (otherItems.length > 0) {
+                  groups.push({
+                    key: 'other',
+                    bannerTitle: moverEstItems.length > 0 || moverPlanItems.length > 0 ? `Aprobaciones y Habilitación de Presupuesto (${otherItems.length})` : undefined,
+                    bannerColor: '#5b21b6',
+                    bannerBg: '#f5f3ff',
+                    bannerBorder: '#ddd6fe',
+                    mode: 'other',
+                    items: otherItems,
+                  });
+                }
+                if (moverEstItems.length > 0) {
+                  groups.push({
+                    key: 'mover_est',
+                    bannerTitle: `Pendientes de mover a "Por aprobar estimación" (${moverEstItems.length}) — Con tiempo estimado lleno`,
+                    bannerColor: '#92400e',
+                    bannerBg: '#fffbeb',
+                    bannerBorder: '#fde68a',
+                    mode: 'mover_est',
+                    items: moverEstItems,
+                  });
+                }
+                if (moverPlanItems.length > 0) {
+                  groups.push({
+                    key: 'mover_plan',
+                    bannerTitle: `Pendientes de mover a "Aprobar planificación" (${moverPlanItems.length}) — Con fechas planificadas llenas`,
+                    bannerColor: '#065f46',
+                    bannerBg: '#ecfdf5',
+                    bannerBorder: '#a7f3d0',
+                    mode: 'mover_plan',
+                    items: moverPlanItems,
+                  });
+                }
+
+                const renderPendingBadge = (t: Iniciativa) => {
+                  const moverAction = getMoverEtapaAction(t);
+                  if (moverAction) {
+                    const isPlan = t.etapa_actual === 'por_planificar';
+                    return (
+                      <span
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          fontSize: 10.5,
+                          padding: '3px 9px',
+                          borderRadius: 6,
+                          background: isPlan ? '#ecfdf5' : '#fffbeb',
+                          color: isPlan ? '#065f46' : '#92400e',
+                          border: `1px solid ${isPlan ? '#a7f3d0' : '#fde68a'}`,
+                          fontWeight: 700,
+                          whiteSpace: 'nowrap',
+                        }}
+                      >
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isPlan ? '#10b981' : '#f59e0b', flexShrink: 0 }} />
+                        <span>{moverAction}</span>
+                      </span>
+                    );
+                  }
+                  if (t.etapa_actual === 'por_aprobar_estimacion') {
+                    const statusTxt = t.aprobar_estimacion || 'Pendiente';
+                    const isNo = statusTxt.toUpperCase() === 'NO';
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, padding: '3px 9px', borderRadius: 6, background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isNo ? '#ef4444' : '#8b5cf6', flexShrink: 0 }} />
+                        <span>Aprobar Estimación</span>
+                        <span style={{ padding: '1px 6px', borderRadius: 999, background: isNo ? '#fee2e2' : '#ede9fe', color: isNo ? '#b91c1c' : '#6d28d9', fontSize: 10 }}>
+                          {statusTxt}
+                        </span>
+                      </span>
+                    );
+                  }
+                  if (t.etapa_actual === 'por_habilitar_presupuesto') {
+                    const statusTxt = t.presupuesto_habilitado || 'Pendiente';
+                    const isNo = statusTxt.toUpperCase() === 'NO';
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, padding: '3px 9px', borderRadius: 6, background: '#ecfeff', color: '#155e75', border: '1px solid #a5f3fc', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isNo ? '#ef4444' : '#06b6d4', flexShrink: 0 }} />
+                        <span>Habilitar Presupuesto</span>
+                        <span style={{ padding: '1px 6px', borderRadius: 999, background: isNo ? '#fee2e2' : '#cffafe', color: isNo ? '#b91c1c' : '#0e7490', fontSize: 10 }}>
+                          {statusTxt}
+                        </span>
+                      </span>
+                    );
+                  }
+                  if (t.etapa_actual === 'aprobar_planificacion') {
+                    const statusTxt = t.planificacion_aprobada || 'Pendiente';
+                    const isNo = statusTxt.toUpperCase() === 'NO';
+                    return (
+                      <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 10.5, padding: '3px 9px', borderRadius: 6, background: '#ecfdf5', color: '#065f46', border: '1px solid #a7f3d0', fontWeight: 700, whiteSpace: 'nowrap' }}>
+                        <span style={{ width: 6, height: 6, borderRadius: '50%', backgroundColor: isNo ? '#ef4444' : '#10b981', flexShrink: 0 }} />
+                        <span>Aprobar Planificación</span>
+                        <span style={{ padding: '1px 6px', borderRadius: 999, background: isNo ? '#fee2e2' : '#d1fae5', color: isNo ? '#b91c1c' : '#047857', fontSize: 10 }}>
+                          {statusTxt}
+                        </span>
+                      </span>
+                    );
+                  }
+                  return null;
+                };
+
+                return groups.map(grp => (
+                  <div key={grp.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {grp.bannerTitle && (
+                      <div
+                        style={{
+                          padding: '7px 12px',
+                          borderRadius: 8,
+                          backgroundColor: grp.bannerBg,
+                          border: `1px solid ${grp.bannerBorder}`,
+                          color: grp.bannerColor,
+                          fontSize: 12,
+                          fontWeight: 700,
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 8,
+                        }}
+                      >
+                        <AlertCircle size={14} />
+                        <span>{grp.bannerTitle}</span>
+                      </div>
+                    )}
+                    <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
+                              <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
                             </th>
-                          );
-                        })}
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredModalItems.map((t, idx) => {
-                        const idStr = String(t.id).padStart(4, '0');
-                        const cfg = ETAPAS_MAP.get(t.etapa_actual);
-                        const moverAction = getMoverEtapaAction(t);
-
-                        let pendingBadge = null;
-                        if (moverAction) {
-                          pendingBadge = (
-                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#fffbeb', color: '#b45309', border: '1px solid #fde68a', fontWeight: 700, whiteSpace: 'nowrap' }}>
-                              {moverAction}
-                            </span>
-                          );
-                        } else if (t.etapa_actual === 'por_aprobar_estimacion') {
-                          pendingBadge = (
-                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#f5f3ff', color: '#7c3aed', border: '1px solid #ddd6fe', fontWeight: 700 }}>
-                              Aprobar Estimación: {t.aprobar_estimacion || 'Pendiente'}
-                            </span>
-                          );
-                        } else if (t.etapa_actual === 'por_habilitar_presupuesto') {
-                          pendingBadge = (
-                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfeff', color: '#0891b2', border: '1px solid #a5f3fc', fontWeight: 700 }}>
-                              Habilitar Presupuesto: {t.presupuesto_habilitado || 'Pendiente'}
-                            </span>
-                          );
-                        } else if (t.etapa_actual === 'aprobar_planificacion') {
-                          pendingBadge = (
-                            <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 6, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0', fontWeight: 700 }}>
-                              Aprobar Planificación: {t.planificacion_aprobada || 'Pendiente'}
-                            </span>
-                          );
-                        }
-
-                        return (
-                          <tr
-                            key={t.id}
-                            style={{
-                              borderBottom: '1px solid #f1f5f9',
-                              backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
-                            }}
-                          >
-                            <td style={{ padding: '8px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
-                              <button
-                                type="button"
-                                onClick={() => onOpenDetailModal(t)}
-                                style={{
-                                  background: '#eff6ff',
-                                  border: '1px solid #bfdbfe',
-                                  borderRadius: 6,
-                                  width: 26,
-                                  height: 26,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  justifyContent: 'center',
-                                  cursor: 'pointer',
-                                  color: '#2563eb',
-                                }}
-                                title="Abrir detalle completo de la iniciativa"
-                              >
-                                <Eye size={13} />
-                              </button>
-                            </td>
                             {bpModalColOrder.map(colId => {
                               if (bpHiddenModalCols.has(colId)) return null;
-                              if (colId === 'id') {
-                                return (
-                                  <td key={colId} style={{ padding: '8px 10px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
-                                    {idStr}
-                                  </td>
-                                );
-                              }
-                              if (colId === 'titulo') {
-                                return (
-                                  <td key={colId} style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', minWidth: 260, lineHeight: 1.4, borderRight: '1px solid #f1f5f9' }}>
-                                    {t.titulo}
-                                  </td>
-                                );
-                              }
-                              if (colId === 'it_bp') {
-                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.it_bp || '—'}</td>;
-                              }
-                              if (colId === 'vp_solicitante') {
-                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.vp_solicitante || '—'}</td>;
-                              }
-                              if (colId === 'solicitante') {
-                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.usuario_negocio || '—'}</td>;
-                              }
-                              if (colId === 'lider_dominio') {
-                                return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.lider_dominio || '—'}</td>;
-                              }
-                              if (colId === 'etapa_actual') {
-                                return (
-                                  <td key={colId} style={{ padding: '8px 10px', borderRight: '1px solid #f1f5f9' }}>
-                                    {cfg ? (
-                                      <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, backgroundColor: cfg.bgColor, color: cfg.textColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
-                                        {cfg.label}
-                                      </span>
-                                    ) : (
-                                      <span>{t.etapa_actual}</span>
+                              const colMeta = DEFAULT_BP_MODAL_COLS.find(c => c.id === colId);
+                              if (!colMeta) return null;
+                              const isDragging = bpDraggingColId === colId;
+                              const isDragOver = bpDragOverColId === colId;
+
+                              const renderTh = (
+                                <th
+                                  key={colId}
+                                  draggable
+                                  onDragStart={e => {
+                                    e.dataTransfer.setData('text/plain', colId);
+                                    e.dataTransfer.effectAllowed = 'move';
+                                    setBpDraggingColId(colId);
+                                  }}
+                                  onDragOver={e => {
+                                    e.preventDefault();
+                                    e.dataTransfer.dropEffect = 'move';
+                                    if (bpDragOverColId !== colId) setBpDragOverColId(colId);
+                                  }}
+                                  onDrop={e => {
+                                    e.preventDefault();
+                                    const fromId = e.dataTransfer.getData('text/plain') as BPModalSortField;
+                                    if (fromId && fromId !== colId) {
+                                      setBpModalColOrder(prev => {
+                                        const fromIdx = prev.indexOf(fromId);
+                                        const toIdx = prev.indexOf(colId);
+                                        if (fromIdx === -1 || toIdx === -1) return prev;
+                                        const next = [...prev];
+                                        const [moved] = next.splice(fromIdx, 1);
+                                        next.splice(toIdx, 0, moved);
+                                        return next;
+                                      });
+                                    }
+                                    setBpDraggingColId(null);
+                                    setBpDragOverColId(null);
+                                  }}
+                                  onDragEnd={() => {
+                                    setBpDraggingColId(null);
+                                    setBpDragOverColId(null);
+                                  }}
+                                  onClick={() => {
+                                    if (bpModalSortField === colId) setBpModalSortDir(d => d === 'asc' ? 'desc' : 'asc');
+                                    else { setBpModalSortField(colId); setBpModalSortDir('asc'); }
+                                  }}
+                                  style={{
+                                    padding: '8px 10px',
+                                    whiteSpace: 'nowrap',
+                                    userSelect: 'none',
+                                    fontSize: 11,
+                                    fontWeight: 700,
+                                    color: '#475569',
+                                    backgroundColor: isDragOver ? '#dbeafe' : isDragging ? '#f1f5f9' : '#f8fafc',
+                                    borderRight: isDragOver ? '2px solid #2563eb' : '1px solid #e2e8f0',
+                                    cursor: 'grab',
+                                    opacity: isDragging ? 0.4 : 1,
+                                    minWidth: colId === 'titulo' ? 260 : undefined,
+                                  }}
+                                  title="Clic para ordenar / Arrastrar para reordenar columna"
+                                >
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                    {colMeta.label}
+                                    {bpModalSortField === colId && (
+                                      <span style={{ color: '#2563eb', fontSize: 10 }}>{bpModalSortDir === 'asc' ? '↑' : '↓'}</span>
                                     )}
-                                  </td>
+                                  </span>
+                                </th>
+                              );
+
+                              if (colId === 'accion_bp') {
+                                return (
+                                  <React.Fragment key={colId}>
+                                    {grp.mode === 'mover_est' && (
+                                      <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#92400e', backgroundColor: '#fffbeb', borderRight: '1px solid #e2e8f0' }}>
+                                        Tiempo Est. (meses)
+                                      </th>
+                                    )}
+                                    {grp.mode === 'mover_plan' && (
+                                      <>
+                                        <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#065f46', backgroundColor: '#ecfdf5', borderRight: '1px solid #e2e8f0' }}>
+                                          F. Inicio Planif.
+                                        </th>
+                                        <th style={{ padding: '8px 10px', whiteSpace: 'nowrap', fontSize: 11, fontWeight: 700, color: '#065f46', backgroundColor: '#ecfdf5', borderRight: '1px solid #e2e8f0' }}>
+                                          F. Fin Planif.
+                                        </th>
+                                      </>
+                                    )}
+                                    {renderTh}
+                                  </React.Fragment>
                                 );
                               }
-                              if (colId === 'accion_bp') {
-                                return <td key={colId} style={{ padding: '8px 10px' }}>{pendingBadge}</td>;
-                              }
-                              return null;
+                              return renderTh;
                             })}
                           </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
+                        </thead>
+                        <tbody>
+                          {grp.items.map((t, idx) => {
+                            const idStr = String(t.id).padStart(4, '0');
+                            const cfg = ETAPAS_MAP.get(t.etapa_actual);
+
+                            return (
+                              <tr
+                                key={t.id}
+                                style={{
+                                  borderBottom: '1px solid #f1f5f9',
+                                  backgroundColor: idx % 2 === 0 ? '#ffffff' : '#f8fafc',
+                                }}
+                              >
+                                <td style={{ padding: '8px 6px', textAlign: 'center', borderRight: '1px solid #f1f5f9' }}>
+                                  <button
+                                    type="button"
+                                    onClick={() => onOpenDetailModal(t)}
+                                    style={{
+                                      background: '#eff6ff',
+                                      border: '1px solid #bfdbfe',
+                                      borderRadius: 6,
+                                      width: 26,
+                                      height: 26,
+                                      display: 'inline-flex',
+                                      alignItems: 'center',
+                                      justifyContent: 'center',
+                                      cursor: 'pointer',
+                                      color: '#2563eb',
+                                    }}
+                                    title="Abrir detalle completo de la iniciativa"
+                                  >
+                                    <Eye size={13} />
+                                  </button>
+                                </td>
+                                {bpModalColOrder.map(colId => {
+                                  if (bpHiddenModalCols.has(colId)) return null;
+                                  if (colId === 'id') {
+                                    return (
+                                      <td key={colId} style={{ padding: '8px 10px', fontWeight: 700, color: '#3b82f6', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
+                                        {idStr}
+                                      </td>
+                                    );
+                                  }
+                                  if (colId === 'titulo') {
+                                    return (
+                                      <td key={colId} style={{ padding: '8px 10px', fontWeight: 600, color: '#1e293b', minWidth: 260, lineHeight: 1.4, borderRight: '1px solid #f1f5f9' }}>
+                                        {t.titulo}
+                                      </td>
+                                    );
+                                  }
+                                  if (colId === 'it_bp') {
+                                    return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.it_bp || '—'}</td>;
+                                  }
+                                  if (colId === 'vp_solicitante') {
+                                    return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.vp_solicitante || '—'}</td>;
+                                  }
+                                  if (colId === 'solicitante') {
+                                    return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.usuario_negocio || '—'}</td>;
+                                  }
+                                  if (colId === 'lider_dominio') {
+                                    return <td key={colId} style={{ padding: '8px 10px', color: '#475569', borderRight: '1px solid #f1f5f9' }}>{t.lider_dominio || '—'}</td>;
+                                  }
+                                  if (colId === 'etapa_actual') {
+                                    return (
+                                      <td key={colId} style={{ padding: '8px 10px', borderRight: '1px solid #f1f5f9' }}>
+                                        {cfg ? (
+                                          <span style={{ fontSize: 10, padding: '2px 8px', borderRadius: 20, backgroundColor: cfg.bgColor, color: cfg.textColor, fontWeight: 700, whiteSpace: 'nowrap' }}>
+                                            {cfg.label}
+                                          </span>
+                                        ) : (
+                                          <span>{t.etapa_actual}</span>
+                                        )}
+                                      </td>
+                                    );
+                                  }
+                                  if (colId === 'accion_bp') {
+                                    return (
+                                      <React.Fragment key={colId}>
+                                        {grp.mode === 'mover_est' && (
+                                          <td style={{ padding: '8px 10px', fontWeight: 700, color: '#92400e', backgroundColor: '#fffbeb40', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
+                                            {getTiempoEstimadoMover(t)}
+                                          </td>
+                                        )}
+                                        {grp.mode === 'mover_plan' && (
+                                          <>
+                                            <td style={{ padding: '8px 10px', fontWeight: 600, color: '#065f46', backgroundColor: '#ecfdf540', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
+                                              {fmtDatePopup(t.fecha_inicio_planificada)}
+                                            </td>
+                                            <td style={{ padding: '8px 10px', fontWeight: 600, color: '#065f46', backgroundColor: '#ecfdf540', whiteSpace: 'nowrap', borderRight: '1px solid #f1f5f9' }}>
+                                              {fmtDatePopup(t.fecha_fin_planificada)}
+                                            </td>
+                                          </>
+                                        )}
+                                        <td style={{ padding: '8px 10px' }}>{renderPendingBadge(t)}</td>
+                                      </React.Fragment>
+                                    );
+                                  }
+                                  return null;
+                                })}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  </div>
+                ));
+              })()}
             </div>
 
             {/* Footer modal */}

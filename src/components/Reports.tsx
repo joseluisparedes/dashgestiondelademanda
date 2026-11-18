@@ -4978,6 +4978,29 @@ function TimelineIniciativasVP({
                                             </div>
                                           )}
                                         </div>
+
+                                        {row.iniciativa.institucion && (
+                                          <span
+                                            title={`Institución: ${row.iniciativa.institucion}`}
+                                            style={{
+                                              flexShrink: 0,
+                                              alignSelf: 'center',
+                                              fontSize: 9.5,
+                                              fontWeight: 700,
+                                              padding: '2px 6px',
+                                              borderRadius: 5,
+                                              backgroundColor: '#f1f5f9',
+                                              color: '#475569',
+                                              border: '1px solid #e2e8f0',
+                                              whiteSpace: 'nowrap',
+                                              maxWidth: 72,
+                                              overflow: 'hidden',
+                                              textOverflow: 'ellipsis',
+                                            }}
+                                          >
+                                            {row.iniciativa.institucion}
+                                          </span>
+                                        )}
                                       </div>
 
                                       {/* Columna 2: F. Inicio (85px) */}

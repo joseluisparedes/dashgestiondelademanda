@@ -13618,51 +13618,121 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                   No se encontraron iniciativas con los filtros aplicados en esta selección.
                 </div>
               ) : (() => {
-                const categoryGroups: {
-                  key: OutOfDateCategory;
+                const getReasonGroupMeta = (it: OutOfDateItem): {
+                  key: string;
+                  category: OutOfDateCategory;
                   title: string;
                   color: string;
                   bg: string;
                   border: string;
-                  items: OutOfDateItem[];
-                }[] = (
-                  [
-                    {
-                      key: 'estimacion' as OutOfDateCategory,
-                      title: 'Por Estimar — Auditoría de Estimación',
+                } => {
+                  const r = it.reason || '';
+                  if (it.category === 'estimacion') {
+                    if (r.includes('vencida')) {
+                      return {
+                        key: 'est-vencida',
+                        category: 'estimacion',
+                        title: 'Por Estimar — Fecha Fin de Estimación vencida respecto a hoy',
+                        color: '#991b1b',
+                        bg: '#fef2f2',
+                        border: '#fecaca',
+                      };
+                    }
+                    if (r.includes('Fuera de SLA')) {
+                      return {
+                        key: 'est-fuera-sla',
+                        category: 'estimacion',
+                        title: 'Por Estimar — Fuera de SLA (> 5 días de asignado al LD, sin fecha fin)',
+                        color: '#9a3412',
+                        bg: '#fff7ed',
+                        border: '#fed7aa',
+                      };
+                    }
+                    if (r.includes('En plazo SLA')) {
+                      return {
+                        key: 'est-en-sla',
+                        category: 'estimacion',
+                        title: 'Por Estimar — En plazo SLA (≤ 5 días desde asignación al LD)',
+                        color: '#065f46',
+                        bg: '#ecfdf5',
+                        border: '#a7f3d0',
+                      };
+                    }
+                    return {
+                      key: `est-${r}`,
+                      category: 'estimacion',
+                      title: r || 'Por Estimar — Pendiente',
                       color: '#92400e',
                       bg: '#fffbeb',
                       border: '#fde68a',
-                      items: sortedModalCustomItems.filter(it => it.category === 'estimacion'),
-                    },
-                    {
-                      key: 'reestimacion' as OutOfDateCategory,
-                      title: 'Por Reestimar — Auditoría de Re-estimación',
+                    };
+                  }
+                  if (it.category === 'reestimacion') {
+                    if (r.includes('vencida')) {
+                      return {
+                        key: 'reest-vencida',
+                        category: 'reestimacion',
+                        title: 'Por Reestimar — Fecha Fin de Re-estimación vencida respecto a hoy',
+                        color: '#991b1b',
+                        bg: '#fef2f2',
+                        border: '#fecaca',
+                      };
+                    }
+                    return {
+                      key: `reest-${r}`,
+                      category: 'reestimacion',
+                      title: r || 'Por Reestimar — Sin fecha fin programada',
                       color: '#9a3412',
                       bg: '#ffedd5',
                       border: '#fdba74',
-                      items: sortedModalCustomItems.filter(it => it.category === 'reestimacion'),
-                    },
-                    {
-                      key: 'planificacion' as OutOfDateCategory,
-                      title: 'Por Planificar — Auditoría de Planificación',
+                    };
+                  }
+                  if (it.category === 'planificacion') {
+                    return {
+                      key: `plan-${r}`,
+                      category: 'planificacion',
+                      title: r || 'Por Planificar — Sin fechas de planificación',
                       color: '#065f46',
                       bg: '#ecfdf5',
                       border: '#a7f3d0',
-                      items: sortedModalCustomItems.filter(it => it.category === 'planificacion'),
-                    },
-                    {
-                      key: 'otro' as OutOfDateCategory,
-                      title: 'Otros Pendientes',
-                      color: '#334155',
-                      bg: '#f1f5f9',
-                      border: '#cbd5e1',
-                      items: sortedModalCustomItems.filter(it => it.category !== 'estimacion' && it.category !== 'reestimacion' && it.category !== 'planificacion'),
-                    },
-                  ]
-                ).filter(g => g.items.length > 0);
+                    };
+                  }
+                  return {
+                    key: `otro-${r}`,
+                    category: 'otro',
+                    title: r || 'Otros Pendientes',
+                    color: '#334155',
+                    bg: '#f1f5f9',
+                    border: '#cbd5e1',
+                  };
+                };
 
-                return categoryGroups.map(grp => (
+                const groupMap = new Map<
+                  string,
+                  {
+                    key: string;
+                    category: OutOfDateCategory;
+                    title: string;
+                    color: string;
+                    bg: string;
+                    border: string;
+                    items: OutOfDateItem[];
+                  }
+                >();
+
+                for (const it of sortedModalCustomItems) {
+                  const meta = getReasonGroupMeta(it);
+                  const existing = groupMap.get(meta.key);
+                  if (existing) {
+                    existing.items.push(it);
+                  } else {
+                    groupMap.set(meta.key, { ...meta, items: [it] });
+                  }
+                }
+
+                const reasonGroups = Array.from(groupMap.values());
+
+                return reasonGroups.map(grp => (
                   <div key={grp.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
                     <div
                       style={{
@@ -13690,7 +13760,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                             </th>
                             {modalColOrder.map(colId => {
                               if (hiddenModalCols.has(colId)) return null;
-                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
+                              if (grp.category === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                           const isDragging = draggingColId === colId;
                           const isDragOver = dragOverColId === colId;
 
@@ -13891,11 +13961,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                     <div onClick={() => toggleModalSort('fecha_inicio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_inicio' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>
-                                        {grp.key === 'estimacion'
+                                        {grp.category === 'estimacion'
                                           ? 'F. Ini. Est.'
-                                          : grp.key === 'reestimacion'
+                                          : grp.category === 'reestimacion'
                                           ? 'F. Ini. Reest.'
-                                          : grp.key === 'planificacion'
+                                          : grp.category === 'planificacion'
                                           ? 'F. Ini. Plan.'
                                           : 'F. Inicio'}
                                       </span>
@@ -13939,11 +14009,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                     <div onClick={() => toggleModalSort('fecha_fin')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_fin' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>
-                                        {grp.key === 'estimacion'
+                                        {grp.category === 'estimacion'
                                           ? 'F. Fin Est.'
-                                          : grp.key === 'reestimacion'
+                                          : grp.category === 'reestimacion'
                                           ? 'F. Fin Reest.'
-                                          : grp.key === 'planificacion'
+                                          : grp.category === 'planificacion'
                                           ? 'F. Fin Plan.'
                                           : 'F. Fin'}
                                       </span>
@@ -14126,7 +14196,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
 
                             {modalColOrder.map(colId => {
                               if (hiddenModalCols.has(colId)) return null;
-                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
+                              if (grp.category === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                               switch (colId) {
                                 case 'id':
                                   return (

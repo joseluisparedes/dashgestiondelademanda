@@ -219,12 +219,69 @@ function fmtDateShort(d: string | Date | null | undefined): string {
 // Evaluadores de Fuera de Fechas
 // ---------------------------------------------------------------------------
 
+function normalizeRawColKey(k: string): string {
+  return k.toLowerCase().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
+}
+
+function getRawColValue(ini: Iniciativa, candidateKeys: string[]): unknown {
+  if (!ini.raw_fields) return undefined;
+  const normalizedTargets = candidateKeys.map(normalizeRawColKey);
+  for (const [k, v] of Object.entries(ini.raw_fields)) {
+    if (normalizedTargets.includes(normalizeRawColKey(k))) {
+      return v;
+    }
+  }
+  return undefined;
+}
+
+function isFilledVal(v: unknown): boolean {
+  if (v === null || v === undefined) return false;
+  const s = String(v).trim();
+  return s !== '' && s !== '—';
+}
+
+function getMoverEtapaAction(i: Iniciativa): string | null {
+  if (i.etapa_actual === 'por_estimar') {
+    const colAJ = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
+    if (isFilledVal(colAJ)) {
+      return 'Mover a "Por aprobar estimación"';
+    }
+  }
+  if (i.etapa_actual === 'por_reestimar') {
+    const colAW = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
+    if (isFilledVal(colAW)) {
+      return 'Mover a "Por aprobar estimación"';
+    }
+  }
+  if (i.etapa_actual === 'por_planificar') {
+    if (isFilledVal(i.fecha_inicio_planificada) && isFilledVal(i.fecha_fin_planificada)) {
+      return 'Mover a "Aprobar planificación"';
+    }
+  }
+  return null;
+}
+
+function getTiempoEstimadoMover(i: Iniciativa): string {
+  let raw: unknown = null;
+  if (i.etapa_actual === 'por_estimar') {
+    raw = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
+  } else if (i.etapa_actual === 'por_reestimar') {
+    raw = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
+  }
+  if (!isFilledVal(raw)) return '—';
+  const num = Number(raw);
+  if (!Number.isNaN(num)) {
+    return `${num} ${num === 1 ? 'mes' : 'meses'}`;
+  }
+  return String(raw).trim();
+}
+
 function checkFueraFechaEstimacion(
   i: Iniciativa,
   refDate: Date = new Date()
 ): { isOutOfDate: boolean; reason: string; delayDays: number } {
-  // REGLA: Solo considerar iniciativas estrictamente en etapa "Por Estimar"
-  if (i.etapa_actual !== 'por_estimar') {
+  // REGLA: Solo considerar iniciativas estrictamente en etapa "Por Estimar" que aún NO tienen estimación (Col AJ)
+  if (i.etapa_actual !== 'por_estimar' || getMoverEtapaAction(i)) {
     return { isOutOfDate: false, reason: '', delayDays: 0 };
   }
 
@@ -322,8 +379,8 @@ function checkFueraFechaReestimacion(
   i: Iniciativa,
   refDate: Date = new Date()
 ): { isOutOfDate: boolean; reason: string; delayDays: number } {
-  // REGLA: Solo considerar iniciativas en estado "Por Reestimar"
-  if (i.etapa_actual !== 'por_reestimar') {
+  // REGLA: Solo considerar iniciativas en estado "Por Reestimar" que aún NO tienen tiempo reestimado (Col AW)
+  if (i.etapa_actual !== 'por_reestimar' || getMoverEtapaAction(i)) {
     return { isOutOfDate: false, reason: '', delayDays: 0 };
   }
 
@@ -9238,63 +9295,6 @@ function isAffirmative(v: string | null | undefined): boolean {
   if (!v) return false;
   const s = String(v).toUpperCase().trim();
   return ['SI', 'SÍ', 'YES', 'S', '1', 'TRUE'].includes(s);
-}
-
-function normalizeRawColKey(k: string): string {
-  return k.toLowerCase().replace(/[\r\n]+/g, ' ').replace(/\s+/g, ' ').trim();
-}
-
-function getRawColValue(ini: Iniciativa, candidateKeys: string[]): unknown {
-  if (!ini.raw_fields) return undefined;
-  const normalizedTargets = candidateKeys.map(normalizeRawColKey);
-  for (const [k, v] of Object.entries(ini.raw_fields)) {
-    if (normalizedTargets.includes(normalizeRawColKey(k))) {
-      return v;
-    }
-  }
-  return undefined;
-}
-
-function isFilledVal(v: unknown): boolean {
-  if (v === null || v === undefined) return false;
-  const s = String(v).trim();
-  return s !== '' && s !== '—';
-}
-
-function getMoverEtapaAction(i: Iniciativa): string | null {
-  if (i.etapa_actual === 'por_estimar') {
-    const colAJ = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
-    if (isFilledVal(colAJ)) {
-      return 'Mover a "Por aprobar estimación"';
-    }
-  }
-  if (i.etapa_actual === 'por_reestimar') {
-    const colAW = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
-    if (isFilledVal(colAW)) {
-      return 'Mover a "Por aprobar estimación"';
-    }
-  }
-  if (i.etapa_actual === 'por_planificar') {
-    if (isFilledVal(i.fecha_inicio_planificada) && isFilledVal(i.fecha_fin_planificada)) {
-      return 'Mover a "Aprobar planificación"';
-    }
-  }
-  return null;
-}
-
-function getTiempoEstimadoMover(i: Iniciativa): string {
-  let raw: unknown = null;
-  if (i.etapa_actual === 'por_estimar') {
-    raw = i.tiempo_estimado ?? i.duracion_meses ?? getRawColValue(i, ['Tiempo estimado (meses)', 'Tiempo estimado']);
-  } else if (i.etapa_actual === 'por_reestimar') {
-    raw = getRawColValue(i, ['Tiempo estimado (meses)_1', 'Tiempo estimado_1']);
-  }
-  if (!isFilledVal(raw)) return '—';
-  const num = Number(raw);
-  if (!Number.isNaN(num)) {
-    return `${num} ${num === 1 ? 'mes' : 'meses'}`;
-  }
-  return String(raw).trim();
 }
 
 type PendingBPTab = 'consolidado' | 'por_aprobar_estimacion' | 'por_habilitar_presupuesto' | 'aprobar_planificacion' | 'mover_etapa';

@@ -13612,7 +13612,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             </div>
 
             {/* Content List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '12px 16px', display: 'flex', flexDirection: 'column', gap: 16 }}>
               {sortedModalCustomItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
                   No se encontraron iniciativas con los filtros aplicados en esta selección.
@@ -13682,25 +13682,24 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                       <span>{grp.title} ({grp.items.length} {grp.items.length === 1 ? 'iniciativa' : 'iniciativas'})</span>
                     </div>
                     <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 10.5 }}>
                         <thead>
                           <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                            <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
-                              <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
+                            <th style={{ padding: '6px 4px', width: 28, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
+                              <Eye size={12} style={{ color: '#94a3b8', margin: '0 auto' }} />
                             </th>
                             {modalColOrder.map(colId => {
                               if (hiddenModalCols.has(colId)) return null;
-                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                               if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                           const isDragging = draggingColId === colId;
                           const isDragOver = dragOverColId === colId;
 
                           const baseThStyle: React.CSSProperties = {
-                            padding: '6px 8px',
+                            padding: '5px 5px',
                             whiteSpace: 'nowrap',
                             userSelect: 'none',
                             verticalAlign: 'top',
-                            fontSize: 11,
+                            fontSize: 10,
                             fontWeight: 600,
                             color: '#475569',
                             backgroundColor: isDragOver ? '#dbeafe' : isDragging ? '#f1f5f9' : '#f8fafc',
@@ -13749,113 +13748,113 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                           switch (colId) {
                             case 'id':
                               return (
-                                <th key="id" {...dragHandlers} style={{ ...baseThStyle, minWidth: 60, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('id')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'id' ? '#2563eb' : '#475569' }}>
+                                <th key="id" {...dragHandlers} style={{ ...baseThStyle, width: 46, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('id')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'id' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>ID</span>
                                     {modalSortField === 'id' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'titulo':
                               return (
-                                <th key="titulo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 200, maxWidth: 300, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('titulo')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'titulo' ? '#2563eb' : '#475569' }}>
+                                <th key="titulo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 150, maxWidth: 230, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('titulo')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'titulo' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Título de la Iniciativa</span>
                                     {modalSortField === 'titulo' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'it_bp':
                               return (
-                                <th key="it_bp" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('it_bp')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'it_bp' ? '#2563eb' : '#475569' }}>
+                                <th key="it_bp" {...dragHandlers} style={{ ...baseThStyle, minWidth: 72, maxWidth: 95, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('it_bp')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'it_bp' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>IT BP</span>
                                     {modalSortField === 'it_bp' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'vp_solicitante':
                               return (
-                                <th key="vp_solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 120, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('vp_solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'vp_solicitante' ? '#2563eb' : '#475569' }}>
+                                <th key="vp_solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 95, maxWidth: 135, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('vp_solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'vp_solicitante' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
-                                    <span>VP Área Solicitante</span>
+                                    <span>VP Solicitante</span>
                                     {modalSortField === 'vp_solicitante' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'solicitante':
                               return (
-                                <th key="solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'solicitante' ? '#2563eb' : '#475569' }}>
+                                <th key="solicitante" {...dragHandlers} style={{ ...baseThStyle, minWidth: 75, maxWidth: 105, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('solicitante')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'solicitante' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Solicitante</span>
                                     {modalSortField === 'solicitante' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'lider_dominio':
                               return (
-                                <th key="lider_dominio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 100, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('lider_dominio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'lider_dominio' ? '#2563eb' : '#475569' }}>
+                                <th key="lider_dominio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 75, maxWidth: 100, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('lider_dominio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'lider_dominio' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
-                                    <span>Líder de Dominio</span>
+                                    <span>Líder Dominio</span>
                                     {modalSortField === 'lider_dominio' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'etapa_actual':
                               return (
-                                <th key="etapa_actual" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('etapa_actual')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'etapa_actual' ? '#2563eb' : '#475569' }}>
+                                <th key="etapa_actual" {...dragHandlers} style={{ ...baseThStyle, minWidth: 72, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('etapa_actual')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'etapa_actual' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Etapa</span>
                                     {modalSortField === 'etapa_actual' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'fecha_asignacion':
                               return (
-                                <th key="fecha_asignacion" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                <th key="fecha_asignacion" {...dragHandlers} style={{ ...baseThStyle, minWidth: 74, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                                     <div onClick={() => toggleModalSort('fecha_asignacion')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_asignacion' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>F. Asig. LD</span>
                                       {modalSortField === 'fecha_asignacion' ? (
-                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                        modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                       ) : (
-                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                        <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                       )}
                                     </div>
                                     {modalFilterOptions.asigMonths.length > 0 && (
@@ -13864,15 +13863,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                         onChange={e => setModalFilterAsigMonth(e.target.value)}
                                         onClick={e => e.stopPropagation()}
                                         style={{
-                                          fontSize: 9.5,
-                                          padding: '1px 3px',
+                                          fontSize: 9,
+                                          padding: '1px 2px',
                                           borderRadius: 4,
                                           border: modalFilterAsigMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
                                           background: modalFilterAsigMonth !== 'all' ? '#eff6ff' : '#fff',
                                           color: modalFilterAsigMonth !== 'all' ? '#1d4ed8' : '#64748b',
                                           fontWeight: modalFilterAsigMonth !== 'all' ? 700 : 400,
                                           cursor: 'pointer',
-                                          maxWidth: 88,
+                                          maxWidth: 72,
                                         }}
                                       >
                                         <option value="all">Mes: Todos</option>
@@ -13887,23 +13886,23 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                               );
                             case 'fecha_inicio':
                               return (
-                                <th key="fecha_inicio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                <th key="fecha_inicio" {...dragHandlers} style={{ ...baseThStyle, minWidth: 74, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                                     <div onClick={() => toggleModalSort('fecha_inicio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_inicio' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>
                                         {grp.key === 'estimacion'
-                                          ? 'F. Inicio Est.'
+                                          ? 'F. Ini. Est.'
                                           : grp.key === 'reestimacion'
-                                          ? 'F. Inicio Reest.'
+                                          ? 'F. Ini. Reest.'
                                           : grp.key === 'planificacion'
-                                          ? 'F. Inicio Plan.'
+                                          ? 'F. Ini. Plan.'
                                           : 'F. Inicio'}
                                       </span>
                                       {modalSortField === 'fecha_inicio' ? (
-                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                        modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                       ) : (
-                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                        <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                       )}
                                     </div>
                                     {modalFilterOptions.inicioMonths.length > 0 && (
@@ -13912,15 +13911,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                         onChange={e => setModalFilterInicioMonth(e.target.value)}
                                         onClick={e => e.stopPropagation()}
                                         style={{
-                                          fontSize: 9.5,
-                                          padding: '1px 3px',
+                                          fontSize: 9,
+                                          padding: '1px 2px',
                                           borderRadius: 4,
                                           border: modalFilterInicioMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
                                           background: modalFilterInicioMonth !== 'all' ? '#eff6ff' : '#fff',
                                           color: modalFilterInicioMonth !== 'all' ? '#1d4ed8' : '#64748b',
                                           fontWeight: modalFilterInicioMonth !== 'all' ? 700 : 400,
                                           cursor: 'pointer',
-                                          maxWidth: 88,
+                                          maxWidth: 72,
                                         }}
                                       >
                                         <option value="all">Mes: Todos</option>
@@ -13935,7 +13934,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                               );
                             case 'fecha_fin':
                               return (
-                                <th key="fecha_fin" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                <th key="fecha_fin" {...dragHandlers} style={{ ...baseThStyle, minWidth: 74, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
                                   <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
                                     <div onClick={() => toggleModalSort('fecha_fin')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_fin' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
@@ -13949,9 +13948,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                           : 'F. Fin'}
                                       </span>
                                       {modalSortField === 'fecha_fin' ? (
-                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                        modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                       ) : (
-                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                        <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                       )}
                                     </div>
                                     {modalFilterOptions.finMonths.length > 0 && (
@@ -13960,15 +13959,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                         onChange={e => setModalFilterFinMonth(e.target.value)}
                                         onClick={e => e.stopPropagation()}
                                         style={{
-                                          fontSize: 9.5,
-                                          padding: '1px 3px',
+                                          fontSize: 9,
+                                          padding: '1px 2px',
                                           borderRadius: 4,
                                           border: modalFilterFinMonth !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
                                           background: modalFilterFinMonth !== 'all' ? '#eff6ff' : '#fff',
                                           color: modalFilterFinMonth !== 'all' ? '#1d4ed8' : '#64748b',
                                           fontWeight: modalFilterFinMonth !== 'all' ? 700 : 400,
                                           cursor: 'pointer',
-                                          maxWidth: 88,
+                                          maxWidth: 72,
                                         }}
                                       >
                                         <option value="all">Mes: Todos</option>
@@ -13983,43 +13982,43 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                               );
                             case 'complejidad':
                               return (
-                                <th key="complejidad" {...dragHandlers} style={{ ...baseThStyle, minWidth: 95, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('complejidad')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'complejidad' ? '#2563eb' : '#475569' }}>
+                                <th key="complejidad" {...dragHandlers} style={{ ...baseThStyle, minWidth: 68, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('complejidad')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'complejidad' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Complejidad</span>
                                     {modalSortField === 'complejidad' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'tiempo_estimado':
                               return (
-                                <th key="tiempo_estimado" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('tiempo_estimado')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'tiempo_estimado' ? '#2563eb' : '#475569' }}>
+                                <th key="tiempo_estimado" {...dragHandlers} style={{ ...baseThStyle, minWidth: 68, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('tiempo_estimado')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'tiempo_estimado' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Tiempo Est.</span>
                                     {modalSortField === 'tiempo_estimado' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
                               );
                             case 'motivo':
                               return (
-                                <th key="motivo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 150, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
+                                <th key="motivo" {...dragHandlers} style={{ ...baseThStyle, minWidth: 130, maxWidth: 175, textAlign: 'left' }} title="Arrastra para mover / Clic para ordenar">
                                   <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                     <div onClick={() => toggleModalSort('motivo')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'motivo' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>Diagnóstico / Motivo</span>
                                       {modalSortField === 'motivo' ? (
-                                        modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                        modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                       ) : (
-                                        <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                        <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                       )}
                                     </div>
                                     {modalFilterOptions.motivos.length > 1 && (
@@ -14028,15 +14027,15 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                         onChange={e => setModalFilterMotivo(e.target.value)}
                                         onClick={e => e.stopPropagation()}
                                         style={{
-                                          fontSize: 9.5,
-                                          padding: '1px 3px',
+                                          fontSize: 9,
+                                          padding: '1px 2px',
                                           borderRadius: 4,
                                           border: modalFilterMotivo !== 'all' ? '1px solid #3b82f6' : '1px solid #cbd5e1',
                                           background: modalFilterMotivo !== 'all' ? '#eff6ff' : '#fff',
                                           color: modalFilterMotivo !== 'all' ? '#1d4ed8' : '#64748b',
                                           fontWeight: modalFilterMotivo !== 'all' ? 700 : 400,
                                           cursor: 'pointer',
-                                          maxWidth: 125,
+                                          maxWidth: 115,
                                         }}
                                       >
                                         <option value="all">Motivo: Todos</option>
@@ -14050,14 +14049,14 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                               );
                             case 'desfase':
                               return (
-                                <th key="desfase" {...dragHandlers} style={{ ...baseThStyle, minWidth: 80, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
-                                  <div onClick={() => toggleModalSort('desfase')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'desfase' ? '#2563eb' : '#475569' }}>
+                                <th key="desfase" {...dragHandlers} style={{ ...baseThStyle, minWidth: 62, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('desfase')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'desfase' ? '#2563eb' : '#475569' }}>
                                     {dragHandle}
                                     <span>Desfase</span>
                                     {modalSortField === 'desfase' ? (
-                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                      modalSortDir === 'asc' ? <ChevronUp size={11} style={{ color: '#2563eb' }} /> : <ChevronDown size={11} style={{ color: '#2563eb' }} />
                                     ) : (
-                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                      <ChevronRight size={10} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
@@ -14077,8 +14076,8 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                         const isSLA = item.reason.includes('En plazo SLA');
 
                         const cellBaseStyle: React.CSSProperties = {
-                          padding: '6px 8px',
-                          fontSize: 11,
+                          padding: '5px 5px',
+                          fontSize: 10.5,
                           verticalAlign: 'middle',
                           borderRight: '1px solid #f1f5f9',
                         };
@@ -14137,31 +14136,31 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                   );
                                 case 'titulo':
                                   return (
-                                    <td key="titulo" style={{ ...cellBaseStyle, fontWeight: 600, color: '#1e293b', minWidth: 200, maxWidth: 300, lineHeight: 1.35, wordBreak: 'break-word' }}>
+                                    <td key="titulo" style={{ ...cellBaseStyle, fontWeight: 600, color: '#1e293b', minWidth: 150, maxWidth: 230, lineHeight: 1.3, wordBreak: 'break-word' }}>
                                       {t.titulo}
                                     </td>
                                   );
                                 case 'it_bp':
                                   return (
-                                    <td key="it_bp" style={{ ...cellBaseStyle, color: '#475569', whiteSpace: 'nowrap' }}>
+                                    <td key="it_bp" style={{ ...cellBaseStyle, color: '#475569', lineHeight: 1.25 }}>
                                       {t.it_bp || '—'}
                                     </td>
                                   );
                                 case 'vp_solicitante':
                                   return (
-                                    <td key="vp_solicitante" style={{ ...cellBaseStyle, color: '#475569', minWidth: 120, lineHeight: 1.3 }}>
+                                    <td key="vp_solicitante" style={{ ...cellBaseStyle, color: '#475569', minWidth: 95, maxWidth: 135, lineHeight: 1.25 }}>
                                       {t.vp_solicitante || '—'}
                                     </td>
                                   );
                                 case 'solicitante':
                                   return (
-                                    <td key="solicitante" style={{ ...cellBaseStyle, color: '#475569', whiteSpace: 'nowrap' }}>
+                                    <td key="solicitante" style={{ ...cellBaseStyle, color: '#475569', lineHeight: 1.25 }}>
                                       {t.usuario_negocio || '—'}
                                     </td>
                                   );
                                 case 'lider_dominio':
                                   return (
-                                    <td key="lider_dominio" style={{ ...cellBaseStyle, color: '#0f172a', fontWeight: 600, whiteSpace: 'nowrap' }}>
+                                    <td key="lider_dominio" style={{ ...cellBaseStyle, color: '#0f172a', fontWeight: 600, lineHeight: 1.25 }}>
                                       {t.lider_dominio || '(Sin asignar)'}
                                     </td>
                                   );

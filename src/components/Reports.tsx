@@ -11567,8 +11567,10 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     { id: 'lider_dominio', label: 'Líder de Dominio' },
     { id: 'etapa_actual', label: 'Etapa Pipeline' },
     { id: 'fecha_asignacion', label: 'F. Asignación LD' },
+    { id: 'complejidad', label: 'Complejidad' },
     { id: 'fecha_inicio', label: 'F. Inicio' },
     { id: 'fecha_fin', label: 'F. Fin' },
+    { id: 'tiempo_estimado', label: 'Tiempo Est.' },
     { id: 'motivo', label: 'Diagnóstico / Motivo' },
     { id: 'desfase', label: 'Desfase vs HOY' },
   ];
@@ -11803,8 +11805,10 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
     | 'lider_dominio'
     | 'etapa_actual'
     | 'fecha_asignacion'
+    | 'complejidad'
     | 'fecha_inicio'
     | 'fecha_fin'
+    | 'tiempo_estimado'
     | 'motivo'
     | 'desfase';
 
@@ -11856,6 +11860,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
           else if (!datesB.asig) return -1;
           else cmp = datesA.asig.localeCompare(datesB.asig);
           break;
+        case 'complejidad':
+          cmp = (tA.complejidad || '').localeCompare(tB.complejidad || '', 'es');
+          break;
         case 'fecha_inicio':
           if (!datesA.inicio && !datesB.inicio) cmp = 0;
           else if (!datesA.inicio) return 1;
@@ -11867,6 +11874,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
           else if (!datesA.fin) return 1;
           else if (!datesB.fin) return -1;
           else cmp = datesA.fin.localeCompare(datesB.fin);
+          break;
+        case 'tiempo_estimado':
+          cmp = (tA.tiempo_estimado ?? tA.duracion_meses ?? 0) - (tB.tiempo_estimado ?? tB.duracion_meses ?? 0);
           break;
         case 'motivo':
           cmp = (a.reason || '').localeCompare(b.reason || '', 'es');
@@ -13395,8 +13405,10 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                     <option value="lider_dominio">Líder de Dominio</option>
                     <option value="etapa_actual">Etapa Pipeline</option>
                     <option value="fecha_asignacion">F. Asignación LD</option>
+                    <option value="complejidad">Complejidad</option>
                     <option value="fecha_inicio">Fecha de Inicio</option>
                     <option value="fecha_fin">Fecha de Fin</option>
+                    <option value="tiempo_estimado">Tiempo Estimado</option>
                     <option value="motivo">Diagnóstico / Motivo</option>
                   </select>
                   <button
@@ -13600,21 +13612,86 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
             </div>
 
             {/* Content List */}
-            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px' }}>
+            <div style={{ flex: 1, overflowY: 'auto', padding: '14px 20px', display: 'flex', flexDirection: 'column', gap: 18 }}>
               {sortedModalCustomItems.length === 0 ? (
                 <div style={{ textAlign: 'center', padding: '40px 20px', color: '#94a3b8' }}>
                   No se encontraron iniciativas con los filtros aplicados en esta selección.
                 </div>
-              ) : (
-                <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
-                    <thead>
-                      <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
-                        <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
-                          <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
-                        </th>
-                        {modalColOrder.map(colId => {
-                          if (hiddenModalCols.has(colId)) return null;
+              ) : (() => {
+                const categoryGroups: {
+                  key: OutOfDateCategory;
+                  title: string;
+                  color: string;
+                  bg: string;
+                  border: string;
+                  items: OutOfDateItem[];
+                }[] = (
+                  [
+                    {
+                      key: 'estimacion' as OutOfDateCategory,
+                      title: 'Por Estimar — Auditoría de Estimación',
+                      color: '#92400e',
+                      bg: '#fffbeb',
+                      border: '#fde68a',
+                      items: sortedModalCustomItems.filter(it => it.category === 'estimacion'),
+                    },
+                    {
+                      key: 'reestimacion' as OutOfDateCategory,
+                      title: 'Por Reestimar — Auditoría de Re-estimación',
+                      color: '#9a3412',
+                      bg: '#ffedd5',
+                      border: '#fdba74',
+                      items: sortedModalCustomItems.filter(it => it.category === 'reestimacion'),
+                    },
+                    {
+                      key: 'planificacion' as OutOfDateCategory,
+                      title: 'Por Planificar — Auditoría de Planificación',
+                      color: '#065f46',
+                      bg: '#ecfdf5',
+                      border: '#a7f3d0',
+                      items: sortedModalCustomItems.filter(it => it.category === 'planificacion'),
+                    },
+                    {
+                      key: 'otro' as OutOfDateCategory,
+                      title: 'Otros Pendientes',
+                      color: '#334155',
+                      bg: '#f1f5f9',
+                      border: '#cbd5e1',
+                      items: sortedModalCustomItems.filter(it => it.category !== 'estimacion' && it.category !== 'reestimacion' && it.category !== 'planificacion'),
+                    },
+                  ]
+                ).filter(g => g.items.length > 0);
+
+                return categoryGroups.map(grp => (
+                  <div key={grp.key} style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    <div
+                      style={{
+                        padding: '7px 12px',
+                        borderRadius: 8,
+                        backgroundColor: grp.bg,
+                        border: `1px solid ${grp.border}`,
+                        color: grp.color,
+                        fontSize: 12,
+                        fontWeight: 700,
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: 8,
+                      }}
+                    >
+                      <AlertTriangle size={14} />
+                      <span>{grp.title} ({grp.items.length} {grp.items.length === 1 ? 'iniciativa' : 'iniciativas'})</span>
+                    </div>
+                    <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: 8 }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 11.5 }}>
+                        <thead>
+                          <tr style={{ textAlign: 'left', color: '#475569', background: '#f8fafc', borderBottom: '2px solid #e2e8f0' }}>
+                            <th style={{ padding: '8px 6px', width: 34, textAlign: 'center', verticalAlign: 'middle', borderRight: '1px solid #e2e8f0' }} title="Ver detalle">
+                              <Eye size={13} style={{ color: '#94a3b8', margin: '0 auto' }} />
+                            </th>
+                            {modalColOrder.map(colId => {
+                              if (hiddenModalCols.has(colId)) return null;
+                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
+                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                           const isDragging = draggingColId === colId;
                           const isDragOver = dragOverColId === colId;
 
@@ -13815,11 +13892,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                     <div onClick={() => toggleModalSort('fecha_inicio')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_inicio' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>
-                                        {popupCustomData.category === 'estimacion'
+                                        {grp.key === 'estimacion'
                                           ? 'F. Inicio Est.'
-                                          : popupCustomData.category === 'reestimacion'
+                                          : grp.key === 'reestimacion'
                                           ? 'F. Inicio Reest.'
-                                          : popupCustomData.category === 'planificacion'
+                                          : grp.key === 'planificacion'
                                           ? 'F. Inicio Plan.'
                                           : 'F. Inicio'}
                                       </span>
@@ -13863,11 +13940,11 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                     <div onClick={() => toggleModalSort('fecha_fin')} style={{ display: 'inline-flex', alignItems: 'center', gap: 2, cursor: 'pointer', color: modalSortField === 'fecha_fin' ? '#2563eb' : '#475569' }}>
                                       {dragHandle}
                                       <span>
-                                        {popupCustomData.category === 'estimacion'
+                                        {grp.key === 'estimacion'
                                           ? 'F. Fin Est.'
-                                          : popupCustomData.category === 'reestimacion'
+                                          : grp.key === 'reestimacion'
                                           ? 'F. Fin Reest.'
-                                          : popupCustomData.category === 'planificacion'
+                                          : grp.key === 'planificacion'
                                           ? 'F. Fin Plan.'
                                           : 'F. Fin'}
                                       </span>
@@ -13900,6 +13977,34 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                           <option key={m} value={m}>{fmtMonthLabel(m)}</option>
                                         ))}
                                       </select>
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'complejidad':
+                              return (
+                                <th key="complejidad" {...dragHandlers} style={{ ...baseThStyle, minWidth: 95, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('complejidad')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'complejidad' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Complejidad</span>
+                                    {modalSortField === 'complejidad' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
+                                    )}
+                                  </div>
+                                </th>
+                              );
+                            case 'tiempo_estimado':
+                              return (
+                                <th key="tiempo_estimado" {...dragHandlers} style={{ ...baseThStyle, minWidth: 90, textAlign: 'center' }} title="Arrastra para mover / Clic para ordenar">
+                                  <div onClick={() => toggleModalSort('tiempo_estimado')} style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 3, cursor: 'pointer', color: modalSortField === 'tiempo_estimado' ? '#2563eb' : '#475569' }}>
+                                    {dragHandle}
+                                    <span>Tiempo Est.</span>
+                                    {modalSortField === 'tiempo_estimado' ? (
+                                      modalSortDir === 'asc' ? <ChevronUp size={12} style={{ color: '#2563eb' }} /> : <ChevronDown size={12} style={{ color: '#2563eb' }} />
+                                    ) : (
+                                      <ChevronRight size={11} style={{ opacity: 0.3, transform: 'rotate(90deg)' }} />
                                     )}
                                   </div>
                                 </th>
@@ -13964,7 +14069,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                       </tr>
                     </thead>
                     <tbody>
-                      {sortedModalCustomItems.map((item, idx) => {
+                      {grp.items.map((item, idx) => {
                         const t = item.iniciativa;
                         const idStr = String(t.id).padStart(4, '0');
                         const cfg = ETAPAS_MAP.get(t.etapa_actual);
@@ -14022,6 +14127,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
 
                             {modalColOrder.map(colId => {
                               if (hiddenModalCols.has(colId)) return null;
+                              if (grp.key === 'planificacion' && (colId === 'complejidad' || colId === 'tiempo_estimado')) return null;
                               switch (colId) {
                                 case 'id':
                                   return (
@@ -14087,6 +14193,20 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                       {asig ? fmtDateShort(asig) : '—'}
                                     </td>
                                   );
+                                case 'complejidad':
+                                  return (
+                                    <td key="complejidad" style={{ ...cellBaseStyle, color: t.complejidad ? '#334155' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: t.complejidad ? 600 : 400, textAlign: 'center' }}>
+                                      {t.complejidad || '—'}
+                                    </td>
+                                  );
+                                case 'tiempo_estimado': {
+                                  const estText = getTiempoEstimadoMover(t);
+                                  return (
+                                    <td key="tiempo_estimado" style={{ ...cellBaseStyle, color: estText !== '—' ? '#0f172a' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: estText !== '—' ? 600 : 400, textAlign: 'center' }}>
+                                      {estText}
+                                    </td>
+                                  );
+                                }
                                 case 'fecha_inicio':
                                   return (
                                     <td key="fecha_inicio" style={{ ...cellBaseStyle, color: inicio ? '#334155' : '#94a3b8', fontSize: 11, whiteSpace: 'nowrap', fontWeight: inicio ? 500 : 400, textAlign: 'center' }}>
@@ -14099,7 +14219,7 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                                       {fin ? fmtDateShort(fin) : '—'}
                                     </td>
                                   );
-                                case 'motivo':
+                            case 'motivo':
                                   return (
                                     <td key="motivo" style={{ ...cellBaseStyle }}>
                                       <MotivoBadgeChip reason={item.reason} category={item.category} fullText={true} />
@@ -14155,7 +14275,9 @@ export function Reports({ iniciativas, onNavigate, mode = 'demanda' }: ReportsPr
                     </tbody>
                   </table>
                 </div>
-              )}
+                  </div>
+                ));
+              })()}
             </div>
 
             {/* Footer */}

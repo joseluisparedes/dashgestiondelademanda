@@ -3571,6 +3571,7 @@ function TimelineIniciativasVP({
   const [onlyWithDates, setOnlyWithDates] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
   const [collapsedGroups, setCollapsedGroups] = useState<Record<string, boolean>>({});
+  const [collapsedSubgroups, setCollapsedSubgroups] = useState<Record<string, boolean>>({});
   const [displayLimits, setDisplayLimits] = useState<Record<string, number>>({});
   const [showAllRows, setShowAllRows] = useState<boolean>(false);
 
@@ -3818,7 +3819,14 @@ function TimelineIniciativasVP({
     setCollapsedGroups(prev => ({ ...prev, [key]: !prev[key] }));
   };
 
-  const expandAll = () => setCollapsedGroups({});
+  const toggleSubgroup = (subKey: string) => {
+    setCollapsedSubgroups(prev => ({ ...prev, [subKey]: !prev[subKey] }));
+  };
+
+  const expandAll = () => {
+    setCollapsedGroups({});
+    setCollapsedSubgroups({});
+  };
   const collapseAll = () => {
     const allCol: Record<string, boolean> = {};
     groupCountsAll.forEach(([k]) => { allCol[k] = true; });
@@ -4862,9 +4870,122 @@ function TimelineIniciativasVP({
                           const visibleRows = grp.rows.slice(0, limit);
                           const hasMore = grp.rows.length > limit;
 
+                          // Agrupar las filas visibles por estado (etapa_actual) siguiendo el orden del pipeline
+                          const stageOrder = [...ETAPAS_CONFIG, ...ETAPAS_PLANIFICADAS_CONFIG];
+                          const byStage = new Map<string, typeof visibleRows>();
+                          visibleRows.forEach(r => {
+                            const st = r.iniciativa.etapa_actual;
+                            if (!byStage.has(st)) byStage.set(st, []);
+                            byStage.get(st)!.push(r);
+                          });
+                          const stageSubgroups: Array<{
+                            etapaId: string;
+                            label: string;
+                            color: string;
+                            bgColor: string;
+                            textColor: string;
+                            rows: typeof visibleRows;
+                          }> = [];
+                          stageOrder.forEach(cfg => {
+                            const list = byStage.get(cfg.id);
+                            if (list && list.length > 0) {
+                              stageSubgroups.push({
+                                etapaId: cfg.id,
+                                label: cfg.label,
+                                color: cfg.color,
+                                bgColor: cfg.bgColor,
+                                textColor: cfg.textColor,
+                                rows: list,
+                              });
+                              byStage.delete(cfg.id);
+                            }
+                          });
+                          byStage.forEach((list, etapaId) => {
+                            stageSubgroups.push({
+                              etapaId,
+                              label: getEtapaHumanLabel(etapaId as EtapaPipeline),
+                              color: '#64748b',
+                              bgColor: '#f1f5f9',
+                              textColor: '#475569',
+                              rows: list,
+                            });
+                          });
+
                           return (
                             <>
-                              {visibleRows.map((row, rowIdx) => {
+                              {stageSubgroups.map(sub => {
+                                const subKey = `${grp.key}::${sub.etapaId}`;
+                                const isSubCollapsed = Boolean(collapsedSubgroups[subKey]);
+
+                                return (
+                                  <React.Fragment key={subKey}>
+                                    {/* SUBSECCIÓN POR ESTADO */}
+                                    <div
+                                      onClick={() => {
+                                        if (dragInfoRef.current.hasMoved) return;
+                                        toggleSubgroup(subKey);
+                                      }}
+                                      style={{
+                                        display: 'flex',
+                                        alignItems: 'center',
+                                        justifyContent: 'space-between',
+                                        padding: '4px 14px 4px 26px',
+                                        background: '#f8fafc',
+                                        borderBottom: '1px solid #e2e8f0',
+                                        borderLeft: `3px solid ${sub.color}`,
+                                        cursor: 'pointer',
+                                        userSelect: 'none',
+                                      }}
+                                    >
+                                      <div
+                                        style={{
+                                          display: 'inline-flex',
+                                          alignItems: 'center',
+                                          gap: 7,
+                                          position: 'sticky',
+                                          left: 26,
+                                          zIndex: 14,
+                                          background: '#f8fafc',
+                                          padding: '1px 6px',
+                                          borderRadius: 6,
+                                        }}
+                                      >
+                                        {isSubCollapsed ? (
+                                          <ChevronRight size={12} style={{ color: '#64748b' }} />
+                                        ) : (
+                                          <ChevronDown size={12} style={{ color: '#64748b' }} />
+                                        )}
+                                        <span
+                                          style={{
+                                            display: 'inline-flex',
+                                            alignItems: 'center',
+                                            gap: 5,
+                                            fontSize: 10.5,
+                                            fontWeight: 700,
+                                            padding: '1px 8px',
+                                            borderRadius: 12,
+                                            background: sub.bgColor,
+                                            color: sub.textColor,
+                                            border: `1px solid ${sub.color}55`,
+                                          }}
+                                        >
+                                          <span
+                                            style={{
+                                              width: 6,
+                                              height: 6,
+                                              borderRadius: '50%',
+                                              background: sub.color,
+                                            }}
+                                          />
+                                          {sub.label}
+                                        </span>
+                                        <span style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
+                                          · {sub.rows.length} {sub.rows.length === 1 ? 'iniciativa' : 'iniciativas'}
+                                        </span>
+                                      </div>
+                                    </div>
+
+                                    {!isSubCollapsed && sub.rows.map((row, rowIdx) => {
                                 const etapaCfg =
                                   ETAPAS_MAP.get(row.iniciativa.etapa_actual) ||
                                   ETAPAS_PLANIFICADAS_MAP.get(row.iniciativa.etapa_actual);
@@ -5176,6 +5297,9 @@ function TimelineIniciativasVP({
                                       )}
                                     </div>
                                   </div>
+                                );
+                              })}
+                                  </React.Fragment>
                                 );
                               })}
 

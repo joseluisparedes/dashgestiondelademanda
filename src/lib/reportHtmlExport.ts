@@ -224,6 +224,60 @@ function buildHtmlShell(opts: {
 // ---------------------------------------------------------------------------
 // 1. Auditoría de Fechas (fuera_fecha)
 // ---------------------------------------------------------------------------
+interface BadgePill {
+  label: string;
+  bg: string;
+  border: string;
+  color: string;
+  dotColor: string;
+}
+
+function buildEstimacionBadges(items: OutOfDateExportItem[]): BadgePill[] {
+  let vencidas = 0, enSLA = 0, fueraSLA = 0, sinAsig = 0, sinFin = 0;
+  items.forEach(it => {
+    const r = (it.reason || '').toLowerCase();
+    if (r.includes('en plazo sla')) enSLA++;
+    else if (r.includes('fuera de sla')) fueraSLA++;
+    else if (r.includes('vencida')) vencidas++;
+    else if (r.includes('sin fecha de asignación') && r.includes('ni fecha fin')) { sinAsig++; sinFin++; }
+    else if (r.includes('sin fecha de asignación') || r.includes('sin asignación')) sinAsig++;
+    else if (r.includes('sin fecha fin')) sinFin++;
+    else vencidas++;
+  });
+
+  const pills: BadgePill[] = [];
+  if (vencidas > 0) pills.push({ label: `${vencidas} vencida${vencidas > 1 ? 's' : ''}`, bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', dotColor: '#ef4444' });
+  if (enSLA > 0) pills.push({ label: `${enSLA} en SLA`, bg: '#dcfce7', border: '#86efac', color: '#166534', dotColor: '#10b981' });
+  if (fueraSLA > 0) pills.push({ label: `${fueraSLA} fuera SLA`, bg: '#ffedd5', border: '#fed7aa', color: '#9a3412', dotColor: '#f97316' });
+  if (sinAsig > 0 && sinFin > 0 && vencidas === 0 && enSLA === 0 && fueraSLA === 0) {
+    pills.push({ label: `${items.length} sin fechas`, bg: '#fef9c3', border: '#fde047', color: '#854d0e', dotColor: '#eab308' });
+  } else {
+    if (sinAsig > 0) pills.push({ label: `${sinAsig} sin asig.`, bg: '#fef9c3', border: '#fde047', color: '#854d0e', dotColor: '#eab308' });
+    if (sinFin > 0) pills.push({ label: `${sinFin} sin fin`, bg: '#fef9c3', border: '#fde047', color: '#854d0e', dotColor: '#eab308' });
+  }
+  return pills;
+}
+
+function buildReestimacionBadges(items: OutOfDateExportItem[]): BadgePill[] {
+  let vencidas = 0, sinFin = 0;
+  items.forEach(it => {
+    const r = (it.reason || '').toLowerCase();
+    if (r.includes('vencida')) vencidas++;
+    else sinFin++;
+  });
+  const pills: BadgePill[] = [];
+  if (vencidas > 0) pills.push({ label: `${vencidas} vencida${vencidas > 1 ? 's' : ''}`, bg: '#fee2e2', border: '#fca5a5', color: '#991b1b', dotColor: '#ef4444' });
+  if (sinFin > 0) pills.push({ label: `${sinFin} sin fin`, bg: '#ffedd5', border: '#fdba74', color: '#9a3412', dotColor: '#f97316' });
+  return pills;
+}
+
+function renderPillListHtml(pills: BadgePill[]): string {
+  if (pills.length === 0) return '';
+  return `<div style="display:flex;flex-wrap:wrap;justify-content:center;gap:4px;margin-top:5px;">${pills.map(p =>
+    `<span style="display:inline-flex;align-items:center;gap:4px;font-size:10px;font-weight:700;padding:1px 7px;border-radius:12px;background:${p.bg};color:${p.color};border:1px solid ${p.border};white-space:nowrap;"><span style="width:5px;height:5px;border-radius:50%;background:${p.dotColor};display:inline-block;"></span>${escapeHtml(p.label)}</span>`
+  ).join('')}</div>`;
+}
+
 export function exportFueraFechaToHTML(input: FueraFechaExportInput) {
   const refDate = new Date();
   const est: OutOfDateExportItem[] = [];
@@ -241,94 +295,195 @@ export function exportFueraFechaToHTML(input: FueraFechaExportInput) {
 
   const all = [...est, ...reest, ...plan];
 
-  const byLider: Record<string, { lider: string; est: number; reest: number; plan: number; total: number; maxDelay: number }> = {};
+  const byLider: Record<string, {
+    lider: string;
+    itemsEst: OutOfDateExportItem[];
+    itemsReest: OutOfDateExportItem[];
+    itemsPlan: OutOfDateExportItem[];
+    itemsAll: OutOfDateExportItem[];
+  }> = {};
+
   all.forEach(item => {
     const lid = normVal(item.iniciativa.lider_dominio);
-    if (!byLider[lid]) byLider[lid] = { lider: lid, est: 0, reest: 0, plan: 0, total: 0, maxDelay: 0 };
-    if (item.category === 'estimacion') byLider[lid].est++;
-    else if (item.category === 'reestimacion') byLider[lid].reest++;
-    else byLider[lid].plan++;
-    byLider[lid].total++;
-    if (item.delayDays > byLider[lid].maxDelay) byLider[lid].maxDelay = item.delayDays;
+    if (!byLider[lid]) byLider[lid] = { lider: lid, itemsEst: [], itemsReest: [], itemsPlan: [], itemsAll: [] };
+    if (item.category === 'estimacion') byLider[lid].itemsEst.push(item);
+    else if (item.category === 'reestimacion') byLider[lid].itemsReest.push(item);
+    else byLider[lid].itemsPlan.push(item);
+    byLider[lid].itemsAll.push(item);
   });
-  const liderRows = Object.values(byLider).sort((a, b) => b.total - a.total);
 
-  const summaryRowsHtml = liderRows.map(r => `
-    <tr>
-      <td style="font-weight:700;color:#0f172a;">${escapeHtml(displayLabel(r.lider))}</td>
-      <td style="text-align:right;font-weight:700;color:#d97706;">${r.est}</td>
-      <td style="text-align:right;font-weight:700;color:#7c3aed;">${r.reest}</td>
-      <td style="text-align:right;font-weight:700;color:#e11d48;">${r.plan}</td>
-      <td style="text-align:right;font-weight:800;color:#0f172a;">${r.total}</td>
-      <td style="text-align:right;font-weight:700;color:#ef4444;">${r.maxDelay > 0 ? `${r.maxDelay} d` : '—'}</td>
-    </tr>
-  `).join('');
+  const liderRows = Object.values(byLider).sort((a, b) => b.itemsAll.length - a.itemsAll.length);
 
-  const detailItems = all.map(item => {
-    const etapa = ETAPAS_BY_ID.get(item.iniciativa.etapa_actual);
+  const tableRowsHtml = liderRows.map(r => {
+    const lidEsc = escapeHtml(r.lider);
+    const lidLabel = escapeHtml(displayLabel(r.lider));
+    const estCell = r.itemsEst.length > 0
+      ? `<div class="cell-click" data-lider="${lidEsc}" data-cat="estimacion" title="Ver detalle de Estimaciones">
+           <span class="count-circle" style="background:#fef9c3;color:#a16207;border-color:#fde047;">${r.itemsEst.length}</span>
+           ${renderPillListHtml(buildEstimacionBadges(r.itemsEst))}
+         </div>`
+      : '<span style="color:#cbd5e1;font-weight:600;">—</span>';
+
+    const reestCell = r.itemsReest.length > 0
+      ? `<div class="cell-click" data-lider="${lidEsc}" data-cat="reestimacion" title="Ver detalle de Re-estimaciones">
+           <span class="count-circle" style="background:#f3e8ff;color:#6d28d9;border-color:#d8b4fe;">${r.itemsReest.length}</span>
+           ${renderPillListHtml(buildReestimacionBadges(r.itemsReest))}
+         </div>`
+      : '<span style="color:#cbd5e1;font-weight:600;">—</span>';
+
+    const planCell = r.itemsPlan.length > 0
+      ? `<div class="cell-click" data-lider="${lidEsc}" data-cat="planificacion" title="Ver detalle de Planificación">
+           <span class="count-circle" style="background:#ffe4e6;color:#be123c;border-color:#fda4af;">${r.itemsPlan.length}</span>
+           ${renderPillListHtml([{ label: `${r.itemsPlan.length} sin fechas`, bg: '#ffe4e6', border: '#fda4af', color: '#9f1239', dotColor: '#f43f5e' }])}
+         </div>`
+      : '<span style="color:#cbd5e1;font-weight:600;">—</span>';
+
+    return `
+      <tr>
+        <td>
+          <button type="button" class="lider-link" data-lider="${lidEsc}" data-cat="all">${lidLabel}</button>
+        </td>
+        <td style="text-align:center;">${estCell}</td>
+        <td style="text-align:center;">${reestCell}</td>
+        <td style="text-align:center;">${planCell}</td>
+        <td style="text-align:center;">
+          <div class="cell-click" data-lider="${lidEsc}" data-cat="all" title="Ver todas las iniciativas de ${lidLabel}">
+            <div style="font-size:14px;font-weight:900;color:#0f172a;">${r.itemsAll.length}</div>
+            <span style="display:inline-block;margin-top:2px;font-size:10px;font-weight:600;color:#475569;background:#f1f5f9;border:1px solid #e2e8f0;padding:1px 8px;border-radius:12px;">
+              ${r.itemsAll.length} ${r.itemsAll.length === 1 ? 'iniciativa' : 'iniciativas'}
+            </span>
+          </div>
+        </td>
+        <td style="text-align:center;">
+          <button type="button" class="btn-detail" data-lider="${lidEsc}" data-cat="all">Ver Detalle</button>
+        </td>
+      </tr>
+    `;
+  }).join('');
+
+  const serializedItems = all.map(item => {
+    const i = item.iniciativa;
+    const etapa = ETAPAS_BY_ID.get(i.etapa_actual);
+    const tiempo = i.tiempo_estimado ?? i.duracion_meses;
     return {
-      id: item.iniciativa.id,
-      titulo: item.iniciativa.titulo,
-      lider: displayLabel(item.iniciativa.lider_dominio),
-      it_bp: displayLabel(item.iniciativa.it_bp),
-      vp: displayLabel(item.iniciativa.vp_solicitante),
-      category: item.category,
-      etapaLabel: etapa?.label ?? item.iniciativa.etapa_actual,
+      id: i.id,
+      idPad: String(i.id).padStart(4, '0'),
+      titulo: i.titulo,
+      it_bp: displayLabel(i.it_bp),
+      vp: displayLabel(i.vp_solicitante),
+      solicitante: displayLabel(i.usuario_negocio),
+      liderKey: normVal(i.lider_dominio),
+      lider: displayLabel(i.lider_dominio),
+      etapaLabel: etapa?.label ?? i.etapa_actual,
       etapaColor: etapa?.color ?? '#64748b',
       etapaBg: etapa?.bgColor ?? '#f1f5f9',
+      fAsig: fmtDateShort(i.fecha_asignacion),
+      complejidad: i.complejidad || '—',
+      fIniEst: fmtDateShort(i.fecha_inicio_estimacion),
+      fFinEst: fmtDateShort(i.fecha_fin_estimacion),
+      tiempoEst: tiempo != null && tiempo !== '' ? `${tiempo} ${Number(tiempo) === 1 ? 'mes' : 'meses'}` : '—',
+      category: item.category,
       reason: item.reason,
       delayDays: item.delayDays,
     };
   });
 
   const bodyHtml = `
+    <style>
+      .kpi-click { cursor:pointer; transition: transform .12s, box-shadow .12s; }
+      .kpi-click:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(15,23,42,.08); }
+      .count-circle {
+        display: inline-flex; align-items: center; justify-content: center;
+        width: 26px; height: 26px; border-radius: 50%; font-size: 12px; font-weight: 800;
+        border: 1.5px solid transparent;
+      }
+      .cell-click { cursor: pointer; display: inline-flex; flex-direction: column; align-items: center; padding: 4px 6px; border-radius: 8px; transition: background .12s; }
+      .cell-click:hover { background: #f1f5f9; }
+      .lider-link {
+        background: none; border: none; padding: 0; font-family: inherit;
+        font-size: 12px; font-weight: 700; color: #2563eb; cursor: pointer; text-align: left;
+      }
+      .lider-link:hover { text-decoration: underline; }
+      .btn-detail {
+        font-family: inherit; font-size: 11px; font-weight: 700; color: #2563eb;
+        background: #eff6ff; border: 1px solid #bfdbfe; border-radius: 7px;
+        padding: 5px 12px; cursor: pointer; transition: all .15s; white-space: nowrap;
+      }
+      .btn-detail:hover { background: #dbeafe; border-color: #93c5fd; }
+      .modal-backdrop {
+        position: fixed; inset: 0; background: rgba(15,23,42,.5); z-index: 1000;
+        display: none; align-items: center; justify-content: center; padding: 18px;
+        backdrop-filter: blur(2px);
+      }
+      .modal-backdrop.open { display: flex; }
+      .modal-box {
+        background: #fff; border-radius: 14px; width: 100%; max-width: 1280px;
+        max-height: 90vh; display: flex; flex-direction: column;
+        box-shadow: 0 24px 48px rgba(15,23,42,.25); overflow: hidden;
+      }
+      .modal-header {
+        padding: 16px 22px; border-bottom: 1px solid #e2e8f0;
+        display: flex; align-items: center; justify-content: space-between; gap: 14px; flex-wrap: wrap;
+        background: #fff;
+      }
+      .modal-body { padding: 18px 22px; overflow-y: auto; display: flex; flex-direction: column; gap: 18px; background: #fff; }
+      .modal-footer { padding: 12px 22px; border-top: 1px solid #e2e8f0; display: flex; justify-content: flex-end; background: #f8fafc; }
+      .sec-header {
+        padding: 8px 14px; border-radius: 8px; font-size: 12px; font-weight: 700;
+        display: flex; align-items: center; gap: 8px;
+      }
+    </style>
+
     <div class="kpi-grid">
-      <div class="kpi-card" style="border-color:#cbd5e1;background:#f8fafc;">
+      <div class="kpi-card kpi-click" data-lider="__ALL__" data-cat="all" style="border-color:#cbd5e1;background:#f8fafc;">
         <span class="kpi-label">Total Desfases Detectados</span>
         <span class="kpi-value" style="color:#0f172a;">${all.length}</span>
-        <span class="kpi-sub">de ${input.iniciativas.length} iniciativas filtradas</span>
+        <span class="kpi-sub">de ${input.iniciativas.length} iniciativas · Ver todas</span>
       </div>
-      <div class="kpi-card" style="border-color:#fde68a;background:#fffbeb;">
+      <div class="kpi-card kpi-click" data-lider="__ALL__" data-cat="estimacion" style="border-color:#fde68a;background:#fffbeb;">
         <span class="kpi-label" style="color:#b45309;">Estimación (SLA y Desfases)</span>
         <span class="kpi-value" style="color:#d97706;">${est.length}</span>
-        <span class="kpi-sub">en Por Estimar</span>
+        <span class="kpi-sub">en Por Estimar · Ver detalle</span>
       </div>
-      <div class="kpi-card" style="border-color:#ddd6fe;background:#f5f3ff;">
+      <div class="kpi-card kpi-click" data-lider="__ALL__" data-cat="reestimacion" style="border-color:#ddd6fe;background:#f5f3ff;">
         <span class="kpi-label" style="color:#6d28d9;">Fecha Fin Re-estimación</span>
         <span class="kpi-value" style="color:#7c3aed;">${reest.length}</span>
-        <span class="kpi-sub">en Por Reestimar</span>
+        <span class="kpi-sub">en Por Reestimar · Ver detalle</span>
       </div>
-      <div class="kpi-card" style="border-color:#fecdd3;background:#fff1f2;">
+      <div class="kpi-card kpi-click" data-lider="__ALL__" data-cat="planificacion" style="border-color:#fecdd3;background:#fff1f2;">
         <span class="kpi-label" style="color:#be123c;">Planificación (Sin Fechas)</span>
         <span class="kpi-value" style="color:#e11d48;">${plan.length}</span>
-        <span class="kpi-sub">en Por Planificar</span>
+        <span class="kpi-sub">en Por Planificar · Ver detalle</span>
       </div>
     </div>
 
     <div class="card">
-      <div class="section-title">Resumen por Líder de Dominio</div>
+      <div class="section-title">
+        <span>Tabla Detallada por Líder de Dominio</span>
+        <span style="font-size:11px;color:#64748b;font-weight:600;">Haz clic en un líder, conteo o botón para ver el detalle</span>
+      </div>
       <div class="table-wrap">
         <table>
           <thead>
             <tr>
               <th>Líder de Dominio</th>
-              <th style="text-align:right;">Estimaciones</th>
-              <th style="text-align:right;">Re-estimaciones</th>
-              <th style="text-align:right;">Planificación</th>
-              <th style="text-align:right;">Total Desfases</th>
-              <th style="text-align:right;">Máx. Atraso</th>
+              <th style="text-align:center;color:#d97706;">Estimaciones</th>
+              <th style="text-align:center;color:#7c3aed;">Re-estimaciones</th>
+              <th style="text-align:center;color:#e11d48;">Planificación</th>
+              <th style="text-align:center;">Total Desfases</th>
+              <th style="text-align:center;">Acción</th>
             </tr>
           </thead>
           <tbody>
-            ${summaryRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:24px;">Sin desfases detectados.</td></tr>'}
+            ${tableRowsHtml || '<tr><td colspan="6" style="text-align:center;color:#94a3b8;padding:28px;">Sin desfases detectados.</td></tr>'}
           </tbody>
           <tfoot>
             <tr>
-              <td>TOTAL</td>
-              <td style="text-align:right;color:#d97706;">${est.length}</td>
-              <td style="text-align:right;color:#7c3aed;">${reest.length}</td>
-              <td style="text-align:right;color:#e11d48;">${plan.length}</td>
-              <td style="text-align:right;">${all.length}</td>
+              <td>TOTAL (${liderRows.length} líderes)</td>
+              <td style="text-align:center;color:#d97706;">${est.length}</td>
+              <td style="text-align:center;color:#7c3aed;">${reest.length}</td>
+              <td style="text-align:center;color:#e11d48;">${plan.length}</td>
+              <td style="text-align:center;">${all.length}</td>
               <td></td>
             </tr>
           </tfoot>
@@ -336,85 +491,180 @@ export function exportFueraFechaToHTML(input: FueraFechaExportInput) {
       </div>
     </div>
 
-    <div class="card">
-      <div class="section-title">
-        <span>Detalle de Iniciativas Fuera de Fecha</span>
-        <span id="detailCount" style="font-size:11px;color:#64748b;font-weight:600;">${detailItems.length} registros</span>
-      </div>
-      <div class="toolbar">
-        <div class="pills" id="catPills">
-          <button class="pill active" data-cat="all">Consolidado (${all.length})</button>
-          <button class="pill" data-cat="estimacion">Estimaciones (${est.length})</button>
-          <button class="pill" data-cat="reestimacion">Re-estimaciones (${reest.length})</button>
-          <button class="pill" data-cat="planificacion">Planificación (${plan.length})</button>
+    <div id="detailModal" class="modal-backdrop">
+      <div class="modal-box" role="dialog" aria-modal="true">
+        <div class="modal-header">
+          <div>
+            <h2 id="modalTitle" style="font-size:15px;font-weight:800;color:#0f172a;"></h2>
+            <p id="modalSubtitle" style="font-size:11px;color:#64748b;margin-top:2px;"></p>
+          </div>
+          <div style="display:flex;align-items:center;gap:10px;">
+            <input id="modalSearch" class="search-input" type="text" placeholder="Buscar en resultado..." style="min-width:220px;" />
+            <button type="button" id="modalCloseX" style="border:1px solid #cbd5e1;background:#fff;border-radius:8px;width:30px;height:30px;cursor:pointer;font-weight:700;color:#475569;">✕</button>
+          </div>
         </div>
-        <input id="searchBox" class="search-input" type="text" placeholder="Buscar por ID, título, líder o motivo..." />
-      </div>
-      <div class="table-wrap">
-        <table>
-          <thead>
-            <tr>
-              <th>ID</th>
-              <th>Título de la Iniciativa</th>
-              <th>Líder de Dominio</th>
-              <th>IT BP</th>
-              <th>Etapa</th>
-              <th>Diagnóstico / Motivo</th>
-              <th style="text-align:right;">Atraso</th>
-            </tr>
-          </thead>
-          <tbody id="detailBody"></tbody>
-        </table>
+        <div id="modalBody" class="modal-body"></div>
+        <div class="modal-footer">
+          <button type="button" id="modalCloseBtn" style="font-family:inherit;font-size:12px;font-weight:700;color:#fff;background:#2563eb;border:none;border-radius:8px;padding:7px 18px;cursor:pointer;">Cerrar</button>
+        </div>
       </div>
     </div>
   `;
 
   const scriptHtml = `<script>
-    const ITEMS = ${safeJson(detailItems)};
-    let activeCat = 'all';
-    let query = '';
-    const catLabels = { estimacion: 'Estimación', reestimacion: 'Re-estimación', planificacion: 'Planificación' };
+    const ITEMS = ${safeJson(serializedItems)};
     const esc = s => String(s ?? '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+    let currentLider = '__ALL__';
+    let currentCat = 'all';
+    let modalQuery = '';
 
-    function render() {
-      const q = query.trim().toLowerCase();
-      const rows = ITEMS.filter(r => {
-        if (activeCat !== 'all' && r.category !== activeCat) return false;
-        if (!q) return true;
-        return String(r.id).includes(q) || r.titulo.toLowerCase().includes(q) || r.lider.toLowerCase().includes(q) || r.it_bp.toLowerCase().includes(q) || r.reason.toLowerCase().includes(q);
-      });
-      document.getElementById('detailCount').textContent = rows.length + ' registros';
-      const tbody = document.getElementById('detailBody');
-      if (rows.length === 0) {
-        tbody.innerHTML = '<tr><td colspan="7" style="text-align:center;color:#94a3b8;padding:24px;">Sin registros para mostrar.</td></tr>';
-        return;
+    function getReasonMeta(it) {
+      const r = it.reason || '';
+      if (it.category === 'estimacion') {
+        if (r.includes('vencida')) return { key: 'est-vencida', cat: 'estimacion', title: 'Por Estimar — Fecha Fin de Estimación vencida respecto a hoy', color: '#991b1b', bg: '#fef2f2', border: '#fecaca' };
+        if (r.includes('Fuera de SLA')) return { key: 'est-fuera-sla', cat: 'estimacion', title: 'Por Estimar — Fuera de SLA (> 5 días de asignado al LD, sin fecha fin)', color: '#9a3412', bg: '#fff7ed', border: '#fed7aa' };
+        if (r.includes('En plazo SLA')) return { key: 'est-en-sla', cat: 'estimacion', title: 'Por Estimar — En plazo SLA (≤ 5 días desde asignación al LD)', color: '#065f46', bg: '#ecfdf5', border: '#a7f3d0' };
+        return { key: 'est-' + r, cat: 'estimacion', title: r || 'Por Estimar — Pendiente', color: '#92400e', bg: '#fffbeb', border: '#fde68a' };
       }
-      tbody.innerHTML = rows.map(r => \`
-        <tr>
-          <td style="font-weight:700;color:#0284c7;">#\${r.id}</td>
-          <td style="font-weight:600;color:#0f172a;max-width:340px;">\${esc(r.titulo)}</td>
-          <td>\${esc(r.lider)}</td>
-          <td>\${esc(r.it_bp)}</td>
-          <td><span class="badge" style="background:\${r.etapaBg};color:\${r.etapaColor};border:1px solid \${r.etapaColor}44;">\${esc(r.etapaLabel)}</span></td>
-          <td style="color:#475569;"><strong>[\${catLabels[r.category]}]</strong> \${esc(r.reason)}</td>
-          <td style="text-align:right;font-weight:700;color:#ef4444;">\${r.delayDays > 0 ? r.delayDays + ' d' : '—'}</td>
-        </tr>
-      \`).join('');
+      if (it.category === 'reestimacion') {
+        if (r.includes('vencida')) return { key: 'reest-vencida', cat: 'reestimacion', title: 'Por Reestimar — Fecha Fin de Re-estimación vencida respecto a hoy', color: '#991b1b', bg: '#fef2f2', border: '#fecaca' };
+        return { key: 'reest-' + r, cat: 'reestimacion', title: r || 'Por Reestimar — Sin fecha fin programada', color: '#9a3412', bg: '#ffedd5', border: '#fdba74' };
+      }
+      if (it.category === 'planificacion') {
+        return { key: 'plan-' + r, cat: 'planificacion', title: r || 'Por Planificar — Sin fechas de planificación', color: '#065f46', bg: '#ecfdf5', border: '#a7f3d0' };
+      }
+      return { key: 'otro', cat: 'otro', title: r || 'Otros Pendientes', color: '#334155', bg: '#f1f5f9', border: '#cbd5e1' };
     }
 
-    document.getElementById('catPills').addEventListener('click', e => {
-      const btn = e.target.closest('.pill');
-      if (!btn) return;
-      document.querySelectorAll('#catPills .pill').forEach(b => b.classList.remove('active'));
-      btn.classList.add('active');
-      activeCat = btn.dataset.cat;
-      render();
+    function renderModal() {
+      const q = modalQuery.trim().toLowerCase();
+      const base = ITEMS.filter(it => {
+        if (currentLider !== '__ALL__' && it.liderKey !== currentLider) return false;
+        if (currentCat !== 'all' && it.category !== currentCat) return false;
+        return true;
+      });
+      const filtered = base.filter(it => {
+        if (!q) return true;
+        return it.idPad.includes(q) || String(it.id).includes(q) || it.titulo.toLowerCase().includes(q) ||
+          it.it_bp.toLowerCase().includes(q) || it.vp.toLowerCase().includes(q) ||
+          it.solicitante.toLowerCase().includes(q) || it.lider.toLowerCase().includes(q) ||
+          it.reason.toLowerCase().includes(q);
+      });
+
+      const liderLabel = currentLider === '__ALL__' ? 'Todos los Líderes' : (base[0]?.lider || currentLider);
+      const titleMap = {
+        estimacion: currentLider === '__ALL__' ? 'Iniciativas en Estimación (Pendientes, SLA y Vencidas)' : 'Auditoría de Estimación: ' + liderLabel,
+        reestimacion: currentLider === '__ALL__' ? 'Iniciativas en Re-estimación' : 'Auditoría de Re-estimación: ' + liderLabel,
+        planificacion: currentLider === '__ALL__' ? 'Iniciativas en Planificación (Sin Fechas)' : 'Auditoría de Planificación: ' + liderLabel,
+        all: currentLider === '__ALL__' ? 'Consolidado de Iniciativas Fuera de Fecha' : 'Auditoría Consolidada: ' + liderLabel,
+      };
+      document.getElementById('modalTitle').textContent = '⚠️ ' + titleMap[currentCat];
+      document.getElementById('modalSubtitle').textContent = filtered.length === base.length
+        ? base.length + ' iniciativas detectadas'
+        : 'Mostrando ' + filtered.length + ' de ' + base.length + ' iniciativas';
+
+      const body = document.getElementById('modalBody');
+      if (filtered.length === 0) {
+        body.innerHTML = '<div style="text-align:center;color:#94a3b8;padding:36px;">No hay iniciativas que coincidan con la búsqueda.</div>';
+        return;
+      }
+
+      const groupMap = new Map();
+      filtered.forEach(it => {
+        const meta = getReasonMeta(it);
+        if (!groupMap.has(meta.key)) groupMap.set(meta.key, { ...meta, items: [] });
+        groupMap.get(meta.key).items.push(it);
+      });
+
+      body.innerHTML = Array.from(groupMap.values()).map(grp => {
+        const isPlan = grp.cat === 'planificacion';
+        const rowsHtml = grp.items.map(it => \`
+          <tr>
+            <td style="font-weight:700;color:#2563eb;white-space:nowrap;">\${esc(it.idPad)}</td>
+            <td style="font-weight:600;color:#0f172a;min-width:210px;max-width:280px;">\${esc(it.titulo)}</td>
+            <td>\${esc(it.it_bp)}</td>
+            <td style="max-width:150px;">\${esc(it.vp)}</td>
+            <td>\${esc(it.solicitante)}</td>
+            <td style="font-weight:600;">\${esc(it.lider)}</td>
+            <td><span class="badge" style="background:\${it.etapaBg};color:\${it.etapaColor};border:1px solid \${it.etapaColor}44;">\${esc(it.etapaLabel)}</span></td>
+            <td style="white-space:nowrap;">\${esc(it.fAsig)}</td>
+            \${isPlan ? '' : '<td style="text-align:center;">' + esc(it.complejidad) + '</td>'}
+            <td style="white-space:nowrap;">\${esc(it.fIniEst)}</td>
+            <td style="white-space:nowrap;">\${esc(it.fFinEst)}</td>
+            \${isPlan ? '' : '<td style="white-space:nowrap;">' + esc(it.tiempoEst) + '</td>'}
+            <td><span class="badge" style="background:\${grp.bg};color:\${grp.color};border:1px solid \${grp.border};white-space:normal;line-height:1.3;">• \${esc(it.reason)}</span></td>
+            <td style="text-align:right;white-space:nowrap;">
+              \${it.delayDays > 0
+                ? '<span class="badge" style="background:' + grp.bg + ';color:' + grp.color + ';border:1px solid ' + grp.border + ';font-weight:800;">+' + it.delayDays + ' días</span>'
+                : '<span style="color:#94a3b8;">—</span>'}
+            </td>
+          </tr>
+        \`).join('');
+
+        return \`
+          <div style="display:flex;flex-direction:column;gap:8px;">
+            <div class="sec-header" style="background:\${grp.bg};color:\${grp.color};border:1px solid \${grp.border};">
+              <span>⚠️ \${esc(grp.title)} (\${grp.items.length} \${grp.items.length === 1 ? 'iniciativa' : 'iniciativas'})</span>
+            </div>
+            <div class="table-wrap">
+              <table style="font-size:11px;">
+                <thead>
+                  <tr>
+                    <th>ID</th>
+                    <th>Título de la Iniciativa</th>
+                    <th>IT BP</th>
+                    <th>VP Solicitante</th>
+                    <th>Solicitante</th>
+                    <th>Líder Dominio</th>
+                    <th>Etapa</th>
+                    <th>F. Asig. LD</th>
+                    \${isPlan ? '' : '<th>Complejidad</th>'}
+                    <th>F. Ini. Est.</th>
+                    <th>F. Fin Est.</th>
+                    \${isPlan ? '' : '<th>Tiempo Est.</th>'}
+                    <th>Diagnóstico / Motivo</th>
+                    <th style="text-align:right;">Desfase</th>
+                  </tr>
+                </thead>
+                <tbody>\${rowsHtml}</tbody>
+              </table>
+            </div>
+          </div>
+        \`;
+      }).join('');
+    }
+
+    function openModal(lider, cat) {
+      currentLider = lider || '__ALL__';
+      currentCat = cat || 'all';
+      modalQuery = '';
+      document.getElementById('modalSearch').value = '';
+      renderModal();
+      document.getElementById('detailModal').classList.add('open');
+    }
+
+    function closeModal() {
+      document.getElementById('detailModal').classList.remove('open');
+    }
+
+    document.addEventListener('click', e => {
+      const trigger = e.target.closest('[data-lider][data-cat]');
+      if (trigger) {
+        openModal(trigger.dataset.lider, trigger.dataset.cat);
+      }
     });
-    document.getElementById('searchBox').addEventListener('input', e => {
-      query = e.target.value;
-      render();
+    document.getElementById('modalSearch').addEventListener('input', e => {
+      modalQuery = e.target.value;
+      renderModal();
     });
-    render();
+    document.getElementById('modalCloseX').addEventListener('click', closeModal);
+    document.getElementById('modalCloseBtn').addEventListener('click', closeModal);
+    document.getElementById('detailModal').addEventListener('click', e => {
+      if (e.target.id === 'detailModal') closeModal();
+    });
+    document.addEventListener('keydown', e => {
+      if (e.key === 'Escape') closeModal();
+    });
   </script>`;
 
   const html = buildHtmlShell({

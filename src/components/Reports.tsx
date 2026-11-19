@@ -4929,12 +4929,18 @@ function TimelineIniciativasVP({
                                         display: 'flex',
                                         alignItems: 'center',
                                         justifyContent: 'space-between',
-                                        padding: '4px 14px 4px 26px',
-                                        background: '#f8fafc',
-                                        borderBottom: '1px solid #e2e8f0',
-                                        borderLeft: `3px solid ${sub.color}`,
+                                        padding: '5px 14px 5px 28px',
+                                        background: `${sub.color}14`,
+                                        borderBottom: `1px solid ${sub.color}30`,
                                         cursor: 'pointer',
                                         userSelect: 'none',
+                                        transition: 'filter 0.15s ease',
+                                      }}
+                                      onMouseEnter={e => {
+                                        (e.currentTarget as HTMLElement).style.filter = 'brightness(0.97)';
+                                      }}
+                                      onMouseLeave={e => {
+                                        (e.currentTarget as HTMLElement).style.filter = 'none';
                                       }}
                                     >
                                       <div
@@ -4943,46 +4949,44 @@ function TimelineIniciativasVP({
                                           alignItems: 'center',
                                           gap: 7,
                                           position: 'sticky',
-                                          left: 26,
+                                          left: 28,
                                           zIndex: 14,
-                                          background: '#f8fafc',
                                           padding: '1px 6px',
                                           borderRadius: 6,
                                         }}
                                       >
                                         {isSubCollapsed ? (
-                                          <ChevronRight size={12} style={{ color: '#64748b' }} />
+                                          <ChevronRight size={13} style={{ color: sub.textColor }} />
                                         ) : (
-                                          <ChevronDown size={12} style={{ color: '#64748b' }} />
+                                          <ChevronDown size={13} style={{ color: sub.textColor }} />
                                         )}
                                         <span
                                           style={{
-                                            display: 'inline-flex',
-                                            alignItems: 'center',
-                                            gap: 5,
-                                            fontSize: 10.5,
-                                            fontWeight: 700,
-                                            padding: '1px 8px',
-                                            borderRadius: 12,
-                                            background: sub.bgColor,
-                                            color: sub.textColor,
-                                            border: `1px solid ${sub.color}55`,
+                                            width: 7,
+                                            height: 7,
+                                            borderRadius: '50%',
+                                            background: sub.color,
+                                            flexShrink: 0,
                                           }}
-                                        >
-                                          <span
-                                            style={{
-                                              width: 6,
-                                              height: 6,
-                                              borderRadius: '50%',
-                                              background: sub.color,
-                                            }}
-                                          />
-                                          {sub.label}
-                                        </span>
-                                        <span style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
-                                          · {sub.rows.length} {sub.rows.length === 1 ? 'iniciativa' : 'iniciativas'}
+                                        />
+                                        <span style={{ fontSize: 11.5, fontWeight: 700, color: sub.textColor }}>
+                                          {sub.label} · {sub.rows.length} {sub.rows.length === 1 ? 'iniciativa' : 'iniciativas'}
                                         </span>
                                       </div>
+
+                                      <span
+                                        style={{
+                                          fontSize: 10,
+                                          fontWeight: 700,
+                                          padding: '1px 8px',
+                                          borderRadius: 12,
+                                          background: sub.bgColor,
+                                          color: sub.textColor,
+                                          border: `1px solid ${sub.color}40`,
+                                        }}
+                                      >
+                                        {sub.label} ({sub.rows.length})
+                                      </span>
                                     </div>
 
                                     {!isSubCollapsed && sub.rows.map((row, rowIdx) => {

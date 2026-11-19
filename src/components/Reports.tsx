@@ -7170,12 +7170,11 @@ function exportReportToHTML(
       const lideres = new Set();
 
       RAW_DATA.forEach(i => {
-        if (i.vp_solicitante) vps.add(i.vp_solicitante.trim());
-        if (i.institucion) insts.add(i.institucion.trim());
-        if (i.it_bp) bps.add(i.it_bp.trim());
-        else if (i.it_business_partner) bps.add(i.it_business_partner.trim());
-        if (i.etapa_actual) estados.add(i.etapa_actual.trim());
-        if (i.lider_dominio) lideres.add(i.lider_dominio.trim());
+        vps.add((i.vp_solicitante || '').trim());
+        insts.add((i.institucion || '').trim());
+        bps.add((i.it_bp || i.it_business_partner || '').trim());
+        estados.add((i.etapa_actual || '').trim());
+        lideres.add((i.lider_dominio || '').trim());
       });
 
       const buildDropdown = (key, set, isState = false) => {
@@ -7183,6 +7182,8 @@ function exportReportToHTML(
         if (!drop) return;
 
         const sorted = Array.from(set).sort((a,b) => {
+          if (a === '') return 1;
+          if (b === '') return -1;
           if (isState) return getEtapaLabel(a).localeCompare(getEtapaLabel(b));
           return a.localeCompare(b);
         });
@@ -7194,7 +7195,7 @@ function exportReportToHTML(
           </div>
           <div style="display: flex; flex-direction: column; gap: 2px;">
             \${sorted.map(val => {
-              const label = isState ? getEtapaLabel(val) : val;
+              const label = val === '' ? '(Sin asignar)' : (isState ? getEtapaLabel(val) : val);
               return \`
                 <label class="ms-item">
                   <input type="checkbox" value="\${escapeJs(val)}" onchange="onCheckboxChange('\${key}')" checked>

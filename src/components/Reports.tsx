@@ -5678,7 +5678,7 @@ function exportReportToHTML(
     }
     .footer-text { font-size: 11px; color: var(--text-muted); line-height: 1.5; }
     .footer-mail { font-size: 11px; font-weight: 700; color: var(--navy); }
-    .main-content { padding: 12px 24px 32px; max-width: 1400px; margin: 0 auto; }
+    .main-content { padding: 12px 24px 32px; width: 100%; max-width: 1400px; margin: 0 auto; }
     .group-section-header {
       background: #f0fdfa;
       cursor: pointer;
@@ -6048,9 +6048,15 @@ function exportReportToHTML(
     /* 4 Phase Cards (Filtros dinámicos interactivos) */
     .phase-grid {
       display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      grid-template-columns: repeat(4, minmax(0, 1fr));
       gap: 14px;
       margin-bottom: 20px;
+    }
+    @media (max-width: 1024px) {
+      .phase-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+    }
+    @media (max-width: 640px) {
+      .phase-grid { grid-template-columns: 1fr; }
     }
     .phase-card {
       background: #ffffff;

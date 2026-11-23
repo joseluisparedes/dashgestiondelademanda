@@ -3119,16 +3119,6 @@ interface GrupoAMConfig {
 
 const AM_PALETTES = [
   {
-    headerBg: '#ecfeff',
-    headerBorder: '#a5f3fc',
-    headerText: '#0e7490',
-    badgeBg: '#cffafe',
-    badgeText: '#0891b2',
-    barColor: '#0891b2',
-    barGradient: 'linear-gradient(135deg, #06b6d4 0%, #0891b2 100%)',
-    barBorder: '#0e7490',
-  },
-  {
     headerBg: '#eff6ff',
     headerBorder: '#bfdbfe',
     headerText: '#1d4ed8',
@@ -3139,62 +3129,12 @@ const AM_PALETTES = [
     barBorder: '#1d4ed8',
   },
   {
-    headerBg: '#f0fdf4',
-    headerBorder: '#bbf7d0',
-    headerText: '#15803d',
-    badgeBg: '#dcfce7',
-    badgeText: '#16a34a',
-    barColor: '#16a34a',
-    barGradient: 'linear-gradient(135deg, #22c55e 0%, #16a34a 100%)',
-    barBorder: '#15803d',
-  },
-  {
-    headerBg: '#faf5ff',
-    headerBorder: '#e9d5ff',
-    headerText: '#7e22ce',
-    badgeBg: '#f3e8ff',
-    badgeText: '#9333ea',
-    barColor: '#9333ea',
-    barGradient: 'linear-gradient(135deg, #a855f7 0%, #9333ea 100%)',
-    barBorder: '#7e22ce',
-  },
-  {
-    headerBg: '#fff7ed',
-    headerBorder: '#fed7aa',
-    headerText: '#c2410c',
-    badgeBg: '#ffedd5',
-    badgeText: '#ea580c',
-    barColor: '#ea580c',
-    barGradient: 'linear-gradient(135deg, #f97316 0%, #ea580c 100%)',
-    barBorder: '#c2410c',
-  },
-  {
-    headerBg: '#fdf4ff',
-    headerBorder: '#f5d0fe',
-    headerText: '#a21caf',
-    badgeBg: '#fae8ff',
-    badgeText: '#c026d3',
-    barColor: '#c026d3',
-    barGradient: 'linear-gradient(135deg, #d946ef 0%, #c026d3 100%)',
-    barBorder: '#a21caf',
-  },
-  {
-    headerBg: '#f0fdfa',
-    headerBorder: '#99f6e4',
-    headerText: '#0f766e',
-    badgeBg: '#ccfbf1',
-    badgeText: '#0d9488',
-    barColor: '#0d9488',
-    barGradient: 'linear-gradient(135deg, #14b8a6 0%, #0d9488 100%)',
-    barBorder: '#0f766e',
-  },
-  {
-    headerBg: '#f8fafc',
+    headerBg: '#f1f5f9',
     headerBorder: '#cbd5e1',
-    headerText: '#475569',
-    badgeBg: '#f1f5f9',
-    badgeText: '#64748b',
-    barColor: '#64748b',
+    headerText: '#334155',
+    badgeBg: '#e2e8f0',
+    badgeText: '#475569',
+    barColor: '#475569',
     barGradient: 'linear-gradient(135deg, #64748b 0%, #475569 100%)',
     barBorder: '#334155',
   },
@@ -3550,6 +3490,288 @@ function buildTimelineSegments(i: Iniciativa): TimelineSegment[] {
 
 const DEFAULT_TIMELINE_PAGE_SIZE = 40;
 
+interface TimelineAMMultiSelectProps {
+  options: Array<[string, number]>;
+  selected: string[];
+  onChange: (next: string[]) => void;
+  totalCount: number;
+}
+
+function TimelineAMMultiSelect({
+  options,
+  selected,
+  onChange,
+  totalCount,
+}: TimelineAMMultiSelectProps) {
+  const [open, setOpen] = useState(false);
+  const [search, setSearch] = useState('');
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    function handleOutsideClick(e: MouseEvent) {
+      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
+        setOpen(false);
+      }
+    }
+    document.addEventListener('mousedown', handleOutsideClick);
+    return () => document.removeEventListener('mousedown', handleOutsideClick);
+  }, []);
+
+  const formatOptionLabel = (grpName: string) =>
+    grpName === 'Sin Clasificar' ? '⚠️ Sin Clasificar (Vacíos)' : grpName;
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const q = search.toLowerCase().trim();
+    return options.filter(([name]) => formatOptionLabel(name).toLowerCase().includes(q));
+  }, [options, search]);
+
+  const toggleItem = (key: string) => {
+    if (selected.includes(key)) {
+      onChange(selected.filter(item => item !== key));
+    } else {
+      onChange([...selected, key]);
+    }
+  };
+
+  const hasSelection = selected.length > 0;
+  const triggerLabel = !hasSelection
+    ? `Todos los grupos (${totalCount})`
+    : selected.length === 1
+    ? formatOptionLabel(selected[0])
+    : `${selected.length} grupos seleccionados`;
+
+  return (
+    <div
+      ref={containerRef}
+      className="no-drag"
+      style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, zIndex: open ? 9500 : 20 }}
+    >
+      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Columna AM:</span>
+      <div style={{ position: 'relative' }}>
+        <button
+          type="button"
+          onClick={() => setOpen(prev => !prev)}
+          style={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            gap: 6,
+            padding: '4px 10px',
+            fontSize: 11,
+            borderRadius: 8,
+            border: hasSelection ? '1px solid #3b82f6' : '1px solid #cbd5e1',
+            backgroundColor: hasSelection ? '#eff6ff' : '#ffffff',
+            color: hasSelection ? '#1d4ed8' : '#1e293b',
+            fontWeight: hasSelection ? 600 : 400,
+            maxWidth: 230,
+            minWidth: 165,
+            cursor: 'pointer',
+            textAlign: 'left',
+          }}
+          title={hasSelection ? selected.map(formatOptionLabel).join(', ') : 'Filtrar por una o más cabeceras de Columna AM'}
+        >
+          <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            {triggerLabel}
+          </span>
+          <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, flexShrink: 0 }}>
+            {hasSelection && (
+              <span
+                role="button"
+                tabIndex={0}
+                onClick={e => {
+                  e.stopPropagation();
+                  onChange([]);
+                }}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ' ') {
+                    e.stopPropagation();
+                    onChange([]);
+                  }
+                }}
+                title="Limpiar selección"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  color: '#2563eb',
+                  padding: 1,
+                  borderRadius: 4,
+                }}
+              >
+                <X size={11} />
+              </span>
+            )}
+            <ChevronDown
+              size={12}
+              style={{
+                color: hasSelection ? '#2563eb' : '#64748b',
+                transform: open ? 'rotate(180deg)' : 'none',
+                transition: 'transform 0.15s ease',
+              }}
+            />
+          </span>
+        </button>
+
+        {open && (
+          <div
+            style={{
+              position: 'absolute',
+              top: 'calc(100% + 4px)',
+              left: 0,
+              minWidth: 270,
+              maxWidth: 340,
+              backgroundColor: '#ffffff',
+              border: '1px solid #cbd5e1',
+              borderRadius: 10,
+              boxShadow: '0 12px 28px -4px rgba(15, 23, 42, 0.18), 0 4px 10px rgba(15, 23, 42, 0.08)',
+              zIndex: 99999,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* Buscador interno */}
+            <div style={{ padding: '8px 8px 6px 8px', borderBottom: '1px solid #f1f5f9', backgroundColor: '#f8fafc' }}>
+              <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                <Search size={12} style={{ position: 'absolute', left: 8, color: '#94a3b8', pointerEvents: 'none' }} />
+                <input
+                  type="text"
+                  value={search}
+                  onChange={e => setSearch(e.target.value)}
+                  placeholder="Buscar cabecera..."
+                  autoFocus
+                  style={{
+                    width: '100%',
+                    padding: '4px 24px 4px 26px',
+                    fontSize: 11,
+                    border: '1px solid #cbd5e1',
+                    borderRadius: 6,
+                    outline: 'none',
+                    backgroundColor: '#ffffff',
+                  }}
+                />
+                {search && (
+                  <button
+                    type="button"
+                    onClick={() => setSearch('')}
+                    style={{
+                      position: 'absolute',
+                      right: 6,
+                      background: 'none',
+                      border: 'none',
+                      cursor: 'pointer',
+                      color: '#94a3b8',
+                      padding: 2,
+                      display: 'flex',
+                    }}
+                  >
+                    <X size={11} />
+                  </button>
+                )}
+              </div>
+
+              {/* Acciones rápidas */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6, fontSize: 10 }}>
+                <button
+                  type="button"
+                  onClick={() => onChange(options.map(([name]) => name))}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: '#2563eb',
+                    fontWeight: 600,
+                    cursor: 'pointer',
+                  }}
+                >
+                  Seleccionar todos ({options.length})
+                </button>
+                <button
+                  type="button"
+                  onClick={() => onChange([])}
+                  disabled={!hasSelection}
+                  style={{
+                    background: 'none',
+                    border: 'none',
+                    padding: 0,
+                    color: hasSelection ? '#dc2626' : '#94a3b8',
+                    fontWeight: 600,
+                    cursor: hasSelection ? 'pointer' : 'default',
+                  }}
+                >
+                  Limpiar ({selected.length})
+                </button>
+              </div>
+            </div>
+
+            {/* Lista de checkboxes */}
+            <div style={{ maxHeight: 250, overflowY: 'auto', padding: '4px 0' }}>
+              {filteredOptions.length === 0 ? (
+                <div style={{ padding: '12px', textAlign: 'center', fontSize: 11, color: '#94a3b8' }}>
+                  Sin coincidencias
+                </div>
+              ) : (
+                filteredOptions.map(([grpName, count]) => {
+                  const isChecked = selected.includes(grpName);
+                  return (
+                    <label
+                      key={grpName}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 8,
+                        padding: '6px 10px',
+                        fontSize: 11,
+                        color: isChecked ? '#1e40af' : '#1e293b',
+                        backgroundColor: isChecked ? '#eff6ff' : 'transparent',
+                        fontWeight: isChecked ? 600 : 400,
+                        cursor: 'pointer',
+                        userSelect: 'none',
+                      }}
+                      onMouseEnter={e => {
+                        if (!isChecked) (e.currentTarget as HTMLElement).style.backgroundColor = '#f8fafc';
+                      }}
+                      onMouseLeave={e => {
+                        if (!isChecked) (e.currentTarget as HTMLElement).style.backgroundColor = 'transparent';
+                      }}
+                    >
+                      <span style={{ display: 'flex', alignItems: 'center', gap: 7, minWidth: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={() => toggleItem(grpName)}
+                          style={{ cursor: 'pointer', accentColor: '#2563eb', flexShrink: 0 }}
+                        />
+                        <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {formatOptionLabel(grpName)}
+                        </span>
+                      </span>
+                      <span
+                        style={{
+                          fontSize: 10,
+                          fontWeight: 600,
+                          color: isChecked ? '#1d4ed8' : '#64748b',
+                          backgroundColor: isChecked ? '#dbeafe' : '#f1f5f9',
+                          padding: '1px 6px',
+                          borderRadius: 10,
+                          flexShrink: 0,
+                        }}
+                      >
+                        {count}
+                      </span>
+                    </label>
+                  );
+                })
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function TimelineIniciativasVP({
   iniciativas,
   onOpenDetailModal,
@@ -3566,7 +3788,7 @@ function TimelineIniciativasVP({
   const [isReady, setIsReady] = useState<boolean>(false);
   const [selectedVP, setSelectedVP] = useState<string>('TODAS');
   const [searchTerm, setSearchTerm] = useState<string>('');
-  const [filterAM, setFilterAM] = useState<string>('TODOS');
+  const [filterAM, setFilterAM] = useState<string[]>([]);
   const [periodFilter, setPeriodFilter] = useState<'all' | 'focused' | 'current_year' | 'next_year'>('all');
   const [onlyWithDates, setOnlyWithDates] = useState<boolean>(false);
   const [sortOrder, setSortOrder] = useState<'recent' | 'oldest' | 'id' | 'title'>('recent');
@@ -3729,7 +3951,7 @@ function TimelineIniciativasVP({
         const vp = normalize(row.iniciativa.vp_solicitante);
         if (vp !== selectedVP) return false;
       }
-      if (filterAM !== 'TODOS' && row.grupoAM !== filterAM) {
+      if (filterAM.length > 0 && !filterAM.includes(row.grupoAM)) {
         return false;
       }
       if (onlyWithDates && !row.hasDates) return false;
@@ -3790,7 +4012,7 @@ function TimelineIniciativasVP({
     });
 
     return distinctKeys
-      .filter(k => filterAM === 'TODOS' || filterAM === k)
+      .filter(k => filterAM.length === 0 || filterAM.includes(k))
       .map((key, idx) => {
         const cfg = getGrupoAMConfig(key, idx);
         const rows = sortedRows.filter(r => r.grupoAM === key);
@@ -4252,30 +4474,13 @@ function TimelineIniciativasVP({
             )}
           </div>
 
-          {/* Filtro por Columna AM dinámico */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Columna AM:</span>
-            <select
-              value={filterAM}
-              onChange={e => setFilterAM(e.target.value)}
-              style={{
-                padding: '4px 8px',
-                fontSize: 11,
-                borderRadius: 8,
-                border: '1px solid #cbd5e1',
-                backgroundColor: '#ffffff',
-                color: '#1e293b',
-                maxWidth: 220,
-              }}
-            >
-              <option value="TODOS">Todos los grupos ({allRows.length})</option>
-              {groupCountsAll.map(([grpName, count]) => (
-                <option key={grpName} value={grpName}>
-                  {grpName === 'Sin Clasificar' ? '⚠️ Sin Clasificar (Vacíos)' : grpName} ({count})
-                </option>
-              ))}
-            </select>
-          </div>
+          {/* Filtro por Columna AM dinámico (multiselección) */}
+          <TimelineAMMultiSelect
+            options={groupCountsAll}
+            selected={filterAM}
+            onChange={setFilterAM}
+            totalCount={allRows.length}
+          />
 
           {/* Selector de VP */}
           <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
@@ -6883,14 +7088,8 @@ function exportReportToHTML(
     }
 
     const AM_PALETTES = [
-      { headerBg: '#ecfeff', headerBorder: '#a5f3fc', headerText: '#0e7490' },
       { headerBg: '#eff6ff', headerBorder: '#bfdbfe', headerText: '#1d4ed8' },
-      { headerBg: '#f0fdf4', headerBorder: '#bbf7d0', headerText: '#15803d' },
-      { headerBg: '#faf5ff', headerBorder: '#e9d5ff', headerText: '#7e22ce' },
-      { headerBg: '#fff7ed', headerBorder: '#fed7aa', headerText: '#c2410c' },
-      { headerBg: '#fdf4ff', headerBorder: '#f5d0fe', headerText: '#a21caf' },
-      { headerBg: '#f0fdfa', headerBorder: '#99f6e4', headerText: '#0f766e' },
-      { headerBg: '#f8fafc', headerBorder: '#cbd5e1', headerText: '#475569' }
+      { headerBg: '#f1f5f9', headerBorder: '#cbd5e1', headerText: '#334155' }
     ];
 
     function getGroupAMStyle(key, idx) {

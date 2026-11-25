@@ -3547,7 +3547,7 @@ function TimelineAMMultiSelect({
       className="no-drag"
       style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 6, zIndex: open ? 9500 : 20 }}
     >
-      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Columna AM:</span>
+      <span style={{ fontSize: 11, fontWeight: 600, color: '#64748b' }}>Clasificación de la iniciativa:</span>
       <div style={{ position: 'relative' }}>
         <button
           type="button"
@@ -3569,7 +3569,7 @@ function TimelineAMMultiSelect({
             cursor: 'pointer',
             textAlign: 'left',
           }}
-          title={hasSelection ? selected.map(formatOptionLabel).join(', ') : 'Filtrar por una o más cabeceras de Columna AM'}
+          title={hasSelection ? selected.map(formatOptionLabel).join(', ') : 'Filtrar por una o más cabeceras de Clasificación de la iniciativa'}
         >
           <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
             {triggerLabel}
@@ -4657,7 +4657,7 @@ function TimelineIniciativasVP({
             No se encontraron iniciativas con los filtros seleccionados
           </p>
           <p style={{ margin: '4px 0 0 0', fontSize: 11, color: '#94a3b8' }}>
-            Prueba ajustando el filtro de Columna AM, término de búsqueda, VP o desmarcando "Solo con fechas".
+            Prueba ajustando el filtro de Clasificación de la iniciativa, término de búsqueda, VP o desmarcando "Solo con fechas".
           </p>
         </div>
       ) : (
@@ -6285,6 +6285,28 @@ function exportReportToHTML(
     @media (max-width: 640px) {
       .phase-grid, .phase-grid.cols-3, .phase-grid.cols-2 { grid-template-columns: 1fr; }
     }
+    /* Multi-select Columna AM en Timeline */
+    .am-ms-wrap { position: relative; display: inline-flex; align-items: center; gap: 6px; z-index: 60; }
+    .am-ms-btn {
+      display: inline-flex; align-items: center; justify-content: space-between; gap: 6px;
+      padding: 4px 10px; font-size: 11px; border-radius: 8px; border: 1px solid #cbd5e1;
+      background: #ffffff; color: #1e293b; font-weight: 500; min-width: 170px; max-width: 230px;
+      cursor: pointer; font-family: inherit; text-align: left;
+    }
+    .am-ms-btn.active { border-color: #3b82f6; background: #eff6ff; color: #1d4ed8; font-weight: 600; }
+    .am-ms-drop {
+      position: absolute; top: calc(100% + 4px); right: 0; min-width: 270px; max-width: 340px;
+      background: #ffffff; border: 1px solid #cbd5e1; border-radius: 10px;
+      box-shadow: 0 12px 28px -4px rgba(15,23,42,0.18), 0 4px 10px rgba(15,23,42,0.08);
+      z-index: 9999; display: none; flex-direction: column; overflow: hidden;
+    }
+    .am-ms-drop.open { display: flex; }
+    .am-ms-opt {
+      display: flex; align-items: center; justify-content: space-between; gap: 8px;
+      padding: 6px 10px; font-size: 11px; color: #1e293b; cursor: pointer; user-select: none;
+    }
+    .am-ms-opt:hover { background: #f8fafc; }
+    .am-ms-opt.checked { background: #eff6ff; color: #1e40af; font-weight: 600; }
     .phase-card {
       background: #ffffff;
       border-radius: 12px;
@@ -6972,7 +6994,8 @@ function exportReportToHTML(
           </span>
           <span style="display: inline-flex; align-items: center; gap: 4px; font-size: 10.5px; font-weight: 600; color: #475569; background: #f1f5f9; padding: 2px 8px; border-radius: 12px; border: 1px solid #cbd5e1;">✋ Clic y arrastra para moverte</span>
         </div>
-        <div class="no-print" style="display: flex; align-items: center; gap: 8px;">
+        <div class="no-print" style="display: flex; flex-wrap: wrap; align-items: center; gap: 8px;">
+          <div id="am-multiselect-wrap" class="am-ms-wrap"></div>
           <input type="text" id="filter-search" placeholder="🔍 Buscar ID, título..." style="font-size: 11px; padding: 4px 8px; border: 1px solid var(--border); border-radius: 6px; width: 180px;">
           <button id="btn-clear-filters" style="display: none; background: #f1f5f9; border: 1px solid var(--border); color: #475569; font-size: 11px; font-weight: 700; padding: 4px 8px; border-radius: 6px; cursor: pointer;" onclick="clearAllFilters()">✕ Restablecer</button>
         </div>
@@ -8550,6 +8573,141 @@ function exportReportToHTML(
       });
     }
 
+    // Filtro multiselección de Columna AM en el Timeline
+    let selectedAMGroups = new Set();
+    let amDropdownOpen = false;
+    let amSearchQuery = '';
+
+    function formatAMOptLabel(grpName) {
+      return grpName === 'Sin Clasificar' ? '⚠️ Sin Clasificar (Vacíos)' : grpName;
+    }
+
+    function getAMGroupCounts() {
+      const base = getActiveDataset();
+      const counts = new Map();
+      base.forEach(i => {
+        const g = classifyGroupAM(i);
+        counts.set(g, (counts.get(g) || 0) + 1);
+      });
+      return Array.from(counts.entries()).sort((a, b) => {
+        if (a[0] === 'Sin Clasificar') return 1;
+        if (b[0] === 'Sin Clasificar') return -1;
+        return b[1] - a[1];
+      });
+    }
+
+    function renderAMFilterUI(preserveSearchFocus = false) {
+      const wrap = document.getElementById('am-multiselect-wrap');
+      if (!wrap) return;
+      const baseCount = getActiveDataset().length;
+      const allOpts = getAMGroupCounts();
+      const q = amSearchQuery.toLowerCase().trim();
+      const filteredOpts = q
+        ? allOpts.filter(([name]) => formatAMOptLabel(name).toLowerCase().includes(q))
+        : allOpts;
+
+      const hasSel = selectedAMGroups.size > 0;
+      const selArr = Array.from(selectedAMGroups);
+      const triggerText = !hasSel
+        ? \`Todos los grupos (\${baseCount})\`
+        : selArr.length === 1
+        ? formatAMOptLabel(selArr[0])
+        : \`\${selArr.length} grupos seleccionados\`;
+
+      wrap.innerHTML = \`
+        <span style="font-size: 11px; font-weight: 600; color: #64748b;">Clasificación de la iniciativa:</span>
+        <div style="position: relative;">
+          <button type="button" class="am-ms-btn \${hasSel ? 'active' : ''}" onclick="toggleAMDropdown(event)" title="\${hasSel ? dmEsc(selArr.map(formatAMOptLabel).join(', ')) : 'Filtrar por una o más cabeceras de Clasificación de la iniciativa'}">
+            <span style="overflow: hidden; text-overflow: ellipsis; white-space: nowrap;">\${dmEsc(triggerText)}</span>
+            <span style="display: inline-flex; align-items: center; gap: 4px; flex-shrink: 0;">
+              \${hasSel ? '<span role="button" onclick="clearAMGroups(event)" title="Limpiar selección" style="color:#2563eb;font-weight:700;padding:0 2px;">✕</span>' : ''}
+              <span style="font-size: 10px; color: \${hasSel ? '#2563eb' : '#64748b'};">\${amDropdownOpen ? '▴' : '▾'}</span>
+            </span>
+          </button>
+          <div id="am-ms-drop" class="am-ms-drop \${amDropdownOpen ? 'open' : ''}" onclick="event.stopPropagation()">
+            <div style="padding: 8px 8px 6px 8px; border-bottom: 1px solid #f1f5f9; background: #f8fafc;">
+              <div style="position: relative; display: flex; align-items: center;">
+                <span style="position: absolute; left: 8px; font-size: 11px; color: #94a3b8; pointer-events: none;">🔍</span>
+                <input id="am-ms-search" type="text" value="\${dmEsc(amSearchQuery)}" oninput="setAMSearch(this.value)" placeholder="Buscar cabecera..." style="width: 100%; padding: 4px 22px 4px 24px; font-size: 11px; border: 1px solid #cbd5e1; border-radius: 6px; outline: none; background: #ffffff;" />
+                \${amSearchQuery ? '<button type="button" onclick="setAMSearch(\\'\\')" style="position:absolute;right:5px;background:none;border:none;cursor:pointer;color:#94a3b8;font-size:11px;">✕</button>' : ''}
+              </div>
+              <div style="display: flex; align-items: center; justify-content: space-between; margin-top: 6px; font-size: 10px;">
+                <button type="button" onclick="selectAllAMGroups()" style="background:none;border:none;padding:0;color:#2563eb;font-weight:600;cursor:pointer;">Seleccionar todos (\${allOpts.length})</button>
+                <button type="button" onclick="clearAMGroups(event)" \${hasSel ? '' : 'disabled'} style="background:none;border:none;padding:0;color:\${hasSel ? '#dc2626' : '#94a3b8'};font-weight:600;cursor:\${hasSel ? 'pointer' : 'default'};">Limpiar (\${selectedAMGroups.size})</button>
+              </div>
+            </div>
+            <div style="max-height: 250px; overflow-y: auto; padding: 4px 0;">
+              \${filteredOpts.length === 0
+                ? '<div style="padding:12px;text-align:center;font-size:11px;color:#94a3b8;">Sin coincidencias</div>'
+                : filteredOpts.map(([grpName, count]) => {
+                    const isChk = selectedAMGroups.has(grpName);
+                    const safeGrp = grpName.replace(/'/g, "\\\\'");
+                    return \`
+                      <label class="am-ms-opt \${isChk ? 'checked' : ''}">
+                        <span style="display:flex;align-items:center;gap:7px;min-width:0;">
+                          <input type="checkbox" \${isChk ? 'checked' : ''} onchange="toggleAMGroup('\${safeGrp}')" style="cursor:pointer;accent-color:#2563eb;flex-shrink:0;" />
+                          <span style="overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${dmEsc(formatAMOptLabel(grpName))}</span>
+                        </span>
+                        <span style="font-size:10px;font-weight:600;color:\${isChk ? '#1d4ed8' : '#64748b'};background:\${isChk ? '#dbeafe' : '#f1f5f9'};padding:1px 6px;border-radius:10px;flex-shrink:0;">\${count}</span>
+                      </label>
+                    \`;
+                  }).join('')}
+            </div>
+          </div>
+        </div>
+      \`;
+
+      if (preserveSearchFocus) {
+        const inp = document.getElementById('am-ms-search');
+        if (inp) {
+          inp.focus();
+          const len = inp.value.length;
+          inp.setSelectionRange(len, len);
+        }
+      }
+    }
+
+    function toggleAMDropdown(e) {
+      if (e) e.stopPropagation();
+      amDropdownOpen = !amDropdownOpen;
+      renderAMFilterUI(amDropdownOpen);
+    }
+
+    function setAMSearch(val) {
+      amSearchQuery = val;
+      renderAMFilterUI(true);
+    }
+
+    function toggleAMGroup(grpName) {
+      if (selectedAMGroups.has(grpName)) selectedAMGroups.delete(grpName);
+      else selectedAMGroups.add(grpName);
+      renderAMFilterUI();
+      renderTimeline();
+    }
+
+    function selectAllAMGroups() {
+      const allOpts = getAMGroupCounts();
+      selectedAMGroups = new Set(allOpts.map(([name]) => name));
+      renderAMFilterUI();
+      renderTimeline();
+    }
+
+    function clearAMGroups(e) {
+      if (e) e.stopPropagation();
+      selectedAMGroups.clear();
+      renderAMFilterUI();
+      renderTimeline();
+    }
+
+    document.addEventListener('mousedown', function(e) {
+      if (!amDropdownOpen) return;
+      const wrap = document.getElementById('am-multiselect-wrap');
+      if (wrap && !wrap.contains(e.target)) {
+        amDropdownOpen = false;
+        renderAMFilterUI();
+      }
+    });
+
     function onFilterChange() {
       const currentDataset = getActiveDataset();
       const badge = document.getElementById('top-counter-badge');
@@ -8558,6 +8716,7 @@ function exportReportToHTML(
       const tlBadge = document.getElementById('timeline-count-badge');
       if (tlBadge) tlBadge.innerText = currentDataset.length + ' iniciativa' + (currentDataset.length === 1 ? '' : 's');
 
+      renderAMFilterUI();
       renderPhaseCards();
       renderTimeline();
     }
@@ -8861,6 +9020,9 @@ function exportReportToHTML(
 
     function clearAllFilters() {
       searchQuery = '';
+      selectedAMGroups.clear();
+      amSearchQuery = '';
+      amDropdownOpen = false;
 
       // Re-seleccionar todos los checkboxes
       document.querySelectorAll('.ms-dropdown input[type="checkbox"]').forEach(i => { i.checked = true; });
@@ -8871,6 +9033,7 @@ function exportReportToHTML(
       const badge = document.getElementById('top-counter-badge');
       if (badge) badge.innerText = \`\${RAW_DATA.length} iniciativas\`;
 
+      renderAMFilterUI();
       renderPhaseCards();
       renderTimeline();
     }
@@ -8878,6 +9041,10 @@ function exportReportToHTML(
     // Render Timeline Gantt con cabecera de meses y línea de HOY
     function renderTimeline() {
       let filtered = getActiveDataset();
+
+      if (selectedAMGroups.size > 0) {
+        filtered = filtered.filter(i => selectedAMGroups.has(classifyGroupAM(i)));
+      }
 
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase().trim();
@@ -8895,7 +9062,7 @@ function exportReportToHTML(
       countBadge.innerText = \`\${filtered.length} iniciativa\${filtered.length === 1 ? '' : 's'}\`;
 
       const activePhases = getActivePhases();
-      if (activePhases.length > 0 || searchQuery.trim()) {
+      if (activePhases.length > 0 || searchQuery.trim() || selectedAMGroups.size > 0) {
         banner.style.display = 'flex';
         clearBtn.style.display = 'inline-block';
         let txt = '';
@@ -8906,6 +9073,12 @@ function exportReportToHTML(
             if (p === 3) return 'Fase 3 (Planificadas e Implementadas)';
             return 'Con Observaciones (Registro Incompleto y Eliminadas)';
           }).join(' + ');
+        }
+        if (selectedAMGroups.size > 0) {
+          const amLabel = selectedAMGroups.size === 1
+            ? formatAMOptLabel(Array.from(selectedAMGroups)[0])
+            : \`\${selectedAMGroups.size} cabeceras AM\`;
+          txt += (txt ? ' • ' : '') + \`Clasificación de la iniciativa: \${amLabel}\`;
         }
         if (searchQuery.trim()) txt += (txt ? ' • ' : '') + \`Búsqueda: "\${searchQuery}"\`;
         bannerText.innerText = \`Mostrando \${filtered.length} iniciativas: \${txt}\`;
@@ -9356,6 +9529,7 @@ function exportReportToHTML(
 
     // Inicialización completa
     initFilterOptions();
+    renderAMFilterUI();
     renderDateFilterRows();
     renderPhaseCards();
     if (typeof renderStrategicCards === 'function') renderStrategicCards();

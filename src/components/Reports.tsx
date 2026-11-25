@@ -6257,11 +6257,33 @@ function exportReportToHTML(
       gap: 14px;
       margin-bottom: 20px;
     }
+    .phase-grid.cols-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+    .phase-grid.cols-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
+    .phase-grid.cols-1 { grid-template-columns: minmax(0, 1fr); }
+
+    .phase-grid.cols-3 .phase-card { padding: 18px 22px; }
+    .phase-grid.cols-3 .phase-title { font-size: 14.5px; }
+    .phase-grid.cols-3 .phase-desc { font-size: 11px; }
+    .phase-grid.cols-3 .phase-count { font-size: 32px; }
+    .phase-grid.cols-3 .subetapa-item { font-size: 11.5px; }
+
+    .phase-grid.cols-2 .phase-card { padding: 20px 26px; }
+    .phase-grid.cols-2 .phase-title { font-size: 15.5px; }
+    .phase-grid.cols-2 .phase-desc { font-size: 11.5px; }
+    .phase-grid.cols-2 .phase-count { font-size: 34px; }
+    .phase-grid.cols-2 .subetapa-item { font-size: 12px; }
+
+    .phase-grid.cols-1 .phase-card { padding: 22px 28px; }
+    .phase-grid.cols-1 .phase-title { font-size: 16.5px; }
+    .phase-grid.cols-1 .phase-desc { font-size: 12px; }
+    .phase-grid.cols-1 .phase-count { font-size: 36px; }
+    .phase-grid.cols-1 .subetapa-item { font-size: 12.5px; }
+
     @media (max-width: 1024px) {
-      .phase-grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .phase-grid, .phase-grid.cols-3 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     @media (max-width: 640px) {
-      .phase-grid { grid-template-columns: 1fr; }
+      .phase-grid, .phase-grid.cols-3, .phase-grid.cols-2 { grid-template-columns: 1fr; }
     }
     .phase-card {
       background: #ffffff;
@@ -8597,7 +8619,10 @@ function exportReportToHTML(
       const isObsActive = activePhases.includes('observaciones');
 
       const container = document.getElementById('phase-cards-container');
-      container.innerHTML = \`
+      const cardsHtml = [];
+
+      if (f1.length > 0) {
+        cardsHtml.push(\`
         <!-- FASE 1 -->
         <div class="phase-card phase-card-1 \${isF1Active ? 'active' : ''}" onclick="togglePhase(1, event)" title="Haz clic para seleccionar estados de Fase 1 (Ctrl+clic para selección múltiple)">
           <div>
@@ -8638,8 +8663,11 @@ function exportReportToHTML(
               </span>
             </div>
           </div>
-        </div>
+        </div>\`);
+      }
 
+      if (f2.length > 0) {
+        cardsHtml.push(\`
         <!-- FASE 2 -->
         <div class="phase-card phase-card-2 \${isF2Active ? 'active' : ''}" onclick="togglePhase(2, event)" title="Haz clic para seleccionar estados de Fase 2 (Ctrl+clic para selección múltiple)">
           <div>
@@ -8680,8 +8708,11 @@ function exportReportToHTML(
               </span>
             </div>
           </div>
-        </div>
+        </div>\`);
+      }
 
+      if (f3.length > 0) {
+        cardsHtml.push(\`
         <!-- FASE 3 -->
         <div class="phase-card phase-card-3 \${isF3Active ? 'active' : ''}" onclick="togglePhase(3, event)" title="Haz clic para seleccionar estados de Fase 3 (Ctrl+clic para selección múltiple)">
           <div>
@@ -8718,8 +8749,11 @@ function exportReportToHTML(
               </span>
             </div>
           </div>
-        </div>
+        </div>\`);
+      }
 
+      if (fObs.length > 0) {
+        cardsHtml.push(\`
         <!-- CON OBSERVACIONES -->
         <div class="phase-card phase-card-obs \${isObsActive ? 'active' : ''}" onclick="togglePhase('observaciones', event)" title="Haz clic para seleccionar estados con Observaciones (Ctrl+clic para selección múltiple)">
           <div>
@@ -8755,8 +8789,13 @@ function exportReportToHTML(
               </span>
             </div>
           </div>
-        </div>
+        </div>\`);
+      }
 
+      const visibleCount = cardsHtml.length;
+      container.className = 'phase-grid cols-' + Math.max(1, visibleCount);
+      container.innerHTML = visibleCount > 0 ? \`
+        \${cardsHtml.join('')}
         <div style="grid-column: 1 / -1; margin-top: -4px; margin-bottom: 6px; font-size: 11px; color: #64748b; font-weight: 500; display: flex; align-items: center; gap: 6px;">
           <span>💡</span>
           <span>
@@ -8764,7 +8803,7 @@ function exportReportToHTML(
             Mantén presionado <strong>Ctrl</strong> (o <strong>Cmd</strong> en Mac) para seleccionar varias fases simultáneamente.
           </span>
         </div>
-      \`;
+      \` : '';
     }
 
     function syncEstadoCheckboxes() {

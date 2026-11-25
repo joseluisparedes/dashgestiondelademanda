@@ -6620,7 +6620,7 @@ function exportReportToHTML(
     .detail-modal-card {
       background: #ffffff;
       width: 100%;
-      max-width: 1000px;
+      max-width: 1080px;
       max-height: 90vh;
       border-radius: 16px;
       box-shadow: 0 25px 50px -12px rgba(0,0,0,0.25);
@@ -6636,7 +6636,7 @@ function exportReportToHTML(
     }
     .detail-modal-header {
       padding: 14px 20px;
-      background: #f8fafc;
+      background: #ffffff;
       border-bottom: 1px solid var(--border);
       display: flex;
       align-items: center;
@@ -6648,13 +6648,40 @@ function exportReportToHTML(
       flex: 1;
       font-size: 12px;
       color: #334155;
+      background: #f8fafc;
     }
     .detail-modal-footer {
       padding: 12px 20px;
-      background: #f8fafc;
+      background: #ffffff;
       border-top: 1px solid var(--border);
       display: flex;
       justify-content: flex-end;
+    }
+    .dm-grid-2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px; }
+    .dm-grid-3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; }
+    .dm-grid-4 { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 8px; }
+    .dm-fields-grid { display: grid; grid-template-columns: repeat(4, minmax(0, 1fr)); gap: 10px; padding: 12px; background: #f8fafc; border-top: 1px solid #f1f5f9; }
+    .dm-narrative-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); border-top: 1px solid #f1f5f9; background: rgba(248,250,252,0.4); }
+    .dm-narrative-cell { padding: 12px; border-bottom: 1px solid #f1f5f9; border-right: 1px solid #f1f5f9; display: flex; flex-direction: column; }
+    .dm-sec-card { background: #ffffff; border: 1px solid #e2e8f0; border-radius: 12px; overflow: hidden; box-shadow: 0 1px 2px rgba(15,23,42,0.03); }
+    .dm-sec-card.is-current { border-color: #93c5fd; box-shadow: 0 0 0 2px #dbeafe; }
+    .dm-sec-card.is-done { border-color: #a7f3d0; }
+    .dm-sec-btn { width: 100%; display: flex; align-items: center; gap: 8px; padding: 9px 12px; background: transparent; border: none; cursor: pointer; text-align: left; font-family: inherit; transition: background 0.15s; }
+    .dm-sec-btn:hover { background: #f8fafc; }
+    .dm-sec-btn.is-current { background: rgba(239,246,255,0.4); }
+    .dm-sec-btn.is-current:hover { background: rgba(239,246,255,0.8); }
+    .dm-field-box { background: #ffffff; padding: 9px 10px; border-radius: 8px; border: 1px solid #f1f5f9; display: flex; flex-direction: column; justify-content: flex-start; }
+    .dm-field-box.span-full { grid-column: 1 / -1; }
+    .dm-tab-btn { font-size: 11.5px; padding: 6px 14px; border-radius: 7px; font-weight: 600; border: none; cursor: pointer; display: inline-flex; align-items: center; gap: 6px; transition: all 0.15s; background: transparent; color: #475569; font-family: inherit; }
+    .dm-tab-btn:hover { background: #f1f5f9; }
+    .dm-tab-btn.active { background: #2563eb; color: #ffffff; box-shadow: 0 1px 2px rgba(37,99,235,0.25); }
+    .dm-raw-table { width: 100%; border-collapse: collapse; font-size: 11.5px; text-align: left; }
+    .dm-raw-table th { background: #f1f5f9; padding: 9px 14px; font-size: 10px; text-transform: uppercase; font-weight: 700; color: #64748b; border-bottom: 1px solid #e2e8f0; position: sticky; top: 0; z-index: 2; }
+    .dm-raw-table td { padding: 9px 14px; border-bottom: 1px solid #f1f5f9; vertical-align: top; word-break: break-word; }
+    .dm-raw-table tr:hover td { background: #f8fafc; }
+    @media (max-width: 900px) {
+      .dm-grid-2, .dm-grid-3, .dm-fields-grid, .dm-narrative-grid { grid-template-columns: 1fr; }
+      .dm-grid-4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
     }
     .detail-badge-pill {
       font-size: 11px;
@@ -6967,7 +6994,7 @@ function exportReportToHTML(
           </div>
           <div>
             <h3 style="font-size: 14px; font-weight: 800; color: #0f172a; margin: 0;">Detalle Completo de la Iniciativa</h3>
-            <p style="font-size: 11px; color: #64748b; margin: 0;">Todos los campos, registros y fechas clave</p>
+            <p style="font-size: 11px; color: #64748b; margin: 0;">Todos los campos, registros y enlaces del archivo Excel</p>
           </div>
         </div>
         <button onclick="closeDetailModal()" style="background: none; border: none; font-size: 18px; color: #64748b; cursor: pointer; padding: 4px 8px; border-radius: 6px;">✕</button>
@@ -7210,123 +7237,893 @@ function exportReportToHTML(
       return i.fecha_eliminacion || null;
     }
 
-    // Modal de Detalle Completo de la Iniciativa
+    // Modal de Detalle Completo de la Iniciativa (idéntico a la versión web, con Descripción y Contexto desplegada por defecto)
+    let dmState = {
+      ini: null,
+      activeTab: 'secciones',
+      fieldSearch: '',
+      narrativeOpen: true,
+      registroOpen: false,
+      estimacionOpen: true,
+      openSections: {}
+    };
+
+    const DM_PIPELINE_STEPS = [
+      { key: 'por_estimar', label: 'Por Estimar', short: 'Estimar' },
+      { key: 'por_aprobar_estimacion', label: 'Ap. Estimación', short: 'Ap. Est.' },
+      { key: 'por_habilitar_presupuesto', label: 'Hab. Presupuesto', short: 'Presup.' },
+      { key: 'por_planificar', label: 'Por Planificar', short: 'Planificar' },
+      { key: 'aprobar_planificacion', label: 'Ap. Planificación', short: 'Ap. Plan.' },
+      { key: 'planificadas', label: 'Planificadas', short: 'Planificada' },
+      { key: 'implementadas', label: 'Implementadas', short: 'Implementada' }
+    ];
+
+    function dmNormalizeEtapaForStepper(etapa) {
+      const e = String(etapa || '').toLowerCase().trim();
+      if (e === 'por_aprobar_planificacion') return 'aprobar_planificacion';
+      if (['planificada', 'por_iniciar', 'en_ejecucion', 'detenido'].includes(e)) return 'planificadas';
+      if (['implementada', 'terminado'].includes(e)) return 'implementadas';
+      if (e === 'eliminada') return 'eliminadas';
+      return e;
+    }
+
+    function dmEsc(val) {
+      if (val === null || val === undefined) return '';
+      return String(val)
+        .replace(/&/g, '&amp;')
+        .replace(/</g, '&lt;')
+        .replace(/>/g, '&gt;')
+        .replace(/"/g, '&quot;')
+        .replace(/'/g, '&#39;');
+    }
+
+    function dmFmtDate(d) {
+      if (!d) return null;
+      const dt = typeof d === 'string' ? parseDate(d) : d;
+      if (!dt) {
+        const s = String(d).trim();
+        return s ? s : null;
+      }
+      const months = ['ene', 'feb', 'mar', 'abr', 'may', 'jun', 'jul', 'ago', 'sep', 'oct', 'nov', 'dic'];
+      const dd = String(dt.getDate()).padStart(2, '0');
+      const mmm = months[dt.getMonth()];
+      const yyyy = dt.getFullYear();
+      return \`\${dd} \${mmm} \${yyyy}\`;
+    }
+
+    function dmFmtDateTime(d) {
+      if (!d) return null;
+      const dt = typeof d === 'string' ? parseDate(d) : d;
+      if (!dt) return dmFmtDate(d);
+      const base = dmFmtDate(dt);
+      const hh = dt.getHours();
+      const mm = dt.getMinutes();
+      if (hh === 0 && mm === 0) return base;
+      return \`\${base} \${String(hh).padStart(2, '0')}:\${String(mm).padStart(2, '0')}\`;
+    }
+
+    function dmFmtMoneyUSD(v) {
+      if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
+      return '$ ' + Number(v).toLocaleString('en-US', { maximumFractionDigits: 0 });
+    }
+
+    function dmFmtMoneyPEN(v) {
+      if (v === null || v === undefined || v === '' || isNaN(Number(v))) return null;
+      return 'S/ ' + Number(v).toLocaleString('es-PE', { maximumFractionDigits: 0 });
+    }
+
+    function dmGetRawVal(ini, ...keys) {
+      if (!ini || !ini.raw_fields) return null;
+      const entries = Object.keys(ini.raw_fields);
+      for (const key of keys) {
+        const normSearch = key.toLowerCase().replace(/[\\r\\n\\s]+/g, ' ').trim();
+        const found = entries.find(k => k.toLowerCase().replace(/[\\r\\n\\s]+/g, ' ').trim() === normSearch);
+        if (found !== undefined && ini.raw_fields[found] !== undefined && ini.raw_fields[found] !== null && ini.raw_fields[found] !== '') {
+          return ini.raw_fields[found];
+        }
+      }
+      return null;
+    }
+
+    function dmFormatValueHtml(val) {
+      if (val === null || val === undefined || val === '' || val === '—') {
+        return '<span style="color:#cbd5e1;font-style:italic;font-weight:400;">—</span>';
+      }
+      const str = String(val).trim();
+      if (!str || str === '—') {
+        return '<span style="color:#cbd5e1;font-style:italic;font-weight:400;">—</span>';
+      }
+      if (/^https?:\\/\\//i.test(str)) {
+        const parts = str.split(/\\s+/).filter(Boolean);
+        return parts.map(p => {
+          if (/^https?:\\/\\//i.test(p)) {
+            const safeUrl = dmEsc(p);
+            const shortUrl = p.length > 55 ? p.slice(0, 52) + '…' : p;
+            return \`<a href="\${safeUrl}" target="_blank" rel="noopener noreferrer" style="color:#2563eb;text-decoration:underline;word-break:break-all;">\${dmEsc(shortUrl)} ↗</a>\`;
+          }
+          return dmEsc(p);
+        }).join('<br/>');
+      }
+      return dmEsc(str).replace(/\\n/g, '<br/>');
+    }
+
+    function dmGetHighlight(label) {
+      const norm = String(label || '').toLowerCase().trim();
+      if (norm.includes('costo') && (norm.includes('dólares') || norm.includes('dolares') || norm.includes('usd'))) {
+        return {
+          badge: 'USD',
+          bg: 'linear-gradient(135deg,#ecfdf5 0%,#d1fae5 100%)',
+          border: '#6ee7b7',
+          labelColor: '#065f46',
+          badgeBg: '#d1fae5',
+          badgeColor: '#065f46',
+          badgeBorder: '#6ee7b7',
+          valStyle: 'color:#064e3b;font-weight:800;font-family:monospace;font-size:13px;'
+        };
+      }
+      if (norm.includes('costo') && (norm.includes('soles') || norm.includes('pen'))) {
+        return {
+          badge: 'PEN',
+          bg: 'linear-gradient(135deg,#eff6ff 0%,#dbeafe 100%)',
+          border: '#93c5fd',
+          labelColor: '#1e40af',
+          badgeBg: '#dbeafe',
+          badgeColor: '#1e40af',
+          badgeBorder: '#93c5fd',
+          valStyle: 'color:#172554;font-weight:800;font-family:monospace;font-size:13px;'
+        };
+      }
+      if (norm.includes('fecha inicio') && norm.includes('estimaci')) {
+        return {
+          badge: 'Inicio Est.',
+          bg: 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)',
+          border: '#fcd34d',
+          labelColor: '#92400e',
+          badgeBg: '#fef3c7',
+          badgeColor: '#92400e',
+          badgeBorder: '#fcd34d',
+          valStyle: 'color:#451a03;font-weight:700;font-family:monospace;font-size:11.5px;'
+        };
+      }
+      if (norm.includes('fecha fin') && norm.includes('estimaci')) {
+        return {
+          badge: 'Fin Est.',
+          bg: 'linear-gradient(135deg,#fffbeb 0%,#fef3c7 100%)',
+          border: '#fcd34d',
+          labelColor: '#92400e',
+          badgeBg: '#fef3c7',
+          badgeColor: '#92400e',
+          badgeBorder: '#fcd34d',
+          valStyle: 'color:#451a03;font-weight:700;font-family:monospace;font-size:11.5px;'
+        };
+      }
+      if (norm.includes('tiempo estimado') || (norm.includes('duración') && norm.includes('meses'))) {
+        return {
+          badge: 'Duración',
+          bg: 'linear-gradient(135deg,#f5f3ff 0%,#ede9fe 100%)',
+          border: '#c4b5fd',
+          labelColor: '#5b21b6',
+          badgeBg: '#ede9fe',
+          badgeColor: '#5b21b6',
+          badgeBorder: '#c4b5fd',
+          valStyle: 'color:#2e1065;font-weight:800;font-family:monospace;font-size:13px;'
+        };
+      }
+      if (norm.includes('fecha inicio') && norm.includes('planificad')) {
+        return {
+          badge: 'Inicio Plan.',
+          bg: 'linear-gradient(135deg,#f0fdfa 0%,#ccfbf1 100%)',
+          border: '#5eead4',
+          labelColor: '#115e59',
+          badgeBg: '#ccfbf1',
+          badgeColor: '#115e59',
+          badgeBorder: '#5eead4',
+          valStyle: 'color:#042f2e;font-weight:700;font-family:monospace;font-size:11.5px;'
+        };
+      }
+      if (norm.includes('fecha fin') && norm.includes('planificad')) {
+        return {
+          badge: 'Fin Plan.',
+          bg: 'linear-gradient(135deg,#f0fdfa 0%,#ccfbf1 100%)',
+          border: '#5eead4',
+          labelColor: '#115e59',
+          badgeBg: '#ccfbf1',
+          badgeColor: '#115e59',
+          badgeBorder: '#5eead4',
+          valStyle: 'color:#042f2e;font-weight:700;font-family:monospace;font-size:11.5px;'
+        };
+      }
+      return null;
+    }
+
+    function dmBuildAllRawEntries(t) {
+      const map = new Map();
+      if (t.id) map.set('ID', t.id);
+      if (t.titulo) map.set('Título de la Iniciativa', t.titulo);
+      if (t.etapa_actual) map.set('Etapa Actual', getEtapaLabel(t.etapa_actual));
+      if (t.objetivo) map.set('Objetivo', t.objetivo);
+      if (t.institucion) map.set('Institución', t.institucion);
+      if (t.vp_solicitante) map.set('VP del Área Solicitante', t.vp_solicitante);
+      if (t.direccion_solicitante) map.set('Dirección del Área Solicitante', t.direccion_solicitante);
+      if (t.priorizacion_vp) map.set('Priorización VP', t.priorizacion_vp);
+      if (t.usuario_negocio) map.set('Usuario Solicitante del Negocio', t.usuario_negocio);
+      if (t.it_bp) map.set('IT BP', t.it_bp);
+      if (t.fecha_registro) map.set('Fecha de Registro', dmFmtDateTime(t.fecha_registro));
+      if (t.fecha_entrega_requerida) map.set('Fecha Entrega Requerida', dmFmtDate(t.fecha_entrega_requerida));
+      if (t.proyecto_spo) map.set('Proyecto SPO', t.proyecto_spo);
+      if (t.tipo_iniciativa) map.set('Tipo de Iniciativa', t.tipo_iniciativa);
+      if (t.pilar_estrategico) map.set('Pilar Estratégico', t.pilar_estrategico);
+      if (t.estabilizacion_sis) map.set('Estabilización SIS', t.estabilizacion_sis);
+      if (t.usuarios_beneficiados) map.set('Usuarios Beneficiados', t.usuarios_beneficiados);
+      if (t.beneficio_cuantitativo) map.set('Beneficio Cuantitativo', t.beneficio_cuantitativo);
+      if (t.complejidad) map.set('Complejidad', t.complejidad);
+      if (t.lider_dominio) map.set('Líder de Dominio', t.lider_dominio);
+      if (t.asignado_por) map.set('Asignado por', t.asignado_por);
+      if (t.fecha_asignacion) map.set('Fecha Asignación', dmFmtDate(t.fecha_asignacion));
+      if (t.duracion_meses !== null && t.duracion_meses !== undefined) map.set('Tiempo Estimado (meses)', t.duracion_meses);
+      if (t.tiempo_estimado !== null && t.tiempo_estimado !== undefined) map.set('Tiempo Estimado', t.tiempo_estimado);
+      if (t.costo_usd !== null && t.costo_usd !== undefined) map.set('Costo en Dólares (USD)', dmFmtMoneyUSD(t.costo_usd));
+      if (t.costo_soles !== null && t.costo_soles !== undefined) map.set('Costo en Soles (PEN)', dmFmtMoneyPEN(t.costo_soles));
+      if (t.tipo_recurso) map.set('Tipo de Recurso', t.tipo_recurso);
+      if (t.proyecto_o_req) map.set('Proyecto o Requerimiento', t.proyecto_o_req);
+      if (t.estatus_estimacion) map.set('Estatus Estimación', t.estatus_estimacion);
+      if (t.fecha_inicio_estimacion) map.set('Fecha Inicio Estimación', dmFmtDate(t.fecha_inicio_estimacion));
+      if (t.fecha_fin_estimacion) map.set('Fecha Fin Estimación', dmFmtDate(t.fecha_fin_estimacion));
+      if (t.fecha_inicio_reestimacion) map.set('Fecha Inicio Reestimación', dmFmtDate(t.fecha_inicio_reestimacion));
+      if (t.fecha_fin_reestimacion) map.set('Fecha Fin Reestimación', dmFmtDate(t.fecha_fin_reestimacion));
+      if (t.accion_brm) map.set('Acción BRM', t.accion_brm);
+      if (t.prioridad_brm) map.set('Prioridad BRM', t.prioridad_brm);
+      if (t.fecha_inicio_planificada) map.set('Fecha Inicio Planificada', dmFmtDate(t.fecha_inicio_planificada));
+      if (t.fecha_fin_planificada) map.set('Fecha Fin Planificada', dmFmtDate(t.fecha_fin_planificada));
+      if (t.impacto_sox) map.set('Impacto SOX', t.impacto_sox);
+      if (t.aprobar_estimacion) map.set('Aprobar Estimación', t.aprobar_estimacion);
+      if (t.presupuesto_habilitado) map.set('Presupuesto Habilitado', t.presupuesto_habilitado);
+      if (t.planificacion_aprobada) map.set('Planificación Aprobada', t.planificacion_aprobada);
+      if (t.fecha_pase_produccion) map.set('Fecha Pase a Producción', dmFmtDate(t.fecha_pase_produccion));
+      if (t.persona_conformidad) map.set('Persona que da Conformidad', t.persona_conformidad);
+      if (t.fecha_conformidad) map.set('Fecha de Conformidad', dmFmtDate(t.fecha_conformidad));
+      if (t.fecha_eliminacion) map.set('Fecha de Eliminación', dmFmtDate(t.fecha_eliminacion));
+      if (t.motivo_eliminacion) map.set('Motivo de Eliminación', t.motivo_eliminacion);
+
+      if (t.raw_fields) {
+        Object.entries(t.raw_fields).forEach(([k, v]) => {
+          if (v !== undefined && v !== null && v !== '') {
+            map.set(k, v);
+          }
+        });
+      }
+      return Array.from(map.entries()).map(([key, value]) => ({ key, value }));
+    }
+
+    function dmBuildNarrativeFields(t) {
+      const list = [];
+      if (t.objetivo) list.push({ label: 'Objetivo de la Iniciativa', value: t.objetivo });
+      const descProb = dmGetRawVal(t, 'Descripción del problema o desafío', 'Descripción del problema', 'Descripcion');
+      if (descProb) list.push({ label: 'Descripción del Problema o Desafío', value: descProb });
+      const sitDes = dmGetRawVal(t, 'Situación deseada', 'Situacion deseada');
+      if (sitDes) list.push({ label: 'Situación Deseada', value: sitDes });
+      const procImp = dmGetRawVal(t, 'Procesos y áreas impactadas', 'Procesos impactados');
+      if (procImp) list.push({ label: 'Procesos y Áreas Impactadas', value: procImp });
+      const asunc = dmGetRawVal(t, 'Asunciones', 'Supuestos');
+      if (asunc) list.push({ label: 'Asunciones y Supuestos', value: asunc });
+      const coments = dmGetRawVal(t, 'Comentarios', 'Comentarios_1', 'Comentarios_2', 'Comentarios_3');
+      if (coments) list.push({ label: 'Comentarios Adicionales', value: coments });
+      return list;
+    }
+
+    function dmBuildSections(t) {
+      const normEtapa = dmNormalizeEtapaForStepper(t.etapa_actual);
+      const tiempoEst = t.tiempo_estimado ?? t.duracion_meses ?? dmGetRawVal(t, 'Tiempo estimado (meses)', 'Tiempo estimado\\r\\n(meses)', 'Tiempo estimado\\n(meses)', 'Tiempo estimado', 'Tiempo Estimado (meses)', 'Tiempo Estimado');
+      const sections = [
+        {
+          etapaKey: 'registro',
+          title: '1 · Registro de la Iniciativa (Datos Generales & Clasificación)',
+          icon: '📋',
+          fields: [
+            { label: 'ID Iniciativa', value: String(t.id).padStart(4, '0') },
+            { label: 'Fecha de Registro', value: dmFmtDateTime(t.fecha_registro) },
+            { label: 'Institución', value: t.institucion },
+            { label: 'VP Solicitante', value: t.vp_solicitante },
+            { label: 'Dirección del área solicitante', value: t.direccion_solicitante ?? dmGetRawVal(t, 'Dirección del área solicitante', 'Direccion del area solicitante', 'Dirección solicitante') },
+            { label: 'Priorización VP', value: t.priorizacion_vp ?? dmGetRawVal(t, 'Priorización VP', 'Priorizacion VP') },
+            { label: 'Usuario / Gerencia Solicitante', value: t.usuario_negocio },
+            { label: 'Correo Solicitante', value: dmGetRawVal(t, 'Correo electrónico', 'Email', 'Correo') },
+            { label: 'Nombre Solicitante', value: dmGetRawVal(t, 'Nombre') },
+            { label: 'IT BP Responsable', value: t.it_bp || t.it_business_partner },
+            { label: 'Fecha Entrega Requerida', value: dmFmtDate(t.fecha_entrega_requerida) },
+            { label: 'Tipo de Iniciativa', value: t.tipo_iniciativa },
+            { label: 'Pilar Estratégico', value: t.pilar_estrategico },
+            { label: 'Proyecto o Requerimiento (No BAU)', value: t.proyecto_o_req },
+            { label: 'Funcionalidad Nueva', value: t.funcionalidad_nueva },
+            { label: 'Proyecto SPO', value: t.proyecto_spo },
+            { label: 'Workstream SPO', value: dmGetRawVal(t, 'Workstream del proyecto SPO', 'Workstream') },
+            { label: 'ID SPO', value: dmGetRawVal(t, 'ID SPO') },
+            { label: 'Estabilización de Procesos SIS', value: t.estabilizacion_sis },
+            { label: 'Impacto SOX', value: t.impacto_sox },
+            { label: 'Puntaje Sugerido', value: dmGetRawVal(t, 'Puntaje Sugerido', 'Puntaje sugerido', 'Puntaje') },
+            { label: 'Usuarios Beneficiados / Afectados', value: t.usuarios_beneficiados },
+            { label: 'Beneficio Cuantitativo', value: t.beneficio_cuantitativo },
+            { label: 'Beneficios Cualitativos', value: dmGetRawVal(t, 'Beneficios cualitativos') },
+            { label: 'Evidencia de Aprobación VP / Director', value: dmGetRawVal(t, 'Evidencia de la aprobación del VP o Director', 'Evidencia de la aprobación', 'Aprobación') },
+            { label: 'Adjuntos / Documentación', value: dmGetRawVal(t, 'Adjuntos', 'Adjuntar') }
+          ]
+        }
+      ];
+
+      if (normEtapa === 'registro_incompleto') {
+        sections.push({
+          etapaKey: 'registro_incompleto',
+          title: 'Observación · Registro Incompleto',
+          icon: '⚠️',
+          fields: [
+            { label: 'Motivo de Registro Incompleto', value: dmGetRawVal(t, 'Completar información', 'Motivo', 'STRING') },
+            { label: 'Asignado por', value: t.asignado_por },
+            { label: 'Fecha de Asignación', value: dmFmtDate(t.fecha_asignacion) },
+            { label: 'Líder de Dominio Asignado', value: t.lider_dominio }
+          ]
+        });
+      }
+
+      sections.push({
+        etapaKey: 'por_estimar',
+        title: '2 · Estimación (Recursos, Costos & Planificación Inicial)',
+        icon: '💲',
+        fields: [
+          { label: 'Líder de Dominio', value: t.lider_dominio },
+          { label: 'Asignado por', value: t.asignado_por },
+          { label: 'Fecha de Asignación al LD', value: dmFmtDate(t.fecha_asignacion) },
+          { label: 'Complejidad Estimada', value: t.complejidad },
+          { label: 'Tipo de Recurso', value: t.tipo_recurso },
+          { label: 'Costo Dólares (USD)', value: dmFmtMoneyUSD(t.costo_usd) },
+          { label: 'Costo Soles (PEN)', value: dmFmtMoneyPEN(t.costo_soles) },
+          { label: 'Fecha Inicio Estimación', value: dmFmtDate(t.fecha_inicio_estimacion) },
+          { label: 'Fecha Fin Estimación', value: dmFmtDate(t.fecha_fin_estimacion) },
+          { label: 'Tiempo estimado (meses)', value: tiempoEst },
+          { label: 'Asunciones', value: dmGetRawVal(t, 'Asunciones', 'Supuestos', 'Asunciones / Supuestos') },
+          { label: 'Comentarios', value: dmGetRawVal(t, 'Comentarios', 'Comentario') },
+          { label: 'Puntaje Sugerido', value: dmGetRawVal(t, 'Puntaje Sugerido', 'Puntaje sugerido', 'Puntaje') },
+          { label: 'Beneficios Cualitativos', value: dmGetRawVal(t, 'Beneficios cualitativos', 'Beneficio cualitativo') },
+          { label: 'Workstream SPO', value: dmGetRawVal(t, 'Workstream del proyecto SPO', 'Workstream') },
+          { label: 'Evidencia de Aprobación', value: dmGetRawVal(t, 'Evidencia de la aprobación del VP o Director', 'Evidencia de la aprobación', 'Aprobación') },
+          { label: 'Estatus Estimación', value: t.estatus_estimacion },
+          { label: 'Acción BRM', value: t.accion_brm },
+          { label: 'Prioridad BRM', value: t.prioridad_brm }
+        ]
+      });
+
+      if (normEtapa === 'por_reestimar') {
+        const reestUsd = dmGetRawVal(t, 'Costo total dolares');
+        const reestPen = dmGetRawVal(t, 'Costo total Soles');
+        sections.push({
+          etapaKey: 'por_reestimar',
+          title: 'Ajuste · Reestimación',
+          icon: '🔄',
+          fields: [
+            { label: 'Motivo de Reestimación', value: dmGetRawVal(t, 'Motivo de Reestimación', 'Motivo de Reestimacion', 'Reestimación') },
+            { label: 'Complejidad Reestimada', value: dmGetRawVal(t, 'Complejidad_1', 'Complejidad reestimación') },
+            { label: 'Duración Reestimada (meses)', value: dmGetRawVal(t, 'Tiempo estimado\\r\\n(meses)_1', 'Tiempo estimado (meses)_1') },
+            { label: 'Costo Total USD Reestimación', value: reestUsd ? dmFmtMoneyUSD(Number(reestUsd)) : null },
+            { label: 'Costo Total Soles Reestimación', value: reestPen ? dmFmtMoneyPEN(Number(reestPen)) : null },
+            { label: 'Fecha Inicio Reestimación', value: dmFmtDate(t.fecha_inicio_reestimacion) },
+            { label: 'Fecha Fin Reestimación', value: dmFmtDate(t.fecha_fin_reestimacion) },
+            { label: 'Estatus Reestimación', value: dmGetRawVal(t, 'Estatus Reestimación', 'Estatus Reestimacion') }
+          ]
+        });
+      }
+
+      sections.push(
+        {
+          etapaKey: 'por_aprobar_estimacion',
+          title: '3 · Aprobación de Estimación',
+          icon: '☑️',
+          fields: [
+            { label: 'Estado Aprobación Estimación', value: t.aprobar_estimacion ?? dmGetRawVal(t, 'Aprobar estimación', 'Aprobar estimacion', 'Aprobación de estimación') ?? '—' },
+            { label: 'Fecha Máxima de Estimación', value: dmFmtDate(dmGetRawVal(t, 'Fecha máxima de estimación', 'Fecha maxima estimacion')) }
+          ]
+        },
+        {
+          etapaKey: 'por_habilitar_presupuesto',
+          title: '4 · Habilitación de Presupuesto',
+          icon: '💵',
+          fields: [
+            { label: 'Presupuesto Habilitado', value: t.presupuesto_habilitado ?? dmGetRawVal(t, 'Presupuesto Habilitado', 'Presupuesto habilitado', 'Habilitación de presupuesto', 'Presupuesto') ?? '—' }
+          ]
+        },
+        {
+          etapaKey: 'por_planificar',
+          title: '5 · Planificación',
+          icon: '📅',
+          fields: [
+            { label: 'Fecha Inicio Planificada', value: dmFmtDate(t.fecha_inicio_planificada) },
+            { label: 'Fecha Fin Planificada', value: dmFmtDate(t.fecha_fin_planificada) }
+          ]
+        },
+        {
+          etapaKey: 'planificadas',
+          title: '6 · Planificación y Pase a Producción',
+          icon: '🗓️',
+          fields: [
+            { label: 'Planificación Aprobada', value: t.planificacion_aprobada ?? dmGetRawVal(t, 'Planificación aprobada', 'Planificacion aprobada', 'Aprobar planificación') ?? '—' },
+            { label: 'Fecha Pase a Producción', value: dmFmtDate(t.fecha_pase_produccion) || dmFmtDate(dmGetRawVal(t, 'Fecha de pase a producción', 'Fecha pase a produccion', 'Pase a producción')) },
+            { label: 'Comentarios Planificación', value: dmGetRawVal(t, 'Comentarios') }
+          ]
+        },
+        {
+          etapaKey: 'implementadas',
+          title: '7 · Implementación y Conformidad',
+          icon: '✅',
+          fields: [
+            { label: 'Persona que da Conformidad', value: t.persona_conformidad ?? dmGetRawVal(t, 'Persona que da conformidad', 'Persona conformidad', 'Conformidad') },
+            { label: 'Fecha de Conformidad', value: dmFmtDate(t.fecha_conformidad) || dmFmtDate(dmGetRawVal(t, 'Fecha de conformidad', 'Fecha conformidad')) }
+          ]
+        }
+      );
+
+      if (normEtapa === 'eliminadas') {
+        sections.push({
+          etapaKey: 'eliminadas',
+          title: 'Detalle de Eliminación',
+          icon: '🗑️',
+          fields: [
+            { label: 'Fecha de Eliminación', value: dmFmtDate(t.fecha_eliminacion) || dmFmtDate(dmGetRawVal(t, 'Fecha de eliminación', 'Fecha eliminacion')) },
+            { label: 'Motivo de Eliminación', value: t.motivo_eliminacion || dmGetRawVal(t, 'Motivo', 'Motivo de eliminación') }
+          ]
+        });
+      }
+
+      return sections;
+    }
+
+    function dmToggleNarrative() { dmState.narrativeOpen = !dmState.narrativeOpen; renderDetailModal(); }
+    function dmToggleRegistro() { dmState.registroOpen = !dmState.registroOpen; renderDetailModal(); }
+    function dmToggleEstimacion() { dmState.estimacionOpen = !dmState.estimacionOpen; renderDetailModal(); }
+    function dmToggleSection(title) {
+      const curr = dmState.openSections[title] !== undefined ? dmState.openSections[title] : true;
+      dmState.openSections[title] = !curr;
+      renderDetailModal();
+    }
+    function dmSetTab(tab) { dmState.activeTab = tab; renderDetailModal(); }
+    function dmSetSearch(val) {
+      dmState.fieldSearch = val;
+      renderDetailModal(true);
+    }
+    function dmCopyAll(btn) {
+      if (!dmState.ini) return;
+      const entries = dmBuildAllRawEntries(dmState.ini);
+      const text = entries.map(e => \`\${e.key}: \${e.value !== null && e.value !== undefined && e.value !== '' ? e.value : '—'}\`).join('\\n');
+      navigator.clipboard.writeText(text);
+      if (btn) {
+        const prev = btn.innerHTML;
+        btn.innerHTML = '✓ ¡Copiado!';
+        btn.style.color = '#059669';
+        setTimeout(() => { btn.innerHTML = prev; btn.style.color = '#334155'; }, 1800);
+      }
+    }
+    function dmCopyField(idx, btn) {
+      if (!dmState.ini) return;
+      const entries = dmBuildAllRawEntries(dmState.ini);
+      const q = dmState.fieldSearch.toLowerCase().trim();
+      const filtered = q ? entries.filter(x => x.key.toLowerCase().includes(q) || String(x.value ?? '').toLowerCase().includes(q)) : entries;
+      const item = filtered[idx];
+      if (!item) return;
+      navigator.clipboard.writeText(String(item.value ?? ''));
+      if (btn) {
+        btn.innerHTML = '✓';
+        btn.style.color = '#059669';
+        setTimeout(() => { btn.innerHTML = '📋'; btn.style.color = '#94a3b8'; }, 1400);
+      }
+    }
+
+    function renderDetailModal(preserveSearchFocus = false) {
+      const ini = dmState.ini;
+      if (!ini) return;
+      const content = document.getElementById('detail-modal-content');
+      if (!content) return;
+
+      const phase = getPhase(ini.etapa_actual);
+      const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
+      const normEtapa = dmNormalizeEtapaForStepper(ini.etapa_actual);
+      const isRegistroIncompleto = normEtapa === 'registro_incompleto';
+      const isPorReestimar = normEtapa === 'por_reestimar';
+      const isEliminada = normEtapa === 'eliminadas';
+      const isLateralStage = isRegistroIncompleto || isPorReestimar || isEliminada;
+      const currentPipelineIndex = DM_PIPELINE_STEPS.findIndex(s => s.key === normEtapa);
+
+      const allRawEntries = dmBuildAllRawEntries(ini);
+      const narrativeFields = dmBuildNarrativeFields(ini);
+      const sections = dmBuildSections(ini);
+
+      const tiempoVal = ini.tiempo_estimado !== null && ini.tiempo_estimado !== undefined
+        ? \`\${ini.tiempo_estimado} meses\`
+        : (ini.duracion_meses !== null && ini.duracion_meses !== undefined ? \`\${ini.duracion_meses} meses\` : null);
+
+      // Stepper HTML
+      let stepperHtml = '<div style="overflow-x:auto;padding-bottom:4px;"><div style="display:flex;align-items:center;gap:4px;min-width:max-content;">';
+      if (isRegistroIncompleto) {
+        stepperHtml += '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#b91c1c;font-size:10px;font-weight:700;margin-right:8px;">⚠️ Registro Incompleto <span style="color:#f87171;font-weight:400;">— Subsanar para retomar flujo</span></div>';
+      }
+      if (isPorReestimar) {
+        stepperHtml += '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:#fffbeb;border:1px solid #fde68a;color:#92400e;font-size:10px;font-weight:700;margin-right:8px;">🔄 Por Reestimar <span style="color:#d97706;font-weight:400;">— Requiere ajuste en estimación</span></div>';
+      }
+      if (isEliminada) {
+        stepperHtml += '<div style="display:inline-flex;align-items:center;gap:6px;padding:4px 10px;border-radius:8px;background:#fef2f2;border:1px solid #fecaca;color:#991b1b;font-size:10px;font-weight:700;margin-right:8px;">🗑️ Eliminada <span style="color:#ef4444;font-weight:400;">— Fuera de pipeline activo</span></div>';
+      }
+      DM_PIPELINE_STEPS.forEach((step, idx) => {
+        const isDone = !isLateralStage && idx < currentPipelineIndex;
+        const isCurrent = !isLateralStage && idx === currentPipelineIndex;
+        const circleStyle = isDone
+          ? 'background:#10b981;color:#ffffff;'
+          : isCurrent
+          ? 'background:#2563eb;color:#ffffff;box-shadow:0 0 0 3px #bfdbfe;transform:scale(1.1);'
+          : isLateralStage
+          ? 'background:#f1f5f9;color:#cbd5e1;'
+          : 'background:#e2e8f0;color:#94a3b8;';
+        const labelColor = isCurrent ? '#2563eb' : isDone ? '#059669' : '#94a3b8';
+        stepperHtml += \`
+          <div style="display:flex;flex-direction:column;align-items:center;">
+            <div style="width:20px;height:20px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;\${circleStyle}">
+              \${isDone ? '✓' : (idx + 1)}
+            </div>
+            <span style="margin-top:3px;font-size:9px;font-weight:600;white-space:nowrap;color:\${labelColor};">\${step.short}</span>
+          </div>
+        \`;
+        if (idx < DM_PIPELINE_STEPS.length - 1) {
+          stepperHtml += \`<div style="height:2px;width:24px;margin:0 2px;margin-top:-10px;border-radius:999px;background:\${isDone ? '#34d399' : '#e2e8f0'};"></div>\`;
+        }
+      });
+      stepperHtml += '</div></div>';
+
+      // Helper para renderizar caja de campo
+      const renderFieldBox = (f, extraClass = '') => {
+        const hl = dmGetHighlight(f.label);
+        if (hl) {
+          return \`
+            <div style="background:\${hl.bg};border:1px solid \${hl.border};border-radius:8px;padding:9px 10px;display:flex;flex-direction:column;justify-content:space-between;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:4px;margin-bottom:4px;">
+                <span style="font-size:10px;font-weight:700;color:\${hl.labelColor};text-transform:uppercase;letter-spacing:0.04em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;">\${dmEsc(f.label)}</span>
+                <span style="font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:\${hl.badgeBg};color:\${hl.badgeColor};border:1px solid \${hl.badgeBorder};text-transform:uppercase;flex-shrink:0;">\${hl.badge}</span>
+              </div>
+              <div style="\${hl.valStyle}line-height:1.4;word-break:break-word;">\${dmFormatValueHtml(f.value)}</div>
+            </div>
+          \`;
+        }
+        return \`
+          <div class="dm-field-box \${extraClass}">
+            <span style="font-size:9px;font-weight:700;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;margin-bottom:2px;">\${dmEsc(f.label)}</span>
+            <div style="font-size:11.5px;color:#1e293b;font-weight:500;line-height:1.45;word-break:break-word;">\${dmFormatValueHtml(f.value)}</div>
+          </div>
+        \`;
+      };
+
+      // Tab 1: Vista Estructurada por Secciones
+      let tab1Html = '';
+      if (dmState.activeTab === 'secciones' && !dmState.fieldSearch.trim()) {
+        tab1Html += '<div style="display:flex;flex-direction:column;gap:12px;">';
+
+        // Sección 0: Descripción y Contexto de la Iniciativa (DESPLEGADA POR DEFECTO)
+        if (narrativeFields.length > 0) {
+          tab1Html += \`
+            <div class="dm-sec-card">
+              <button type="button" class="dm-sec-btn" onclick="dmToggleNarrative()">
+                <span style="font-size:11px;color:#64748b;display:inline-block;transition:transform 0.15s;\${dmState.narrativeOpen ? 'transform:rotate(90deg);' : ''}">›</span>
+                <span style="font-size:13px;">📄</span>
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#475569;flex:1;">Descripción y Contexto de la Iniciativa</span>
+                <span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;">\${narrativeFields.length} campo\${narrativeFields.length !== 1 ? 's' : ''}</span>
+              </button>
+              \${dmState.narrativeOpen ? \`
+                <div class="dm-narrative-grid">
+                  \${narrativeFields.map(nf => \`
+                    <div class="dm-narrative-cell">
+                      <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#94a3b8;margin-bottom:4px;">\${dmEsc(nf.label)}</span>
+                      <div style="font-size:12px;color:#1e293b;line-height:1.5;max-height:190px;overflow-y:auto;padding-right:4px;">\${dmFormatValueHtml(nf.value)}</div>
+                    </div>
+                  \`).join('')}
+                </div>
+              \` : ''}
+            </div>
+          \`;
+        }
+
+        // Sección 1: Registro de la Iniciativa (plegada por defecto)
+        const registroSec = sections.find(s => s.etapaKey === 'registro');
+        if (registroSec) {
+          const validReg = registroSec.fields.filter(f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—');
+          if (validReg.length > 0) {
+            tab1Html += \`
+              <div class="dm-sec-card">
+                <button type="button" class="dm-sec-btn" onclick="dmToggleRegistro()">
+                  <span style="font-size:11px;color:#64748b;display:inline-block;transition:transform 0.15s;\${dmState.registroOpen ? 'transform:rotate(90deg);' : ''}">›</span>
+                  <span style="font-size:13px;">📋</span>
+                  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#475569;flex:1;">\${dmEsc(registroSec.title)}</span>
+                  <span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;">\${validReg.length} campos</span>
+                  <span style="font-size:8.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#ecfdf5;color:#059669;">✓ Completado</span>
+                </button>
+                \${dmState.registroOpen ? \`
+                  <div class="dm-fields-grid">
+                    \${validReg.map(f => {
+                      const lbl = f.label.toLowerCase();
+                      const isWide = lbl.includes('adjunt') || lbl.includes('documentac') || lbl.includes('evidencia') || lbl.includes('beneficios cualitativos');
+                      return renderFieldBox(f, isWide ? 'span-full' : '');
+                    }).join('')}
+                  </div>
+                \` : ''}
+              </div>
+            \`;
+          }
+        }
+
+        // Sección 2: Estimación (abierta por defecto)
+        const estSec = sections.find(s => s.etapaKey === 'por_estimar');
+        if (estSec) {
+          const validEst = estSec.fields.filter(f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—');
+          if (validEst.length > 0) {
+            const isCurEst = normEtapa === 'por_estimar';
+            const estPipeIdx = DM_PIPELINE_STEPS.findIndex(s => s.key === 'por_estimar');
+            const isDoneEst = !isLateralStage && estPipeIdx !== -1 && estPipeIdx < currentPipelineIndex;
+            tab1Html += \`
+              <div class="dm-sec-card \${isCurEst ? 'is-current' : isDoneEst ? 'is-done' : ''}">
+                <button type="button" class="dm-sec-btn \${isCurEst ? 'is-current' : ''}" onclick="dmToggleEstimacion()">
+                  <span style="font-size:11px;color:#64748b;display:inline-block;transition:transform 0.15s;\${dmState.estimacionOpen ? 'transform:rotate(90deg);' : ''}">›</span>
+                  <span style="font-size:13px;">💲</span>
+                  <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#475569;flex:1;">\${dmEsc(estSec.title)}</span>
+                  <span style="font-size:9px;font-weight:600;padding:2px 7px;border-radius:999px;background:#f1f5f9;color:#64748b;">\${validEst.length} campos</span>
+                  \${isCurEst ? '<span style="font-size:8.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#dbeafe;color:#1d4ed8;">◉ EN CURSO</span>' : isDoneEst ? '<span style="font-size:8.5px;font-weight:700;padding:2px 7px;border-radius:999px;background:#ecfdf5;color:#059669;">✓ Completado</span>' : ''}
+                </button>
+                \${dmState.estimacionOpen ? \`
+                  <div class="dm-fields-grid">
+                    \${validEst.map(f => renderFieldBox(f)).join('')}
+                  </div>
+                \` : ''}
+              </div>
+            \`;
+          }
+        }
+
+        // Rejilla de secciones restantes (3, 4, 5, 6, 7, Observación, Reestimación, Eliminadas) ABIERTAS por defecto
+        tab1Html += '<div class="dm-grid-3">';
+        sections.filter(s => s.etapaKey !== 'registro' && s.etapaKey !== 'por_estimar').forEach(sec => {
+          const validFields = sec.fields.filter(f => f.value !== null && f.value !== undefined && f.value !== '' && f.value !== '—');
+          if (validFields.length === 0 && (sec.etapaKey === 'registro_incompleto' || sec.etapaKey === 'por_reestimar')) return;
+          const displayFields = validFields.length > 0 ? validFields : sec.fields;
+          const isCur = sec.etapaKey === normEtapa;
+          const secIdx = DM_PIPELINE_STEPS.findIndex(s => s.key === sec.etapaKey);
+          const isDone = !isLateralStage && secIdx !== -1 && secIdx < currentPipelineIndex;
+          const isOpen = dmState.openSections[sec.title] !== undefined ? dmState.openSections[sec.title] : true;
+          const safeTitleJs = sec.title.replace(/'/g, "\\\\'");
+          const badgeHtml = isCur
+            ? '<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;background:#dbeafe;color:#1d4ed8;white-space:nowrap;">◉ EN CURSO</span>'
+            : isDone
+            ? '<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;background:#ecfdf5;color:#059669;">✓</span>'
+            : '<span style="font-size:8px;font-weight:700;padding:2px 6px;border-radius:999px;background:#f1f5f9;color:#94a3b8;">—</span>';
+
+          tab1Html += \`
+            <div class="dm-sec-card \${isCur ? 'is-current' : isDone ? 'is-done' : ''}">
+              <button type="button" class="dm-sec-btn \${isCur ? 'is-current' : ''}" onclick="dmToggleSection('\${safeTitleJs}')">
+                <span style="font-size:11px;color:\${isCur ? '#2563eb' : '#64748b'};display:inline-block;transition:transform 0.15s;\${isOpen ? 'transform:rotate(90deg);' : ''}">›</span>
+                <span style="font-size:12px;">\${sec.icon}</span>
+                <span style="font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:0.04em;color:#475569;flex:1;line-height:1.2;">\${dmEsc(sec.title)}</span>
+                <span style="font-size:8.5px;font-weight:600;padding:1px 6px;border-radius:999px;background:#f1f5f9;color:#64748b;">\${displayFields.length}</span>
+                \${badgeHtml}
+              </button>
+              \${isOpen ? \`
+                <div style="border-top:1px solid #f1f5f9;padding:10px 12px;display:flex;flex-direction:column;gap:8px;">
+                  \${displayFields.map(f => {
+                    const hl = dmGetHighlight(f.label);
+                    if (hl) return renderFieldBox(f);
+                    return \`
+                      <div style="padding-top:6px;border-top:1px solid #f8fafc;">
+                        <span style="font-size:9.5px;font-weight:600;color:#94a3b8;text-transform:uppercase;letter-spacing:0.04em;display:block;margin-bottom:2px;">\${dmEsc(f.label)}</span>
+                        <div style="font-size:11.5px;color:#1e293b;font-weight:500;line-height:1.45;word-break:break-word;">\${dmFormatValueHtml(f.value)}</div>
+                      </div>
+                    \`;
+                  }).join('')}
+                </div>
+              \` : ''}
+            </div>
+          \`;
+        });
+        tab1Html += '</div></div>';
+      }
+
+      // Tab 2 o Búsqueda activa
+      let tab2Html = '';
+      if (dmState.activeTab === 'todos' || dmState.fieldSearch.trim()) {
+        const q = dmState.fieldSearch.toLowerCase().trim();
+        const filteredRaw = q
+          ? allRawEntries.filter(x => x.key.toLowerCase().includes(q) || String(x.value ?? '').toLowerCase().includes(q))
+          : allRawEntries;
+
+        tab2Html = \`
+          <div style="background:#ffffff;border:1px solid #e2e8f0;border-radius:12px;overflow:hidden;box-shadow:0 1px 2px rgba(15,23,42,0.03);">
+            <div style="padding:10px 14px;background:#f8fafc;border-bottom:1px solid #e2e8f0;display:flex;justify-content:space-between;align-items:center;font-size:11.5px;color:#475569;">
+              <span style="font-weight:600;">Mostrando \${filteredRaw.length} de \${allRawEntries.length} campos del registro</span>
+              \${q ? \`<span style="color:#2563eb;font-weight:600;">Filtrado por: "\${dmEsc(dmState.fieldSearch)}"</span>\` : ''}
+            </div>
+            <div style="max-height:420px;overflow-y:auto;">
+              <table class="dm-raw-table">
+                <thead>
+                  <tr>
+                    <th style="width:34%;">Nombre del Campo / Columna</th>
+                    <th style="width:58%;">Valor Registrado</th>
+                    <th style="width:8%;text-align:center;">Copiar</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  \${filteredRaw.map((item, idx) => {
+                    const hl = dmGetHighlight(item.key);
+                    return \`
+                      <tr style="\${hl ? 'background:rgba(255,251,235,0.4);' : ''}">
+                        <td style="font-weight:600;color:#334155;">
+                          <span>\${dmEsc(item.key)}</span>
+                          \${hl ? \`<span style="margin-left:6px;font-size:8px;font-weight:700;padding:1px 5px;border-radius:4px;background:\${hl.badgeBg};color:\${hl.badgeColor};border:1px solid \${hl.badgeBorder};text-transform:uppercase;">★ \${hl.badge}</span>\` : ''}
+                        </td>
+                        <td style="\${hl ? hl.valStyle : 'color:#1e293b;'}line-height:1.45;">\${dmFormatValueHtml(item.value)}</td>
+                        <td style="text-align:center;">
+                          <button type="button" onclick="dmCopyField(\${idx}, this)" title="Copiar valor" style="background:none;border:none;cursor:pointer;color:#94a3b8;font-size:13px;padding:3px 6px;border-radius:5px;">📋</button>
+                        </td>
+                      </tr>
+                    \`;
+                  }).join('')}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        \`;
+      }
+
+      content.innerHTML = \`
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <!-- Cabecera de la Iniciativa -->
+          <div style="display:flex;flex-wrap:wrap;align-items:flex-start;justify-content:space-between;gap:12px;padding-bottom:14px;border-bottom:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:flex-start;gap:12px;flex:1;min-width:260px;">
+              <div style="background:#2563eb;color:#ffffff;font-family:monospace;font-size:12px;font-weight:700;padding:5px 10px;border-radius:8px;flex-shrink:0;margin-top:2px;">
+                ID: \${String(ini.id).padStart(4, '0')}
+              </div>
+              <div>
+                <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+                  <h2 style="font-size:15.5px;font-weight:800;color:#0f172a;margin:0;line-height:1.35;">\${dmEsc(ini.titulo || 'Sin Título')}</h2>
+                  <span class="detail-badge-pill \${phaseClass}">\${dmEsc(getEtapaLabel(ini.etapa_actual))}</span>
+                  \${ini.sub_estado ? \`<span style="font-size:10.5px;font-weight:700;background:#f1f5f9;color:#475569;padding:2px 7px;border-radius:4px;">\${dmEsc(ini.sub_estado)}</span>\` : ''}
+                </div>
+                <div style="display:flex;flex-wrap:wrap;gap:8px;font-size:11.5px;color:#64748b;margin-top:4px;align-items:center;">
+                  <span>Institución: <strong style="color:#334155;">\${dmEsc(ini.institucion || '—')}</strong></span>
+                  <span>•</span>
+                  <span>Solicitante: <strong style="color:#334155;">\${dmEsc(ini.usuario_negocio || '—')}</strong></span>
+                  <span>•</span>
+                  <span>IT BP: <strong style="color:#334155;">\${dmEsc(ini.it_bp || ini.it_business_partner || '—')}</strong></span>
+                  <span>•</span>
+                  <span>Líder Dominio: <strong style="color:#334155;">\${dmEsc(ini.lider_dominio || '—')}</strong></span>
+                  \${ini.vp_solicitante ? \`<span>•</span><span>VP: <strong style="color:#334155;">\${dmEsc(ini.vp_solicitante)}</strong></span>\` : ''}
+                </div>
+              </div>
+            </div>
+            <button type="button" onclick="dmCopyAll(this)" style="font-size:11.5px;font-weight:600;color:#334155;background:#ffffff;border:1px solid #e2e8f0;padding:6px 12px;border-radius:8px;cursor:pointer;display:inline-flex;align-items:center;gap:6px;box-shadow:0 1px 2px rgba(0,0,0,0.03);flex-shrink:0;">
+              📋 Copiar todo
+            </button>
+          </div>
+
+          <!-- Stepper visual del pipeline -->
+          \${stepperHtml}
+
+          <!-- Barra de Destacados: 2 · Estimación Clave & 5 · Planificación Clave -->
+          <div class="dm-grid-2">
+            <!-- Bloque 1: 2 · Estimación Clave -->
+            <div style="background:linear-gradient(135deg,rgba(245,158,11,0.10) 0%,rgba(255,251,235,0.6) 60%,rgba(255,247,237,0.4) 100%);border:1px solid #fde68a;border-radius:12px;padding:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(253,230,138,0.7);">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="padding:3px 6px;border-radius:6px;background:#f59e0b;color:#ffffff;font-size:11px;font-weight:800;">$</span>
+                  <span style="font-size:11px;font-weight:800;color:#78350f;text-transform:uppercase;letter-spacing:0.04em;">2 · Estimación Clave</span>
+                </div>
+                <span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:999px;background:#fef3c7;color:#92400e;border:1px solid #fcd34d;">★ CAMPOS PRIORITARIOS</span>
+              </div>
+              <div class="dm-grid-4">
+                <div style="background:#ffffff;padding:8px;border-radius:8px;border:1px solid #a7f3d0;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Costo USD</span>
+                    <span style="font-size:8px;padding:1px 4px;border-radius:4px;background:#d1fae5;color:#065f46;border:1px solid #a7f3d0;">USD</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:800;font-family:monospace;color:#064e3b;margin-top:4px;">\${dmFmtMoneyUSD(ini.costo_usd) || '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}</div>
+                </div>
+                <div style="background:#ffffff;padding:8px;border-radius:8px;border:1px solid #bfdbfe;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Costo Soles</span>
+                    <span style="font-size:8px;padding:1px 4px;border-radius:4px;background:#dbeafe;color:#1e40af;border:1px solid #bfdbfe;">PEN</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:800;font-family:monospace;color:#172554;margin-top:4px;">\${dmFmtMoneyPEN(ini.costo_soles) || '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}</div>
+                </div>
+                <div style="background:#ffffff;padding:8px;border-radius:8px;border:1px solid #ddd6fe;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Tiempo Estimado</span>
+                    <span style="font-size:10px;color:#7c3aed;">🕒</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:800;font-family:monospace;color:#2e1065;margin-top:4px;">\${tiempoVal ? dmEsc(tiempoVal) : '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}</div>
+                </div>
+                <div style="background:#ffffff;padding:8px;border-radius:8px;border:1px solid #fde68a;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Fechas Estimación</span>
+                    <span style="font-size:10px;color:#d97706;">📅</span>
+                  </div>
+                  <div style="font-size:10px;font-weight:700;font-family:monospace;color:#451a03;margin-top:4px;line-height:1.3;">
+                    \${(ini.fecha_inicio_estimacion || ini.fecha_fin_estimacion) ? \`\${dmFmtDate(ini.fecha_inicio_estimacion) || '—'} <span style="color:#f59e0b;">→</span> \${dmFmtDate(ini.fecha_fin_estimacion) || '—'}\` : '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- Bloque 2: 5 · Planificación Clave -->
+            <div style="background:linear-gradient(135deg,rgba(20,184,166,0.10) 0%,rgba(240,253,250,0.6) 60%,rgba(236,253,245,0.4) 100%);border:1px solid #99f6e4;border-radius:12px;padding:12px;">
+              <div style="display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:8px;padding-bottom:6px;border-bottom:1px solid rgba(153,246,228,0.7);">
+                <div style="display:flex;align-items:center;gap:6px;">
+                  <span style="padding:3px 6px;border-radius:6px;background:#0d9488;color:#ffffff;font-size:11px;font-weight:800;">📅</span>
+                  <span style="font-size:11px;font-weight:800;color:#134e4a;text-transform:uppercase;letter-spacing:0.04em;">5 · Planificación Clave</span>
+                </div>
+                <span style="font-size:9px;font-weight:700;padding:2px 8px;border-radius:999px;background:#ccfbf1;color:#115e59;border:1px solid #5eead4;">★ CRONOGRAMA</span>
+              </div>
+              <div class="dm-grid-2">
+                <div style="background:#ffffff;padding:8px 10px;border-radius:8px;border:1px solid #99f6e4;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Fecha Inicio Planificada</span>
+                    <span style="font-size:10px;color:#0d9488;">📅</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:800;font-family:monospace;color:#042f2e;margin-top:4px;">\${dmFmtDate(ini.fecha_inicio_planificada) || '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}</div>
+                </div>
+                <div style="background:#ffffff;padding:8px 10px;border-radius:8px;border:1px solid #99f6e4;">
+                  <div style="display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:700;color:#64748b;text-transform:uppercase;">
+                    <span>Fecha Fin Planificada</span>
+                    <span style="font-size:10px;color:#0d9488;">🗓️</span>
+                  </div>
+                  <div style="font-size:12px;font-weight:800;font-family:monospace;color:#042f2e;margin-top:4px;">\${dmFmtDate(ini.fecha_fin_planificada) || '<span style="color:#cbd5e1;font-style:italic;font-weight:400;font-family:sans-serif;">—</span>'}</div>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <!-- Selector de Pestañas y Buscador interno -->
+          <div style="display:flex;flex-wrap:wrap;align-items:center;justify-content:space-between;gap:10px;background:#ffffff;padding:8px 10px;border-radius:10px;border:1px solid #e2e8f0;">
+            <div style="display:flex;align-items:center;gap:6px;flex-wrap:wrap;">
+              <button type="button" class="dm-tab-btn \${dmState.activeTab === 'secciones' && !dmState.fieldSearch.trim() ? 'active' : ''}" onclick="dmSetTab('secciones')">
+                🗂️ Vista Estructurada por Secciones
+              </button>
+              <button type="button" class="dm-tab-btn \${dmState.activeTab === 'todos' || dmState.fieldSearch.trim() ? 'active' : ''}" onclick="dmSetTab('todos')">
+                📄 Todos los Campos del Registro (\${allRawEntries.length})
+              </button>
+            </div>
+            <div style="position:relative;min-width:240px;">
+              <span style="position:absolute;left:9px;top:50%;transform:translateY(-50%);font-size:11px;color:#94a3b8;pointer-events:none;">🔍</span>
+              <input id="dm-search-input" type="text" value="\${dmEsc(dmState.fieldSearch)}" oninput="dmSetSearch(this.value)" placeholder="Filtrar campos o valores…" style="width:100%;padding:6px 26px 6px 28px;font-size:11.5px;background:#f8fafc;border:1px solid #e2e8f0;border-radius:7px;outline:none;color:#334155;" />
+              \${dmState.fieldSearch ? '<button type="button" onclick="dmSetSearch(\\'\\')" style="position:absolute;right:7px;top:50%;transform:translateY(-50%);background:none;border:none;cursor:pointer;color:#94a3b8;font-size:12px;">✕</button>' : ''}
+            </div>
+          </div>
+
+          \${tab1Html}
+          \${tab2Html}
+        </div>
+      \`;
+
+      if (preserveSearchFocus) {
+        const inp = document.getElementById('dm-search-input');
+        if (inp) {
+          inp.focus();
+          const len = inp.value.length;
+          inp.setSelectionRange(len, len);
+        }
+      }
+    }
+
     function openDetailModal(id) {
       const ini = RAW_DATA.find(x => String(x.id) === String(id));
       if (!ini) return;
 
-      const phase = getPhase(ini.etapa_actual);
-      const phaseClass = phase === 1 ? 'badge-fase1' : phase === 2 ? 'badge-fase2' : phase === 3 ? 'badge-fase3' : 'badge-faseobs';
-
-      const content = document.getElementById('detail-modal-content');
-      content.innerHTML = \`
-        <div style="display: flex; flex-direction: column; gap: 16px;">
-          <!-- Cabecera de la Iniciativa -->
-          <div style="background: #f8fafc; border: 1px solid var(--border); border-radius: 12px; padding: 16px;">
-            <div style="display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 6px; flex-wrap: wrap;">
-              <div style="display: flex; align-items: center; gap: 8px;">
-                <span style="font-size: 13px; font-weight: 900; color: #ffffff; background: #0284c7; padding: 3px 10px; border-radius: 6px;">
-                  ID: #\${ini.id}
-                </span>
-                <span class="detail-badge-pill \${phaseClass}">
-                  \${getEtapaLabel(ini.etapa_actual)}
-                </span>
-                \${ini.sub_estado ? \`<span style="font-size: 11px; font-weight: 700; background: #f1f5f9; color: #475569; padding: 2px 7px; border-radius: 4px;">\${ini.sub_estado}</span>\` : ''}
-              </div>
-              <button onclick="navigator.clipboard.writeText(JSON.stringify(RAW_DATA.find(x => String(x.id) === '\${ini.id}'), null, 2))" style="font-size: 11px; font-weight: 700; color: #0284c7; background: #ffffff; border: 1px solid #bfdbfe; padding: 4px 10px; border-radius: 6px; cursor: pointer;">
-                📋 Copiar Datos
-              </button>
-            </div>
-            <h2 style="font-size: 16px; font-weight: 800; color: #0f172a; margin: 4px 0 10px 0; line-height: 1.4;">
-              \${ini.titulo || 'Sin Título'}
-            </h2>
-            <div style="display: flex; flex-wrap: wrap; gap: 14px; font-size: 11.5px; color: #475569;">
-              <span>Institución: <strong>\${ini.institucion || '—'}</strong></span>
-
-              <span>IT BP: <strong>\${ini.it_bp || ini.it_business_partner || '—'}</strong></span>
-              <span>Líder de Dominio: <strong>\${ini.lider_dominio || '—'}</strong></span>
-              <span>VP: <strong>\${ini.vp_solicitante || '—'}</strong></span>
-            </div>
-          </div>
-
-          <!-- Cards Clave: Estimación y Planificación -->
-          <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(280px, 1fr)); gap: 12px;">
-            <!-- Estimación Clave -->
-            <div style="background: #fffbeb; border: 1px solid #fde68a; border-radius: 10px; padding: 14px;">
-              <div style="font-size: 11px; font-weight: 800; color: #b45309; text-transform: uppercase; margin-bottom: 8px;">
-                ⚡ ESTIMACIÓN CLAVE
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <div class="modal-box">
-                  <div class="modal-box-title">Costo USD</div>
-                  <div class="modal-box-val" style="color: #047857;">\${fmtMoneyUSD(ini.costo_usd)}</div>
-                </div>
-                <div class="modal-box">
-                  <div class="modal-box-title">Costo Soles</div>
-                  <div class="modal-box-val" style="color: #047857;">\${fmtMoneyPEN(ini.costo_soles)}</div>
-                </div>
-                <div class="modal-box" style="grid-column: span 2;">
-                  <div class="modal-box-title">Fechas de Estimación</div>
-                  <div style="font-size: 11.5px; font-weight: 700; color: #334155; font-family: monospace;">
-                    \${fmtDate(ini.fecha_inicio_estimacion)} ➔ \${fmtDate(ini.fecha_fin_estimacion)}
-                  </div>
-                  \${ini.estatus_estimacion ? \`<div style="font-size: 10.5px; color: #b45309; margin-top: 3px;">Estatus: \${ini.estatus_estimacion}</div>\` : ''}
-                </div>
-              </div>
-            </div>
-
-            <!-- Planificación Clave -->
-            <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 10px; padding: 14px;">
-              <div style="font-size: 11px; font-weight: 800; color: #047857; text-transform: uppercase; margin-bottom: 8px;">
-                📅 PLANIFICACIÓN Y PRODUCCIÓN
-              </div>
-              <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 8px;">
-                <div class="modal-box">
-                  <div class="modal-box-title">Inicio Planif.</div>
-                  <div class="modal-box-val" style="font-size: 12.5px; font-family: monospace;">\${fmtDate(ini.fecha_inicio_planificada)}</div>
-                </div>
-                <div class="modal-box">
-                  <div class="modal-box-title">Fin Planif.</div>
-                  <div class="modal-box-val" style="font-size: 12.5px; font-family: monospace;">\${fmtDate(ini.fecha_fin_planificada)}</div>
-                </div>
-                <div class="modal-box" style="grid-column: span 2;">
-                  <div class="modal-box-title">Pase a Prod. / Conformidad</div>
-                  <div style="font-size: 11.5px; font-weight: 700; color: #334155; font-family: monospace;">
-                    Prod: \${fmtDate(ini.fecha_pase_produccion)} | Conf: \${fmtDate(ini.fecha_conformidad)}
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- Información Adicional y de Eliminación -->
-          \${['eliminadas', 'eliminada'].includes(ini.etapa_actual) ? \`
-            <div style="background: #fef2f2; border: 1px solid #fecdd3; border-radius: 10px; padding: 14px;">
-              <div style="font-size: 11px; font-weight: 800; color: #991b1b; text-transform: uppercase; margin-bottom: 6px;">
-                ✕ REGISTRO ELIMINADO
-              </div>
-              <div style="font-size: 12px; color: #7f1d1d; display: flex; flex-direction: column; gap: 4px;">
-                <div>Fecha de Eliminación: <strong>\${fmtDate(ini.fecha_eliminacion)}</strong></div>
-
-                <div>Motivo: <strong>\${ini.motivo_eliminacion || 'Sin motivo especificado'}</strong></div>
-              </div>
-            </div>
-          \` : ''}
-
-          <!-- Contexto Estratégico -->
-          <div style="background: #ffffff; border: 1px solid var(--border); border-radius: 10px; padding: 14px;">
-            <div style="font-size: 11px; font-weight: 800; color: #334155; text-transform: uppercase; margin-bottom: 8px;">
-              🌐 CLASIFICACIÓN ESTRATÉGICA
-            </div>
-            <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 10px; font-size: 11.5px;">
-              <div>Frente / Ecosistema: <strong>\${getFrenteName(ini)}</strong></div>
-              <div>Pilar Estratégico: <strong>\${ini.pilar_estrategico || '—'}</strong></div>
-              <div>Beneficio Cualitativo: <strong>\${ini.beneficio_cualitativo || '—'}</strong></div>
-              <div>Proyecto SPO: <strong>\${ini.proyecto_spo ? 'SÍ' : 'NO'}</strong></div>
-            </div>
-          </div>
-        </div>
-      \`;
+      dmState = {
+        ini,
+        activeTab: 'secciones',
+        fieldSearch: '',
+        narrativeOpen: true,
+        registroOpen: false,
+        estimacionOpen: true,
+        openSections: {}
+      };
+      renderDetailModal();
 
       const overlay = document.getElementById('detail-modal-overlay');
       overlay.classList.add('open');

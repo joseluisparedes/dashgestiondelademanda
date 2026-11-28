@@ -1536,7 +1536,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
     { id: 'estimacion', label: 'Estimaciones' },
     { id: 'reestimacion', label: 'Re-estimaciones' },
     { id: 'planificacion', label: 'Planificación' },
-    { id: 'total', label: 'Total Desfases' },
+    { id: 'total', label: 'Total' },
     { id: 'accion', label: 'Acción' },
   ];
 
@@ -2393,7 +2393,7 @@ export function ReporteLideresFueraFecha({ iniciativas, onOpenCustomPopup }: Rep
                   )}
                   {!hiddenConsolidatedCols.has('total') && (
                     <th onClick={() => toggleSort('total')} style={{ padding: '8px 12px', textAlign: 'right', fontWeight: 700, fontSize: 11, color: '#64748b', borderBottom: '2px solid #e2e8f0', cursor: 'pointer', userSelect: 'none', whiteSpace: 'nowrap' }}>
-                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total Desfases <SortIcon field="total" /></span>
+                      <span style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: 4 }}>Total <SortIcon field="total" /></span>
                     </th>
                   )}
                   {!hiddenConsolidatedCols.has('accion') && (

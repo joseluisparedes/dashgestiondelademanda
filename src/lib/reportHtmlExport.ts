@@ -470,7 +470,7 @@ export function exportFueraFechaToHTML(input: FueraFechaExportInput) {
               <th style="text-align:center;color:#d97706;">Estimaciones</th>
               <th style="text-align:center;color:#7c3aed;">Re-estimaciones</th>
               <th style="text-align:center;color:#e11d48;">Planificación</th>
-              <th style="text-align:center;">Total Desfases</th>
+              <th style="text-align:center;">Total</th>
               <th style="text-align:center;">Acción</th>
             </tr>
           </thead>
